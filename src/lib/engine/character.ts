@@ -257,8 +257,8 @@ export function applyPose(rig: CharacterRig, pose: Pose) {
     b.scale.set(1.25, 0.7, 1.25);
     b.position.y = 0.1;
   } else if (pose === "stick") {
-    b.scale.set(1.12, 1.04, 0.22);
-    b.position.z = 0.1;
+    b.scale.set(1.22, 1.06, 0.12);
+    b.position.z = -0.082;
   }
 }
 
@@ -382,6 +382,10 @@ export function animateCharacter(
   }
   rig.body.position.y = (opts.ghost ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0) + bob;
   if (airborne) rig.body.position.y += 0.05;
+  if (rig.pose === "stick") {
+    rig.body.position.z = -0.082;
+    rig.body.scale.set(1.22, 1.06, 0.12);
+  }
 }
 
 export function uvPaint(

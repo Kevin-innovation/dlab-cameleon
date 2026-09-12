@@ -5,6 +5,7 @@ import type { BodyPart, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose,
 import { hiderAlive, isHunter } from "../round";
 import {
   blocked,
+  circleHitsBox,
   edgeMargin,
   headHit,
   landOn,
@@ -47,6 +48,7 @@ export class GameWorld {
   colliders: Collider[] = [];
   private baseColliders: Collider[] = [];
   private doorRigs: { def: DoorDef; pivot: THREE.Group; leaf: THREE.Mesh }[] = [];
+  private doorPass = new Map<string, Map<string, number>>();
   map!: GameMap;
   yaw = 0;
   pitch = 0;
@@ -144,6 +146,7 @@ export class GameWorld {
     this.scene.fog = new THREE.FogExp2(map.fog, 0.0072);
     this.cling = null;
     this.grounded = true;
+    this.doorPass.clear();
 
     const hemi = new THREE.HemisphereLight("#f2efe6", "#3d2a1c", 1.05);
     const sun = new THREE.DirectionalLight("#fff4e0", 1.35);
@@ -258,6 +261,35 @@ export class GameWorld {
     return best?.id ?? null;
   }
 
+  doorsToClose(open: Record<string, boolean>, people: { id: string; x: number; z: number }[]) {
+    const close: string[] = [];
+    for (const d of this.doorRigs) {
+      const id = d.def.id;
+      let rec = this.doorPass.get(id);
+      if (!rec) {
+        rec = new Map();
+        this.doorPass.set(id, rec);
+      }
+      for (const p of people) {
+        if (Math.hypot(p.x - d.def.x, p.z - d.def.z) > 3.4) continue;
+        const side = doorPlaneSide(d.def, p.x, p.z);
+        const prev = rec.get(p.id);
+        if (
+          open[id] &&
+          prev !== undefined &&
+          side !== 0 &&
+          prev !== side &&
+          alongDoorway(d.def, p.x, p.z) &&
+          !doorColliders(d.def, false).some((c) => circleHitsBox(p.x, p.z, 0.34, c))
+        ) {
+          close.push(id);
+        }
+        if (side !== 0) rec.set(p.id, side);
+      }
+    }
+    return close;
+  }
+
   lookDelta(dx: number, dy: number) {
     const lim = Math.PI / 2 - 0.04;
     if (this.watch) {
@@ -326,7 +358,7 @@ export class GameWorld {
     if (!hit || hit.dist < 0.04 || hit.dist > 0.55) return false;
     const box = hit.box;
     const r = poseRadius("stick");
-    const pad = r + 0.07;
+    const pad = clingPad(r);
     if (Math.abs(hit.nx) >= Math.abs(hit.nz)) {
       const sign = hit.nx >= 0 ? 1 : -1;
       this.cling = {
@@ -508,7 +540,7 @@ export class GameWorld {
     if (!cling) return;
     const nx = cling.axis === "x" ? cling.sign : 0;
     const nz = cling.axis === "z" ? cling.sign : 0;
-    const pad = r + 0.07;
+    const pad = clingPad(r);
     if (keys.has("shift")) {
       this.localX += nx * 0.32;
       this.localZ += nz * 0.32;
@@ -947,6 +979,21 @@ export class GameWorld {
     disposeObject(this.mapGroup);
     this.renderer.dispose();
   }
+}
+
+function clingPad(r: number) {
+  return r + 0.01;
+}
+
+function doorPlaneSide(def: DoorDef, x: number, z: number) {
+  const delta = def.along === "x" ? z - def.z : x - def.x;
+  if (Math.abs(delta) < 0.14) return 0;
+  return delta > 0 ? 1 : -1;
+}
+
+function alongDoorway(def: DoorDef, x: number, z: number) {
+  const a = def.along === "x" ? Math.abs(x - def.x) : Math.abs(z - def.z);
+  return a <= def.w / 2 + 0.55;
 }
 
 function makeDoor(def: DoorDef) {

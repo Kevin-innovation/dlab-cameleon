@@ -491,6 +491,16 @@ export function GameView({
             };
           }
         }
+        const myId = session.myId();
+        const bodies = snapsFrom(session).map((p) =>
+          p.id === myId ? { id: p.id, x: world.localX, z: world.localZ } : { id: p.id, x: p.x, z: p.z },
+        );
+        const closeIds = world.doorsToClose(next.doors ?? {}, bodies);
+        if (closeIds.length) {
+          const doors = { ...(next.doors ?? {}) };
+          for (const id of closeIds) doors[id] = false;
+          next = { ...next, doors };
+        }
         if (
           next.phase !== room.phase ||
           next.phaseEndsAt !== room.phaseEndsAt ||
@@ -500,9 +510,11 @@ export function GameView({
           next.round !== room.round ||
           next.lastTag?.at !== room.lastTag?.at ||
           (next.feed?.length ?? 0) !== (room.feed?.length ?? 0) ||
-          JSON.stringify(next.ammo) !== JSON.stringify(room.ammo)
+          JSON.stringify(next.ammo) !== JSON.stringify(room.ammo) ||
+          closeIds.length
         ) {
           session.setRoom(next);
+          if (closeIds.length) world.syncDoors(next.doors ?? {});
         }
       }
 
@@ -735,7 +747,7 @@ export function GameView({
             ) : (
               <>
                 <div>WASD 걷기 · Shift 달리기 · Space 점프/벽오르기 · Ctrl 내려가기</div>
-                <div>F 페인트 · 1 도발 · 5 관전 · E 문 · Tab 현황</div>
+                <div>F 페인트 · 1 도발 · 5 관전 · E 문(통과 시 닫힘) · Tab 현황</div>
               </>
             )}
           </div>
@@ -868,7 +880,7 @@ export function GameView({
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
               <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
               <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
-              <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 숨은 채 관전, E로 문.</li>
+              <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 숨은 채 관전, E로 문. 열고 지나가면 닫힙니다.</li>
               <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
               <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
               <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
