@@ -186,7 +186,22 @@ export class GameWorld {
     for (const b of map.boxes) {
       const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
       let mat: THREE.MeshStandardMaterial;
-      if (b.pattern && b.pattern !== "solid") {
+      if (b.texture) {
+        const tex = new THREE.TextureLoader().load(b.texture);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(Math.max(1, b.w / 3), Math.max(1, b.h / 3));
+        mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(b.x, b.y, b.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.color = b.color;
+        mesh.userData.texture = b.texture;
+        this.mapGroup.add(mesh);
+        if (b.collide || b.h >= 0.28) this.camBlockers.push(mesh);
+      } else if (b.pattern && b.pattern !== "solid") {
         const cnv = makePatternCanvas(
           b.pattern,
           b.color,
@@ -1059,11 +1074,10 @@ function disposeObject(obj: THREE.Object3D) {
 function canSee(room: RoomState, self: PlayerSnap | undefined, other: PlayerSnap) {
   if (!self) return true;
   if (other.id === self.id) return true;
-  if (room.phase === "lobby" || room.phase === "result") return true;
+  if (room.phase === "lobby" || room.phase === "reveal" || room.phase === "result") return true;
   if (isHunter(room, self.id) || !hiderAlive(room, self.id)) return true;
   if (room.phase === "hide") return !isHunter(room, other.id);
   if (isHunter(room, other.id)) return true;
   if (room.mode === "normal" && room.caughtIds.includes(other.id)) return true;
   return false;
 }
-

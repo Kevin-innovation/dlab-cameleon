@@ -1,6 +1,6 @@
 export type Pose = "stand" | "crouch" | "sit" | "lie" | "stretch" | "ball" | "stick";
 
-export type Phase = "lobby" | "hide" | "hunt" | "result";
+export type Phase = "lobby" | "hide" | "hunt" | "reveal" | "result";
 
 export type Mode = "normal" | "infection";
 
@@ -44,6 +44,7 @@ export type BoxDef = {
   d: number;
   color: string;
   pattern?: Pattern;
+  texture?: string;
   colors?: string[];
   collide?: boolean;
 };

@@ -20,6 +20,7 @@ function B(
     d,
     color,
     pattern: extra.pattern,
+    texture: extra.texture,
     colors: extra.colors,
     collide: extra.collide,
   };
@@ -63,7 +64,13 @@ const mansion: GameMap = {
   ],
   boxes: [
     B(1, 1, 46, 34, "#c4a06a", { h: 0.04, pattern: "wood" }),
-    B(2, 2, 8, 0.18, "#6b3a2a", { h: 3.6, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
+    B(2, 2, 8, 0.18, "#78856a", {
+      h: 3.6,
+      collide: true,
+      pattern: "wallpaper",
+      texture: "/textures/mansion-wallpaper-v1.png",
+      colors: ["#78856a", "#9caa82"],
+    }),
     B(12, 2, 10, 0.18, "#1f4d6e", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
     B(28, 2, 8, 0.18, "#6a8f6a", { h: 2.8, collide: true, pattern: "leaves" }),
     B(10, 11, 0.2, 8, "#6b3a2a", { h: 2.9, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),

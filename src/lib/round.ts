@@ -1,4 +1,13 @@
-import { DEFAULT_AMMO, DEFAULT_HIDE, DEFAULT_HUNT, SCORE_HUNT_WIN, SCORE_SURVIVE, SCORE_TAG, TAG_RANGE } from "./config";
+import {
+  DEFAULT_AMMO,
+  DEFAULT_HIDE,
+  DEFAULT_HUNT,
+  REVEAL_TIME,
+  SCORE_HUNT_WIN,
+  SCORE_SURVIVE,
+  SCORE_TAG,
+  TAG_RANGE,
+} from "./config";
 import type { PlayerSnap, RoomState } from "./types";
 
 export function emptyRoom(): RoomState {
@@ -167,9 +176,9 @@ export function finishRound(
   }
   return {
     ...room,
-    phase: "result",
+    phase: "reveal",
     winner,
-    phaseEndsAt: now + 12000,
+    phaseEndsAt: now + REVEAL_TIME * 1000,
     scores,
   };
 }
@@ -185,6 +194,9 @@ export function tickRoom(room: RoomState, players: PlayerSnap[], now: number): R
   if (room.phase === "hunt" && !huntersHaveAmmo(room, players)) {
     const any = players.some((p) => hiderAlive(room, p.id));
     if (any) return finishRound(room, "hiders", players, now);
+  }
+  if (room.phase === "reveal" && now >= room.phaseEndsAt) {
+    return { ...room, phase: "result", phaseEndsAt: now + 12000 };
   }
   if (room.phase === "result" && now >= room.phaseEndsAt) {
     return { ...room, phase: "lobby", winner: undefined, hunterIds: [], caughtIds: [] };

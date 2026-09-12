@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   MAX_BLOBS,
   MAX_PLAYERS,
+  REVEAL_TIME,
   SHOT_COOLDOWN,
   SYNC_HZ,
   TAUNT_COOLDOWN,
@@ -631,10 +632,11 @@ export function GameView({
               {hud.phase === "lobby" && "대기실 — WASD로 걸어보세요"}
               {hud.phase === "hide" && "위장 시간"}
               {hud.phase === "hunt" && "수색 중"}
+              {hud.phase === "reveal" && "검증 라운드"}
               {hud.phase === "result" && (hud.winner === "hiders" ? "카멜레온 승리" : "술래 승리")}
             </div>
           </div>
-          {(hud.phase === "hide" || hud.phase === "hunt") && (
+          {(hud.phase === "hide" || hud.phase === "hunt" || hud.phase === "reveal") && (
             <div className="rounded-2xl bg-black/50 px-4 py-2 text-center backdrop-blur-sm">
               <div className="text-[11px] text-white/60">남은 시간</div>
               <div className="font-display text-3xl leading-none text-lime tabular-nums">{timeLeft}</div>
@@ -654,7 +656,7 @@ export function GameView({
           </div>
         </header>
 
-        {!locked && !paintOpen && !hunterHide && hud.phase !== "result" && (
+        {!locked && !paintOpen && !hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
           <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-sm">
             {myRole === "hunter" && hud.phase === "hunt"
               ? "1인칭 수색 · 마우스 조준 · 좌클릭 발사"
@@ -738,7 +740,9 @@ export function GameView({
           <ResultPanel room={hud} people={people} host={session.isHost()} onNext={() => startRound(true)} />
         )}
 
-        {!hunterHide && hud.phase !== "result" && (
+        {hud.phase === "reveal" && <RevealPanel room={hud} timeLeft={timeLeft} />}
+
+        {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
@@ -758,7 +762,7 @@ export function GameView({
           <button type="button" className="rounded-full bg-black/50 px-3 py-1 text-sm" onClick={() => setHelp(true)}>
             도움말
           </button>
-          {myRole !== "hunter" && hud.phase !== "result" && (
+          {myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
             <button
               type="button"
               className={`rounded-full px-4 py-2 font-display ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
@@ -767,7 +771,7 @@ export function GameView({
               {paintOpen ? "페인트 ON" : "페인트"}
             </button>
           )}
-          {!(myRole === "hunter" && hud.phase === "hunt") && (
+          {hud.phase !== "reveal" && !(myRole === "hunter" && hud.phase === "hunt") && (
             <div className="flex flex-wrap justify-end gap-1">
               {POSES.map((p) => (
                 <button
@@ -790,7 +794,7 @@ export function GameView({
           )}
         </div>
 
-        {paintOpen && myRole !== "hunter" && hud.phase !== "result" && (
+        {paintOpen && myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
           <aside className="absolute bottom-24 right-3 z-20 w-[230px] rounded-2xl border border-white/10 bg-[#121a16]/95 p-3 shadow-xl">
             <div className="mb-2 flex items-center justify-between text-sm">
               <span className="font-display">위장 팔레트</span>
@@ -1214,6 +1218,7 @@ function RoomSocialPanel({
 function presenceStatus(room: RoomState, person: PlayerSnap, myId: string) {
   if (person.id === myId) return "나";
   if (room.phase === "lobby") return person.ready ? "준비" : "대기";
+  if (room.phase === "reveal") return "공개됨";
   if (room.phase === "result") return "결과";
   if (room.mode === "normal" && room.caughtIds.includes(person.id)) return "탈락";
   return "플레이 중";
@@ -1314,6 +1319,26 @@ function ResultPanel({
             다음 라운드
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function RevealPanel({ room, timeLeft }: { room: RoomState; timeLeft: number }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-black/25 p-4">
+      <div className="w-full max-w-md rounded-3xl border border-lime/25 bg-[#121c17]/90 p-6 text-center shadow-2xl backdrop-blur-sm">
+        <p className="text-sm tracking-[0.18em] text-lime">마지막 {REVEAL_TIME}초</p>
+        <h2 className="mt-2 font-display text-4xl">검증 라운드</h2>
+        <p className="mt-3 text-sm text-white/75">
+          모든 카멜레온의 위치가 공개됩니다.
+          <br />
+          숨은 장소를 감상하고 다음 라운드를 준비하세요.
+        </p>
+        <div className="mt-5 font-display text-6xl tabular-nums text-lime">{timeLeft}</div>
+        <p className="mt-2 text-xs text-white/45">
+          {room.winner === "hiders" ? "카멜레온 팀 승리" : "술래 팀 승리"} · Tab으로 현황 보기
+        </p>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ export const MAX_BLOBS = 140;
 export const SYNC_HZ = 14;
 export const DEFAULT_HIDE = 60;
 export const DEFAULT_HUNT = 180;
+export const REVEAL_TIME = 30;
 export const WHITE = "#f3f1ea";
 export const SCORE_TAG = 80;
 export const SCORE_SURVIVE = 150;
