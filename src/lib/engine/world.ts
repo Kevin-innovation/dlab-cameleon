@@ -252,7 +252,8 @@ export class GameWorld {
       return;
     }
     if (!this.cling) this.yaw -= dx * LOOK_SENS;
-    this.pitch = Math.max(-lim, Math.min(lim, this.pitch - dy * LOOK_SENS));
+    const pitchLim = this.cling ? Math.PI / 5 : lim;
+    this.pitch = Math.max(-pitchLim, Math.min(pitchLim, this.pitch - dy * LOOK_SENS));
   }
 
   toggleWatch() {
@@ -262,13 +263,20 @@ export class GameWorld {
       return false;
     }
     this.watch = true;
-    this.bodyYaw = this.yaw;
-    this.specYaw = this.yaw;
-    this.specPitch = this.pitch;
+    this.bodyYaw = this.cling
+      ? Math.atan2(this.cling.axis === "x" ? this.cling.sign : 0, this.cling.axis === "z" ? this.cling.sign : 0)
+      : this.yaw;
+    this.specYaw = this.bodyYaw;
+    this.specPitch = 0;
     this.specX = this.camera.position.x;
-    this.specY = Math.max(1.2, this.camera.position.y);
+    this.specY = Math.max(1.2, Math.min(this.map.ceiling - 0.45, this.camera.position.y));
     this.specZ = this.camera.position.z;
     return true;
+  }
+
+  private clingFeetMax(boxMaxY: number) {
+    const head = poseHeight("stick");
+    return Math.max(0, Math.min(boxMaxY - 0.28, this.map.ceiling - head - 0.22));
   }
 
   exitWatch() {
@@ -328,7 +336,8 @@ export class GameWorld {
     }
     this.yaw = Math.atan2(this.cling.axis === "x" ? this.cling.sign : 0, this.cling.axis === "z" ? this.cling.sign : 0);
     this.vy = 0;
-    this.localY = Math.max(0, Math.min(this.localY, this.cling.maxY - 0.45));
+    this.pitch = Math.max(-0.6, Math.min(0.45, this.pitch));
+    this.localY = Math.max(0, Math.min(this.localY, this.clingFeetMax(this.cling.maxY)));
     return true;
   }
 
@@ -512,7 +521,7 @@ export class GameWorld {
       this.localX = Math.max(cling.minA, Math.min(cling.maxA, this.localX + rx * along * speed));
       this.localZ = cling.plane + cling.sign * pad;
     }
-    this.localY = Math.max(0, Math.min(cling.maxY - 0.45, this.localY + climb * speed));
+    this.localY = Math.max(0, Math.min(this.clingFeetMax(cling.maxY), this.localY + climb * speed));
     this.vy = 0;
     this.yaw = Math.atan2(nx, nz);
     const m = edgeMargin(r);
@@ -635,6 +644,7 @@ export class GameWorld {
       this.viewBob += opts.moving ? 0.26 : 0.05;
       const bob = opts.moving ? Math.sin(this.viewBob) * 0.028 : 0;
       this.camEye.set(this.localX, (this.crouching ? 1.08 : 1.58) + this.localY + bob, this.localZ);
+      this.camEye.y = Math.min(this.camEye.y, this.map.ceiling - 0.3);
       this.camera.position.copy(this.camEye);
       this.camRay.set(this.camEye, this.forward);
       this.camRay.near = 0.02;
@@ -652,6 +662,7 @@ export class GameWorld {
       const flash = this.fpMuzzle.material as THREE.MeshBasicMaterial;
       flash.opacity = kick * 0.9;
       this.fpMuzzle.scale.setScalar(0.8 + kick * 1.6);
+      this.camera.position.y = Math.min(this.camera.position.y, this.map.ceiling - 0.28);
       this.camera.updateProjectionMatrix();
       return;
     }
@@ -659,6 +670,7 @@ export class GameWorld {
     this.camera.fov = 70;
     const want = opts.paintOpen ? 2.4 : 4.0;
     this.camEye.set(this.localX, (this.crouching ? 1.05 : 1.48) + this.localY, this.localZ);
+    this.camEye.y = Math.min(this.camEye.y, this.map.ceiling - 0.3);
     this.camPos.copy(this.camEye).addScaledVector(this.forward, -want);
     this.camPos.y = Math.max(0.55, this.camPos.y);
     this.camDir.copy(this.camPos).sub(this.camEye);
@@ -674,7 +686,7 @@ export class GameWorld {
     } else {
       this.camera.position.copy(this.camEye);
     }
-    this.camera.position.y = Math.max(0.42, this.camera.position.y);
+    this.camera.position.y = Math.max(0.42, Math.min(this.map.ceiling - 0.28, this.camera.position.y));
     this.camera.updateProjectionMatrix();
   }
 
