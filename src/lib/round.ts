@@ -18,6 +18,7 @@ export function emptyRoom(): RoomState {
     ammo: {},
     feed: [],
     taunts: [],
+    doors: {},
   };
 }
 
@@ -59,6 +60,7 @@ export function beginRound(
     lastTag: undefined,
     feed: [],
     taunts: [],
+    doors: {},
     scores,
     ammoCount: mag,
     ammo,

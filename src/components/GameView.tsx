@@ -42,6 +42,7 @@ export function GameView({
   const [help, setHelp] = useState(false);
   const [watching, setWatching] = useState(false);
   const [nowTick, setNowTick] = useState(0);
+  const [atDoor, setAtDoor] = useState(false);
   const paintOpenRef = useRef(false);
   const watchingRef = useRef(false);
   const helpRef = useRef(false);
@@ -135,7 +136,13 @@ export function GameView({
           if (canStick) applyPosePick(session, world, "stick");
         }
         if (k === "t") tryTaunt();
-        if (k === "e") setTool("dropper");
+        if (k === "e") {
+          if (paintOpenRef.current) setTool("dropper");
+          else {
+            const id = world.nearDoor();
+            if (id) session.callDoor(id);
+          }
+        }
         if (k === "b") setTool("brush");
         if (k === "v") {
           const room = session.getRoom();
@@ -297,6 +304,13 @@ export function GameView({
       );
       session.setRoom(result.room);
     });
+    const undoor = session.onDoor((id) => {
+      if (!session.isHost()) return;
+      const room = session.getRoom();
+      const doors = { ...(room.doors ?? {}) };
+      doors[id] = !doors[id];
+      session.setRoom({ ...room, doors });
+    });
 
     const resize = () => world.resize();
     window.addEventListener("resize", resize);
@@ -344,6 +358,7 @@ export function GameView({
         }
       }
 
+      world.syncDoors(room.doors ?? {});
       const hunterWait = !!(me && isHunter(room, me.id) && room.phase === "hide");
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
       const ghost =
@@ -450,6 +465,7 @@ export function GameView({
       setHud({ ...session.getRoom() });
       setPeople(snapsFrom(session));
       setNowTick(Date.now());
+      setAtDoor(!!worldRef.current?.nearDoor());
     }, 120);
 
     return () => {
@@ -466,6 +482,7 @@ export function GameView({
       window.removeEventListener("pointercancel", onPointerUpPaint);
       ro.disconnect();
       unshot();
+      undoor();
       world.dispose();
       worldRef.current = null;
     };
@@ -613,6 +630,12 @@ export function GameView({
           </div>
         )}
 
+        {atDoor && !paintOpen && (
+          <div className="pointer-events-none absolute left-1/2 bottom-28 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-sm">
+            <span className="font-display text-lime">E</span> 문 열기/닫기
+          </div>
+        )}
+
         {me?.pose === "stick" && (
           <div className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
             <div className="font-display text-xl text-lime">벽에 붙음</div>
@@ -640,8 +663,8 @@ export function GameView({
 
         {!hunterHide && hud.phase !== "result" && (
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
-            <div>마우스 이동 = 시점 · WASD 이동 · Space 점프</div>
-            <div>C 벽에 붙기 · Shift 살금 · F 페인트 · R 자세 · V 관전</div>
+            <div>마우스 이동 = 시점 · WASD 이동 · Space 점프(상자 위)</div>
+            <div>C 벽에 붙기 · E 문 · Shift 살금 · F 페인트 · V 관전</div>
             {myRole === "hunter" && hud.phase === "hunt" && (
               <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
             )}
@@ -763,11 +786,11 @@ export function GameView({
           <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-2xl">3D 카멜론</h3>
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
-              <li>마우스를 움직이면 시점이 돌아가고, WASD로 걷고 Space로 점프합니다.</li>
-              <li>벽이나 가구 가까이에서 C를 누르면 면에 붙어 오를 수 있습니다. W/S 높이, A/D 좌우, 다시 C나 Space로 뗍니다.</li>
-              <li>숨은 뒤 V를 누르면 몸은 고정되고 카메라만 날리며 관전할 수 있습니다.</li>
-              <li>F로 페인트를 연 뒤 스포이드로 벽 색을 찍고, 붓으로 드래그해 몸을 칠하세요.</li>
-              <li>술래는 조준점을 맞추고 클릭해서 태그합니다. 처치는 왼쪽 위 킬 로그에 뜹니다.</li>
+              <li>WASD로 걷고 Space로 점프해 상자·소파 위에 오를 수 있습니다.</li>
+              <li>문 앞에서 E로 열고 방에 들어가세요. 벽 너머는 보이지 않습니다.</li>
+              <li>벽 가까이 C로 붙습니다. A/D 좌우, W/S 오르내리기. 같은 면에만 붙고 벽을 통과하지 않습니다.</li>
+              <li>F로 페인트를 연 뒤 스포이드로 벽 색을 찍고, 붓으로 드래그해 칠하세요.</li>
+              <li>술래는 조준점을 맞추고 클릭해서 태그합니다.</li>
             </ol>
             <button
               type="button"
@@ -859,7 +882,7 @@ function Lobby({
               key={m.id}
               type="button"
               disabled={!host}
-              onClick={() => session.setRoom({ ...room, mapId: m.id })}
+              onClick={() => session.setRoom({ ...room, mapId: m.id, doors: {} })}
               className={`rounded-xl px-3 py-2 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
             >
               <div className="font-display">

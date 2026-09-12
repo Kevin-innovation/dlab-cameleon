@@ -1,9 +1,18 @@
 import * as THREE from "three";
 import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, SNEAK_SPEED, WHITE } from "../config";
-import { getMap, mapColliders } from "../maps";
-import type { BodyPart, Collider, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
+import { doorCollider, getMap, mapColliders } from "../maps";
+import type { BodyPart, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
-import { moveWithSlide, nearestSurface, poseRadius, resolveStuck } from "./collision";
+import {
+  blocked,
+  headHit,
+  landOn,
+  moveWithSlide,
+  nearestSurface,
+  poseHeight,
+  poseRadius,
+  resolveStuck,
+} from "./collision";
 import {
   animateCharacter,
   applyPaint,
@@ -34,6 +43,8 @@ export class GameWorld {
   mapGroup = new THREE.Group();
   players = new Map<string, CharacterRig>();
   colliders: Collider[] = [];
+  private baseColliders: Collider[] = [];
+  private doorRigs: { def: DoorDef; pivot: THREE.Group; leaf: THREE.Mesh }[] = [];
   map!: GameMap;
   yaw = 0;
   pitch = 0;
@@ -41,7 +52,15 @@ export class GameWorld {
   localY = 0;
   localZ = 4;
   vy = 0;
-  cling: { nx: number; nz: number; maxY: number } | null = null;
+  cling: {
+    axis: "x" | "z";
+    sign: number;
+    plane: number;
+    minA: number;
+    maxA: number;
+    maxY: number;
+  } | null = null;
+  grounded = true;
   watch = false;
   bodyYaw = 0;
   specX = 0;
@@ -99,7 +118,6 @@ export class GameWorld {
   loadMap(id: string) {
     const map = getMap(id);
     this.map = map;
-    this.colliders = mapColliders(map);
     this.sampleCanvases = [];
     this.camBlockers = [];
     while (this.mapGroup.children.length) {
@@ -109,8 +127,9 @@ export class GameWorld {
     }
 
     this.scene.background = new THREE.Color(map.fog);
-    this.scene.fog = new THREE.FogExp2(map.fog, 0.0065);
+    this.scene.fog = new THREE.FogExp2(map.fog, 0.0072);
     this.cling = null;
+    this.grounded = true;
 
     const hemi = new THREE.HemisphereLight("#f2efe6", "#3d2a1c", 1.05);
     const sun = new THREE.DirectionalLight("#fff4e0", 1.35);
@@ -180,6 +199,35 @@ export class GameWorld {
         if (b.collide || b.h >= 0.28) this.camBlockers.push(mesh);
       }
     }
+
+    this.doorRigs = [];
+    for (const def of map.doors ?? []) {
+      const rig = makeDoor(def);
+      this.mapGroup.add(rig.pivot);
+      this.camBlockers.push(rig.leaf);
+      this.doorRigs.push({ def, pivot: rig.pivot, leaf: rig.leaf });
+    }
+    this.baseColliders = mapColliders(map);
+    this.syncDoors({});
+  }
+
+  syncDoors(open: Record<string, boolean>) {
+    for (const d of this.doorRigs) {
+      d.pivot.rotation.y = open[d.def.id] ? 1.84 : 0;
+    }
+    this.colliders = [
+      ...this.baseColliders,
+      ...this.doorRigs.filter((d) => !open[d.def.id]).map((d) => doorCollider(d.def)),
+    ];
+  }
+
+  nearDoor() {
+    let best: { id: string; dist: number } | null = null;
+    for (const d of this.doorRigs) {
+      const dist = Math.hypot(this.localX - d.def.x, this.localZ - d.def.z);
+      if (dist < 2.6 && (!best || dist < best.dist)) best = { id: d.def.id, dist };
+    }
+    return best?.id ?? null;
   }
 
   lookDelta(dx: number, dy: number) {
@@ -229,15 +277,39 @@ export class GameWorld {
       return false;
     }
     if (pose === "lie" || pose === "ball") return false;
-    const hit = nearestSurface(this.localX, this.localZ, this.colliders, 0.7);
-    if (!hit || hit.dist > 0.62) return false;
+    const hit = nearestSurface(this.localX, this.localZ, this.colliders, 0.58);
+    if (!hit || hit.dist < 0.04 || hit.dist > 0.55) return false;
+    const box = hit.box;
     const r = poseRadius("stick");
-    this.cling = { nx: hit.nx, nz: hit.nz, maxY: hit.box.maxY ?? 3.2 };
-    this.localX = hit.x + hit.nx * (r + 0.03);
-    this.localZ = hit.z + hit.nz * (r + 0.03);
-    this.yaw = Math.atan2(hit.nx, hit.nz);
+    const pad = r + 0.07;
+    if (Math.abs(hit.nx) >= Math.abs(hit.nz)) {
+      const sign = hit.nx >= 0 ? 1 : -1;
+      this.cling = {
+        axis: "x",
+        sign,
+        plane: sign > 0 ? box.maxX : box.minX,
+        minA: box.minZ + 0.04,
+        maxA: box.maxZ - 0.04,
+        maxY: box.maxY,
+      };
+      this.localX = this.cling.plane + sign * pad;
+      this.localZ = Math.max(this.cling.minA, Math.min(this.cling.maxA, this.localZ));
+    } else {
+      const sign = hit.nz >= 0 ? 1 : -1;
+      this.cling = {
+        axis: "z",
+        sign,
+        plane: sign > 0 ? box.maxZ : box.minZ,
+        minA: box.minX + 0.04,
+        maxA: box.maxX - 0.04,
+        maxY: box.maxY,
+      };
+      this.localZ = this.cling.plane + sign * pad;
+      this.localX = Math.max(this.cling.minA, Math.min(this.cling.maxA, this.localX));
+    }
+    this.yaw = Math.atan2(this.cling.axis === "x" ? this.cling.sign : 0, this.cling.axis === "z" ? this.cling.sign : 0);
     this.vy = 0;
-    this.localY = Math.max(0, Math.min(this.localY, this.cling.maxY - 0.4));
+    this.localY = Math.max(0, Math.min(this.localY, this.cling.maxY - 0.45));
     return true;
   }
 
@@ -273,14 +345,19 @@ export class GameWorld {
     if (ghost && this.cling) this.cling = null;
     if (this.cling && pose !== "stick") this.cling = null;
     const r = poseRadius(this.cling ? "stick" : pose);
-    const freed = resolveStuck(this.localX, this.localZ, r, boxes, bounds);
-    this.localX = freed.x;
-    this.localZ = freed.z;
+    const h = poseHeight(this.cling ? "stick" : pose);
+    const feet = this.localY;
+    const head = this.localY + h;
+    if (!this.cling) {
+      const freed = resolveStuck(this.localX, this.localZ, r, boxes, bounds, feet, head);
+      this.localX = freed.x;
+      this.localZ = freed.z;
+    }
     if (!canMove) return { x: this.localX, z: this.localZ, yaw: this.yaw };
 
     const k = input.keys;
     if (this.cling) {
-      this.stepCling(dt, k, r, boxes);
+      this.stepCling(dt, k, r);
       return { x: this.localX, z: this.localZ, yaw: this.yaw };
     }
 
@@ -306,30 +383,54 @@ export class GameWorld {
       if (pose === "lie") speed *= 0.45;
       if (pose === "crouch" || pose === "sit") speed *= 0.72;
       if (ghost) speed *= 1.15;
-      const moved = moveWithSlide(
-        this.localX,
-        this.localZ,
-        this.wish.x * speed * dt,
-        this.wish.z * speed * dt,
-        r,
-        boxes,
-        bounds,
-      );
-      this.localX = moved.x;
-      this.localZ = moved.z;
+      const dx = this.wish.x * speed * dt;
+      const dz = this.wish.z * speed * dt;
+      const moved = moveWithSlide(this.localX, this.localZ, dx, dz, r, boxes, bounds, feet, head);
+      if (
+        this.grounded &&
+        Math.hypot(moved.x - this.localX, moved.z - this.localZ) < 0.0001 &&
+        (Math.abs(dx) > 0.0001 || Math.abs(dz) > 0.0001)
+      ) {
+        const step = 0.42;
+        if (!blocked(this.localX + dx, this.localZ + dz, r, boxes, bounds, feet + step, head + step)) {
+          const up = moveWithSlide(this.localX, this.localZ, dx, dz, r, boxes, bounds, feet + step, head + step);
+          this.localX = up.x;
+          this.localZ = up.z;
+          const landed = landOn(up.x, up.z, r, feet + step + 0.05, feet, boxes);
+          if (landed !== null) this.localY = landed;
+        }
+      } else {
+        this.localX = moved.x;
+        this.localZ = moved.z;
+      }
     }
 
-    const onGround = this.localY <= 0.02 && this.vy <= 0.01;
-    if (onGround) {
-      this.localY = 0;
-      this.vy = 0;
-      if (k.has(" ") || k.has("space")) this.vy = JUMP_SPEED;
+    if (this.grounded && (k.has(" ") || k.has("space"))) {
+      this.vy = JUMP_SPEED;
+      this.grounded = false;
     }
     this.vy -= GRAVITY * dt;
+    const prevY = this.localY;
     this.localY += this.vy * dt;
+    this.grounded = false;
     if (this.localY <= 0) {
       this.localY = 0;
       if (this.vy < 0) this.vy = 0;
+      this.grounded = true;
+    }
+    if (this.vy <= 0.05) {
+      const landed = landOn(this.localX, this.localZ, r, prevY, this.localY, boxes);
+      if (landed !== null) {
+        this.localY = landed;
+        this.vy = 0;
+        this.grounded = true;
+      }
+    } else {
+      const bump = headHit(this.localX, this.localZ, r, prevY + h, this.localY + h, boxes);
+      if (bump !== null) {
+        this.localY = Math.max(0, bump - h - 0.02);
+        this.vy = 0;
+      }
     }
     return { x: this.localX, z: this.localZ, yaw: this.yaw };
   }
@@ -340,17 +441,22 @@ export class GameWorld {
     this.localY = 0;
     this.vy = 0;
     this.cling = null;
+    this.grounded = true;
     if (yaw !== undefined) this.yaw = yaw;
   }
 
-  private stepCling(dt: number, keys: Set<string>, r: number, boxes: typeof this.colliders) {
+  private stepCling(dt: number, keys: Set<string>, r: number) {
     const cling = this.cling;
     if (!cling) return;
+    const nx = cling.axis === "x" ? cling.sign : 0;
+    const nz = cling.axis === "z" ? cling.sign : 0;
+    const pad = r + 0.07;
     if (keys.has(" ") || keys.has("space")) {
-      this.localX += cling.nx * 0.42;
-      this.localZ += cling.nz * 0.42;
+      this.localX += nx * 0.45;
+      this.localZ += nz * 0.45;
       this.vy = JUMP_SPEED * 0.78;
       this.cling = null;
+      this.grounded = false;
       return;
     }
     let along = 0;
@@ -360,29 +466,25 @@ export class GameWorld {
     if (keys.has("w") || keys.has("arrowup")) climb += 1;
     if (keys.has("s") || keys.has("arrowdown")) climb -= 1;
     if (climb < 0 && this.localY <= 0.03) {
-      this.localX += cling.nx * 0.28;
-      this.localZ += cling.nz * 0.28;
+      this.localX += nx * 0.32;
+      this.localZ += nz * 0.32;
       this.cling = null;
+      this.grounded = true;
       return;
     }
     const speed = (keys.has("shift") ? 2.4 : 5.2) * dt;
-    const rx = -cling.nz;
-    const rz = cling.nx;
-    this.localX += rx * along * speed;
-    this.localZ += rz * along * speed;
-    this.localY = Math.max(0, Math.min(cling.maxY - 0.38, this.localY + climb * speed));
-    this.vy = 0;
-    const hit = nearestSurface(this.localX, this.localZ, boxes, 0.78);
-    if (!hit || hit.dist > 0.7) {
-      this.cling = null;
-      return;
+    const rx = nz;
+    const rz = -nx;
+    if (cling.axis === "x") {
+      this.localZ = Math.max(cling.minA, Math.min(cling.maxA, this.localZ + rz * along * speed));
+      this.localX = cling.plane + cling.sign * pad;
+    } else {
+      this.localX = Math.max(cling.minA, Math.min(cling.maxA, this.localX + rx * along * speed));
+      this.localZ = cling.plane + cling.sign * pad;
     }
-    const pad = r + 0.03;
-    this.localX = hit.x + hit.nx * pad;
-    this.localZ = hit.z + hit.nz * pad;
-    this.cling = { nx: hit.nx, nz: hit.nz, maxY: hit.box.maxY ?? cling.maxY };
-    this.yaw = Math.atan2(hit.nx, hit.nz);
-    this.localY = Math.max(0, Math.min(this.cling.maxY - 0.38, this.localY));
+    this.localY = Math.max(0, Math.min(cling.maxY - 0.45, this.localY + climb * speed));
+    this.vy = 0;
+    this.yaw = Math.atan2(nx, nz);
   }
 
   syncPlayers(
@@ -426,7 +528,7 @@ export class GameWorld {
           ? this.watch
             ? this.bodyYaw
             : this.cling
-              ? Math.atan2(this.cling.nx, this.cling.nz)
+              ? Math.atan2(this.cling.axis === "x" ? this.cling.sign : 0, this.cling.axis === "z" ? this.cling.sign : 0)
               : this.yaw
           : p.yaw;
       const prevX = rig.group.position.x;
@@ -742,6 +844,32 @@ export class GameWorld {
     disposeObject(this.mapGroup);
     this.renderer.dispose();
   }
+}
+
+function makeDoor(def: DoorDef) {
+  const pivot = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.62, metalness: 0.08 });
+  const trim = new THREE.MeshStandardMaterial({ color: "#c9a227", roughness: 0.4, metalness: 0.45 });
+  if (def.along === "z") {
+    pivot.position.set(def.x, 0, def.z - def.w / 2);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(def.d, def.h, def.w), wood);
+    leaf.position.set(0, def.h / 2, def.w / 2);
+    leaf.castShadow = true;
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), trim);
+    knob.position.set(def.d * 0.6, def.h * 0.48, def.w * 0.78);
+    leaf.add(knob);
+    pivot.add(leaf);
+    return { pivot, leaf };
+  }
+  pivot.position.set(def.x - def.w / 2, 0, def.z);
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(def.w, def.h, def.d), wood);
+  leaf.position.set(def.w / 2, def.h / 2, 0);
+  leaf.castShadow = true;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), trim);
+  knob.position.set(def.w * 0.78, def.h * 0.48, def.d * 0.6);
+  leaf.add(knob);
+  pivot.add(leaf);
+  return { pivot, leaf };
 }
 
 function makeKillSprite(text: string) {

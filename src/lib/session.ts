@@ -27,6 +27,8 @@ export type Session = {
   me: () => SessionPlayer;
   callShot: (targetId: string) => void;
   onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
+  callDoor: (id: string) => void;
+  onDoor: (cb: (id: string) => void) => () => void;
   leave: () => void;
 };
 
@@ -110,10 +112,16 @@ export async function connectOnline(opts: {
   }
 
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
+  const doorListeners = new Set<(id: string) => void>();
   RPC.register("shot", async (payload, sender) => {
     const targetId = String(payload?.targetId ?? "");
     if (!targetId) return;
     shotListeners.forEach((cb) => cb(sender.id, targetId));
+  });
+  RPC.register("door", async (payload) => {
+    const id = String(payload?.id ?? "");
+    if (!id) return;
+    doorListeners.forEach((cb) => cb(id));
   });
 
   return {
@@ -137,6 +145,13 @@ export async function connectOnline(opts: {
     onShot: (cb) => {
       shotListeners.add(cb);
       return () => shotListeners.delete(cb);
+    },
+    callDoor: (id) => {
+      void RPC.call("door", { id }, RPC.Mode.HOST);
+    },
+    onDoor: (cb) => {
+      doorListeners.add(cb);
+      return () => doorListeners.delete(cb);
     },
     leave: () => {
       try {
@@ -173,6 +188,7 @@ export function createPractice(nickname: string): Session {
     },
   };
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
+  const doorListeners = new Set<(doorId: string) => void>();
   return {
     kind: "practice",
     myId: () => id,
@@ -187,6 +203,11 @@ export function createPractice(nickname: string): Session {
     onShot: (cb) => {
       shotListeners.add(cb);
       return () => shotListeners.delete(cb);
+    },
+    callDoor: (doorId) => doorListeners.forEach((cb) => cb(doorId)),
+    onDoor: (cb) => {
+      doorListeners.add(cb);
+      return () => doorListeners.delete(cb);
     },
     leave: () => {
       window.location.assign(window.location.origin + "/");

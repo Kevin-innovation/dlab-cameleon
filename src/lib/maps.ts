@@ -1,5 +1,5 @@
-import { resolveStuck } from "./engine/collision";
-import type { BoxDef, GameMap, Pattern } from "./types";
+import { circleHitsBox, resolveStuck } from "./engine/collision";
+import type { BoxDef, Collider, DoorDef, GameMap, Pattern } from "./types";
 
 function B(
   x: number,
@@ -41,13 +41,14 @@ const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67
 const mansion: GameMap = {
   id: "mansion",
   name: "숨바꼭질 저택",
-  blurb: "홀과 구석. 벽·소파·책장 면에 붙어 위장하세요.",
+  blurb: "방과 문이 있는 저택. 상자 위에 오르고 벽에 붙어 숨으세요.",
   difficulty: "쉬움",
   w: 48,
   d: 36,
   ceiling: 4.2,
   fog: "#241810",
   floor: "#c4a06a",
+  doors: [],
   hunterSpawns: [{ x: 24, z: 33.5 }],
   spawns: [
     { x: 8, z: 8 },
@@ -97,13 +98,14 @@ const mansion: GameMap = {
 const farm: GameMap = {
   id: "farm",
   name: "실내 농장",
-  blurb: "헛간. 건초·기둥·칸막이 면에 붙어 숨으세요.",
+  blurb: "마구간과 헛간 방. 문을 열고 건초 더미 위에 숨으세요.",
   difficulty: "쉬움",
   w: 52,
   d: 38,
   ceiling: 6,
   fog: "#2a2214",
   floor: "#c2a05a",
+  doors: [],
   hunterSpawns: [{ x: 26, z: 35 }],
   spawns: [
     { x: 8, z: 8 },
@@ -153,13 +155,14 @@ const farm: GameMap = {
 const sewer: GameMap = {
   id: "sewer",
   name: "하수도",
-  blurb: "지하 홀. 드럼·파이프·그래피티 벽에 녹아드세요.",
+  blurb: "터널과 챔버. 철문을 열고 파이프 뒤에 숨으세요.",
   difficulty: "보통",
   w: 46,
   d: 34,
   ceiling: 4.4,
   fog: "#101816",
   floor: "#3d4a43",
+  doors: [],
   hunterSpawns: [{ x: 23, z: 31.5 }],
   spawns: [
     { x: 7, z: 7 },
@@ -306,16 +309,116 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
   return [B(x, z, 2.2, 0.22, "#6a8f6a", { h: 2.4, collide: true, pattern: "leaves" })];
 }
 
+function wallTheme(id: string): { color: string; pattern: Pattern; colors: string[] } {
+  if (id === "farm") return { color: "#6d4420", pattern: "wood", colors: ["#6d4420", "#8b5a2b"] };
+  if (id === "sewer") return { color: "#1b2420", pattern: "bricks", colors: ["#1b2420", "#2a3830"] };
+  return { color: "#4a3428", pattern: "wallpaper", colors: ["#4a3428", "#6b3a2a"] };
+}
+
+function wallWithDoor(
+  mapId: string,
+  along: "x" | "z",
+  plane: number,
+  a0: number,
+  a1: number,
+  thick: number,
+  h: number,
+  theme: { color: string; pattern: Pattern; colors: string[] },
+): { walls: BoxDef[]; door: DoorDef } {
+  const gap = 1.82;
+  const mid = (a0 + a1) / 2;
+  const door: DoorDef = {
+    id: `${mapId}-${along}-${plane.toFixed(1)}-${mid.toFixed(1)}`,
+    x: along === "z" ? plane : mid,
+    z: along === "z" ? mid : plane,
+    w: gap - 0.08,
+    h: Math.min(2.32, h - 0.15),
+    d: thick + 0.05,
+    along,
+    color: "#5c3a22",
+  };
+  const walls: BoxDef[] = [];
+  const leftLen = mid - gap / 2 - a0;
+  const rightLen = a1 - (mid + gap / 2);
+  if (along === "z") {
+    if (leftLen > 0.35) walls.push(B(plane - thick / 2, a0, thick, leftLen, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }));
+    if (rightLen > 0.35)
+      walls.push(
+        B(plane - thick / 2, mid + gap / 2, thick, rightLen, theme.color, {
+          h,
+          collide: true,
+          pattern: theme.pattern,
+          colors: theme.colors,
+        }),
+      );
+  } else {
+    if (leftLen > 0.35) walls.push(B(a0, plane - thick / 2, leftLen, thick, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }));
+    if (rightLen > 0.35)
+      walls.push(
+        B(mid + gap / 2, plane - thick / 2, rightLen, thick, theme.color, {
+          h,
+          collide: true,
+          pattern: theme.pattern,
+          colors: theme.colors,
+        }),
+      );
+  }
+  return { walls, door };
+}
+
+function partitionMap(map: GameMap): GameMap {
+  const theme = wallTheme(map.id);
+  const h = Math.max(3.6, map.ceiling - 0.08);
+  const thick = 0.4;
+  const pad = 1.4;
+  let xs: number[];
+  let zs: number[];
+  if (map.id === "farm") {
+    xs = [36, 70, 104];
+    zs = [30, 58];
+  } else if (map.id === "sewer") {
+    xs = [24, 46, 68, 90];
+    zs = [22, 42, 64];
+  } else {
+    xs = [32, 64, 96];
+    zs = [26, 52, 74];
+  }
+  const xLines = [pad, ...xs.filter((x) => x > pad + 2 && x < map.w - pad - 2), map.w - pad];
+  const zLines = [pad, ...zs.filter((z) => z > pad + 2 && z < map.d - pad - 2), map.d - pad];
+  const walls: BoxDef[] = [];
+  const doors: DoorDef[] = [];
+  for (const x of xs) {
+    if (x <= pad || x >= map.w - pad) continue;
+    for (let i = 0; i < zLines.length - 1; i++) {
+      const part = wallWithDoor(map.id, "z", x, zLines[i], zLines[i + 1], thick, h, theme);
+      walls.push(...part.walls);
+      doors.push(part.door);
+    }
+  }
+  for (const z of zs) {
+    if (z <= pad || z >= map.d - pad) continue;
+    for (let i = 0; i < xLines.length - 1; i++) {
+      const part = wallWithDoor(map.id, "x", z, xLines[i], xLines[i + 1], thick, h, theme);
+      walls.push(...part.walls);
+      doors.push(part.door);
+    }
+  }
+  return { ...map, boxes: [...map.boxes, ...walls], doors };
+}
+
 function clutterMap(map: GameMap): GameMap {
   const rnd = mulberry(map.id.split("").reduce((a, c) => a + c.charCodeAt(0) * 17, 11));
+  const cols = mapColliders(map);
   const extras: BoxDef[] = [];
-  const step = 9;
+  const step = 10;
   for (let gx = 8; gx < map.w - 8; gx += step) {
     for (let gz = 8; gz < map.d - 8; gz += step) {
-      const x = gx + (rnd() - 0.5) * 4.5;
-      const z = gz + (rnd() - 0.5) * 4.5;
+      const x = gx + (rnd() - 0.5) * 4.2;
+      const z = gz + (rnd() - 0.5) * 4.2;
       if (nearSpawn(map, x, z, 6.5)) continue;
-      if (rnd() < 0.1) continue;
+      if (map.doors.some((d) => Math.hypot(d.x - x, d.z - z) < 2.6)) continue;
+      if (cols.some((c) => circleHitsBox(x + 1, z + 1, 1.35, c))) continue;
+      if (rnd() < 0.12) continue;
       extras.push(...cluster(map.id, x, z, Math.floor(rnd() * 9), rnd));
     }
   }
@@ -323,7 +426,7 @@ function clutterMap(map: GameMap): GameMap {
 }
 
 function clearSpawns(map: GameMap): GameMap {
-  const cols = mapColliders(map);
+  const cols = [...mapColliders(map), ...(map.doors ?? []).map(doorCollider)];
   const bounds = { w: map.w, d: map.d };
   const fix = (p: { x: number; z: number }) => resolveStuck(p.x, p.z, 0.45, cols, bounds);
   return {
@@ -359,8 +462,29 @@ function expandMap(map: GameMap, s: number): GameMap {
 }
 
 export const MAPS: GameMap[] = [mansion, farm, sewer].map((m) =>
-  clearSpawns(clutterMap(expandMap(m, 2.5))),
+  clearSpawns(clutterMap(partitionMap(expandMap(m, 2.5)))),
 );
+
+export function doorCollider(door: DoorDef): Collider {
+  if (door.along === "z") {
+    return {
+      minX: door.x - door.d / 2,
+      maxX: door.x + door.d / 2,
+      minZ: door.z - door.w / 2,
+      maxZ: door.z + door.w / 2,
+      minY: 0,
+      maxY: door.h,
+    };
+  }
+  return {
+    minX: door.x - door.w / 2,
+    maxX: door.x + door.w / 2,
+    minZ: door.z - door.d / 2,
+    maxZ: door.z + door.d / 2,
+    minY: 0,
+    maxY: door.h,
+  };
+}
 
 export function getMap(id: string) {
   return MAPS.find((m) => m.id === id) ?? MAPS[0];

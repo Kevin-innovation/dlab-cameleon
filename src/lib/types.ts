@@ -57,6 +57,17 @@ export type Collider = {
   maxY: number;
 };
 
+export type DoorDef = {
+  id: string;
+  x: number;
+  z: number;
+  w: number;
+  h: number;
+  d: number;
+  along: "x" | "z";
+  color: string;
+};
+
 export type GameMap = {
   id: string;
   name: string;
@@ -68,6 +79,7 @@ export type GameMap = {
   fog: string;
   floor: string;
   boxes: BoxDef[];
+  doors: DoorDef[];
   spawns: { x: number; z: number }[];
   hunterSpawns: { x: number; z: number }[];
 };
@@ -89,6 +101,7 @@ export type RoomState = {
   lastTag?: { id: string; by: string; name: string; byName: string; at: number };
   feed: { id: string; by: string; name: string; byName: string; at: number }[];
   taunts: { x: number; y: number; at: number; id: string }[];
+  doors: Record<string, boolean>;
   winner?: "hunters" | "hiders";
 };
 
