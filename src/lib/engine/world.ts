@@ -38,6 +38,13 @@ export class GameWorld {
   pitch = 0;
   localX = 4;
   localZ = 4;
+  watch = false;
+  bodyYaw = 0;
+  specX = 0;
+  specY = 1.6;
+  specZ = 0;
+  specYaw = 0;
+  specPitch = 0;
   sampleCanvases: { mesh: THREE.Mesh; canvas: HTMLCanvasElement }[] = [];
   camBlockers: THREE.Object3D[] = [];
   private euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -169,10 +176,56 @@ export class GameWorld {
   }
 
   lookDelta(dx: number, dy: number) {
-    this.yaw -= dx * LOOK_SENS;
-    this.pitch -= dy * LOOK_SENS;
     const lim = Math.PI / 2 - 0.04;
-    this.pitch = Math.max(-lim, Math.min(lim, this.pitch));
+    if (this.watch) {
+      this.specYaw -= dx * LOOK_SENS;
+      this.specPitch = Math.max(-lim, Math.min(lim, this.specPitch - dy * LOOK_SENS));
+      return;
+    }
+    this.yaw -= dx * LOOK_SENS;
+    this.pitch = Math.max(-lim, Math.min(lim, this.pitch - dy * LOOK_SENS));
+  }
+
+  toggleWatch() {
+    if (this.watch) {
+      this.watch = false;
+      this.yaw = this.bodyYaw;
+      return false;
+    }
+    this.watch = true;
+    this.bodyYaw = this.yaw;
+    this.specYaw = this.yaw;
+    this.specPitch = this.pitch;
+    this.specX = this.camera.position.x;
+    this.specY = Math.max(1.2, this.camera.position.y);
+    this.specZ = this.camera.position.z;
+    return true;
+  }
+
+  exitWatch() {
+    if (!this.watch) return;
+    this.watch = false;
+    this.yaw = this.bodyYaw;
+  }
+
+  stepSpectate(dt: number, keys: Set<string>) {
+    this.euler.set(this.specPitch, this.specYaw, 0, "YXZ");
+    this.forward.set(0, 0, -1).applyEuler(this.euler);
+    this.right.set(1, 0, 0).applyEuler(this.euler);
+    this.wish.set(0, 0, 0);
+    if (keys.has("w") || keys.has("arrowup")) this.wish.add(this.forward);
+    if (keys.has("s") || keys.has("arrowdown")) this.wish.sub(this.forward);
+    if (keys.has("d") || keys.has("arrowright")) this.wish.add(this.right);
+    if (keys.has("a") || keys.has("arrowleft")) this.wish.sub(this.right);
+    const up = (keys.has("e") || keys.has(" ") ? 1 : 0) - (keys.has("q") || keys.has("control") ? 1 : 0);
+    if (this.wish.lengthSq() > 0) this.wish.normalize();
+    const speed = (keys.has("shift") ? 22 : 14) * dt;
+    this.specX += this.wish.x * speed;
+    this.specY += this.wish.y * speed + up * speed;
+    this.specZ += this.wish.z * speed;
+    this.specX = Math.max(1, Math.min(this.map.w - 1, this.specX));
+    this.specZ = Math.max(1, Math.min(this.map.d - 1, this.specZ));
+    this.specY = Math.max(0.6, Math.min(this.map.ceiling - 0.4, this.specY));
   }
 
   stepLocal(
@@ -269,7 +322,7 @@ export class GameWorld {
       setGhostLook(rig, ghost);
       const x = p.id === myId ? this.localX : p.x;
       const z = p.id === myId ? this.localZ : p.z;
-      const yaw = p.id === myId ? this.yaw : p.yaw;
+      const yaw = p.id === myId ? (this.watch ? this.bodyYaw : this.yaw) : p.yaw;
       const prevX = rig.group.position.x;
       const prevZ = rig.group.position.z;
       if (p.id === myId) {
@@ -307,6 +360,14 @@ export class GameWorld {
   }
 
   updateCamera(opts: { paintOpen: boolean; hunterHide: boolean }) {
+    if (this.watch) {
+      this.euler.set(this.specPitch, this.specYaw, 0, "YXZ");
+      this.camera.quaternion.setFromEuler(this.euler);
+      this.camera.position.set(this.specX, this.specY, this.specZ);
+      this.camera.fov = 72;
+      this.camera.updateProjectionMatrix();
+      return;
+    }
     this.euler.set(this.pitch, this.yaw, 0, "YXZ");
     this.camera.quaternion.setFromEuler(this.euler);
     if (opts.hunterHide) {

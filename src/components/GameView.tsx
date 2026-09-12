@@ -40,8 +40,10 @@ export function GameView({
   const [brush, setBrush] = useState(14);
   const [tool, setTool] = useState<Tool>("dropper");
   const [help, setHelp] = useState(false);
+  const [watching, setWatching] = useState(false);
   const [nowTick, setNowTick] = useState(0);
   const paintOpenRef = useRef(false);
+  const watchingRef = useRef(false);
   const helpRef = useRef(false);
   const colorRef = useRef(color);
   const brushRef = useRef(brush);
@@ -64,6 +66,9 @@ export function GameView({
   useEffect(() => {
     helpRef.current = help;
   }, [help]);
+  useEffect(() => {
+    watchingRef.current = watching;
+  }, [watching]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -122,6 +127,20 @@ export function GameView({
         if (k === "t") tryTaunt();
         if (k === "e") setTool("dropper");
         if (k === "b") setTool("brush");
+        if (k === "v") {
+          const room = session.getRoom();
+          const snap = snapsFrom(session).find((p) => p.id === session.myId());
+          const hiding =
+            !!snap &&
+            (room.phase === "hide" || room.phase === "hunt") &&
+            hiderAlive(room, snap.id);
+          if (hiding) {
+            const on = world.toggleWatch();
+            watchingRef.current = on;
+            setWatching(on);
+            if (on) setPaintOpen(false);
+          }
+        }
       }
       if (down) keys.add(k);
       else keys.delete(k);
@@ -269,6 +288,9 @@ export function GameView({
           session.me().set("alive", role !== "spectator", true);
           session.me().set("ready", false, true);
           setPaintOpen(false);
+          world.exitWatch();
+          watchingRef.current = false;
+          setWatching(false);
         }
       }
 
@@ -280,23 +302,30 @@ export function GameView({
         room.mode === "normal" &&
         room.caughtIds.includes(me.id) &&
         !isHunter(room, me.id);
+      if (ghost && watchingRef.current) {
+        world.exitWatch();
+        watchingRef.current = false;
+        setWatching(false);
+      }
+      if (watchingRef.current) world.stepSpectate(dt, keys);
       const localMoving =
-        keys.has("w") ||
-        keys.has("a") ||
-        keys.has("s") ||
-        keys.has("d") ||
-        keys.has("arrowup") ||
-        keys.has("arrowdown") ||
-        keys.has("arrowleft") ||
-        keys.has("arrowright");
+        !watchingRef.current &&
+        (keys.has("w") ||
+          keys.has("a") ||
+          keys.has("s") ||
+          keys.has("d") ||
+          keys.has("arrowup") ||
+          keys.has("arrowdown") ||
+          keys.has("arrowleft") ||
+          keys.has("arrowright"));
       const moved = world.stepLocal(
         dt,
         { keys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
-        !hunterWait && room.phase !== "result",
+        !hunterWait && room.phase !== "result" && !watchingRef.current,
         pose,
         ghost,
       );
-      session.me().set("yaw", world.yaw, false);
+      if (!watchingRef.current) session.me().set("yaw", world.yaw, false);
 
       if (me && room.phase === "hunt" && hiderAlive(room, me.id)) {
         if (Date.now() - lastForced > FORCED_TAUNT) {
@@ -502,6 +531,13 @@ export function GameView({
           </div>
         )}
 
+        {watching && myRole === "hider" && (
+          <div className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
+            <div className="font-display text-xl text-lime">숨은 채 관전</div>
+            <p className="text-sm text-white/75">몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · V 복귀</p>
+          </div>
+        )}
+
         {myRole === "spectator" && hud.phase === "hunt" && (
           <div className="pointer-events-none absolute left-1/2 top-36 z-30 -translate-x-1/2 rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm">
             <div className="font-display text-2xl text-cyan-100">유령</div>
@@ -516,7 +552,7 @@ export function GameView({
         {!hunterHide && hud.phase !== "result" && (
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
             <div>마우스 이동 = 시점 · WASD 이동</div>
-            <div>Shift 살금 · F 페인트 · R 자세</div>
+            <div>Shift 살금 · F 페인트 · R 자세 · V 숨은 채 관전</div>
             {myRole === "hunter" && hud.phase === "hunt" && (
               <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
             )}
@@ -632,6 +668,7 @@ export function GameView({
             <h3 className="font-display text-2xl">3D 카멜론</h3>
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
               <li>마우스를 움직이면 시점이 돌아가고, WASD로 그 방향으로 걷습니다. 좌클릭은 시점이 아니라 태그입니다.</li>
+              <li>숨은 뒤 V를 누르면 몸은 고정되고 카메라만 날리며 관전할 수 있습니다. 다시 V로 돌아옵니다.</li>
               <li>위장 시간에 자리를 고르고 F로 페인트를 연 뒤, 스포이드로 벽 색을 찍고 팔·몸·머리를 따로 칠합니다.</li>
               <li>자세를 바꿔 소파·책장·파이프 실루엣에 맞추세요.</li>
               <li>술래는 조준점을 맞추고 클릭해서 태그합니다.</li>
