@@ -280,6 +280,7 @@ export function GameView({
               : map.spawns[idx % map.spawns.length];
           world.setLocal(spawn.x, spawn.z);
           session.me().set("x", spawn.x, true);
+          session.me().set("y", 0, true);
           session.me().set("z", spawn.z, true);
           session.me().set("fill", WHITE, true);
           session.me().set("blobs", [], true);
@@ -337,8 +338,11 @@ export function GameView({
       if (t - lastSync > 1000 / SYNC_HZ) {
         lastSync = t;
         session.me().set("x", moved.x, false);
+        session.me().set("y", world.localY, false);
         session.me().set("z", moved.z, false);
         session.me().set("yaw", world.yaw, false);
+      } else if (world.localY > 0.02) {
+        session.me().set("y", world.localY, false);
       }
 
       if (session.isHost()) {
@@ -370,6 +374,7 @@ export function GameView({
           next.winner !== room.winner ||
           next.round !== room.round ||
           next.lastTag?.at !== room.lastTag?.at ||
+          (next.feed?.length ?? 0) !== (room.feed?.length ?? 0) ||
           JSON.stringify(next.ammo) !== JSON.stringify(room.ammo)
         ) {
           session.setRoom(next);
@@ -450,6 +455,23 @@ export function GameView({
           className={`absolute inset-0 h-full w-full touch-none ${paintOpen ? "cursor-crosshair" : locked ? "cursor-none" : "cursor-default"}`}
         />
 
+        <div className="pointer-events-none absolute left-3 top-[4.5rem] z-30 flex w-[min(100%,300px)] flex-col gap-1.5">
+          {(hud.feed ?? [])
+            .filter((f) => nowTick - f.at < 9000)
+            .slice(-6)
+            .map((f) => (
+              <div
+                key={`${f.at}-${f.id}`}
+                className="flex items-center gap-2 rounded-lg border-l-4 border-pink bg-black/70 px-2.5 py-1.5 text-[13px] leading-snug backdrop-blur-sm"
+              >
+                <span className="font-display text-[11px] tracking-wide text-pink">처치</span>
+                <span className="font-display text-white">{f.byName}</span>
+                <span className="text-white/40">→</span>
+                <span className="font-display text-lime">{f.name}</span>
+              </div>
+            ))}
+        </div>
+
         <header className="pointer-events-none absolute left-0 right-0 top-0 z-10 flex items-start justify-between p-3">
           <div className="rounded-2xl bg-black/45 px-3 py-2 backdrop-blur-sm">
             <div className="text-[11px] tracking-wide text-lime/80">
@@ -525,9 +547,12 @@ export function GameView({
           </div>
         )}
 
-        {hud.lastTag && nowTick - hud.lastTag.at < 1800 && hud.phase === "hunt" && (
-          <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-full bg-pink px-4 py-1 font-display text-black">
-            {hud.lastTag.name} 발견!
+        {hud.lastTag && nowTick - hud.lastTag.at < 2200 && hud.phase === "hunt" && (
+          <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-2xl bg-pink px-6 py-2 text-center text-black shadow-lg">
+            <div className="text-[11px] font-semibold tracking-[0.2em]">처치</div>
+            <div className="font-display text-2xl leading-none">
+              {hud.lastTag.byName} → {hud.lastTag.name}
+            </div>
           </div>
         )}
 
@@ -551,7 +576,7 @@ export function GameView({
 
         {!hunterHide && hud.phase !== "result" && (
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
-            <div>마우스 이동 = 시점 · WASD 이동</div>
+            <div>마우스 이동 = 시점 · WASD 이동 · Space 점프</div>
             <div>Shift 살금 · F 페인트 · R 자세 · V 숨은 채 관전</div>
             {myRole === "hunter" && hud.phase === "hunt" && (
               <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
@@ -667,11 +692,11 @@ export function GameView({
           <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-2xl">3D 카멜론</h3>
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
-              <li>마우스를 움직이면 시점이 돌아가고, WASD로 그 방향으로 걷습니다. 좌클릭은 시점이 아니라 태그입니다.</li>
+              <li>마우스를 움직이면 시점이 돌아가고, WASD로 그 방향으로 걷습니다. Space로 점프합니다.</li>
               <li>숨은 뒤 V를 누르면 몸은 고정되고 카메라만 날리며 관전할 수 있습니다. 다시 V로 돌아옵니다.</li>
               <li>위장 시간에 자리를 고르고 F로 페인트를 연 뒤, 스포이드로 벽 색을 찍고 팔·몸·머리를 따로 칠합니다.</li>
               <li>자세를 바꿔 소파·책장·파이프 실루엣에 맞추세요.</li>
-              <li>술래는 조준점을 맞추고 클릭해서 태그합니다.</li>
+              <li>술래는 조준점을 맞추고 클릭해서 태그합니다. 누가 누구를 잡았는지는 왼쪽 위 킬 로그에 뜹니다.</li>
             </ol>
             <button
               type="button"

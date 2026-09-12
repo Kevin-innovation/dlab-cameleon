@@ -16,6 +16,7 @@ export function emptyRoom(): RoomState {
     hunterCount: 1,
     ammoCount: DEFAULT_AMMO,
     ammo: {},
+    feed: [],
     taunts: [],
   };
 }
@@ -56,6 +57,7 @@ export function beginRound(
     caughtIds: [],
     winner: undefined,
     lastTag: undefined,
+    feed: [],
     taunts: [],
     scores,
     ammoCount: mag,
@@ -116,11 +118,19 @@ export function processFire(
       const scores = { ...next.scores };
       scores[hunterId] = (scores[hunterId] ?? 0) + 80;
       tagged = best;
+      const entry = {
+        id: best.id,
+        by: hunterId,
+        name: best.name,
+        byName: hunter.name,
+        at: now,
+      };
       next = {
         ...next,
         caughtIds,
         scores,
-        lastTag: { id: best.id, by: hunterId, name: best.name, at: now },
+        lastTag: entry,
+        feed: [...(next.feed ?? []), entry].slice(-10),
       };
       if (next.mode === "infection") {
         next.ammo = { ...next.ammo, [best.id]: next.ammoCount || DEFAULT_AMMO };

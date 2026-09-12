@@ -36,6 +36,7 @@ function readSnap(p: SessionPlayer): PlayerSnap {
     name: String(p.get("name") ?? "손님"),
     ready: Boolean(p.get("ready")),
     x: Number(p.get("x") ?? 4),
+    y: Number(p.get("y") ?? 0),
     z: Number(p.get("z") ?? 4),
     yaw: Number(p.get("yaw") ?? 0),
     pose: (p.get("pose") as Pose) || "stand",
@@ -73,6 +74,7 @@ export async function connectOnline(opts: {
       alive: true,
       role: "spectator",
       x: 4.2,
+      y: 0,
       z: 3.4,
       yaw: 0,
     },
@@ -99,6 +101,7 @@ export async function connectOnline(opts: {
   me.setState("blobs", [], true);
   me.setState("pose", "stand", true);
   me.setState("x", 4.2, true);
+  me.setState("y", 0, true);
   me.setState("z", 3.4, true);
   me.setState("yaw", 0, true);
 
@@ -152,6 +155,7 @@ export function createPractice(nickname: string): Session {
     name: nickname,
     ready: true,
     x: 4.2,
+    y: 0,
     z: 3.4,
     yaw: 0,
     pose: "stand",

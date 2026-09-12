@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, SNEAK_SPEED, WHITE } from "../config";
+import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, SNEAK_SPEED, WHITE } from "../config";
 import { getMap, mapColliders } from "../maps";
 import type { BodyPart, Collider, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
@@ -37,7 +37,9 @@ export class GameWorld {
   yaw = 0;
   pitch = 0;
   localX = 4;
+  localY = 0;
   localZ = 4;
+  vy = 0;
   watch = false;
   bodyYaw = 0;
   specX = 0;
@@ -58,6 +60,8 @@ export class GameWorld {
   private muzzleWorld = new THREE.Vector3();
   private tracerEnd = new THREE.Vector3();
   private tracers: { line: THREE.Line; until: number }[] = [];
+  private killFx: { group: THREE.Group; start: number; until: number }[] = [];
+  private seenTagAt = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -278,12 +282,27 @@ export class GameWorld {
       this.localX = moved.x;
       this.localZ = moved.z;
     }
+
+    const onGround = this.localY <= 0.02 && this.vy <= 0.01;
+    if (onGround) {
+      this.localY = 0;
+      this.vy = 0;
+      if (k.has(" ") || k.has("space")) this.vy = JUMP_SPEED;
+    }
+    this.vy -= GRAVITY * dt;
+    this.localY += this.vy * dt;
+    if (this.localY <= 0) {
+      this.localY = 0;
+      if (this.vy < 0) this.vy = 0;
+    }
     return { x: this.localX, z: this.localZ, yaw: this.yaw };
   }
 
   setLocal(x: number, z: number, yaw?: number) {
     this.localX = x;
     this.localZ = z;
+    this.localY = 0;
+    this.vy = 0;
     if (yaw !== undefined) this.yaw = yaw;
   }
 
@@ -321,15 +340,17 @@ export class GameWorld {
       );
       setGhostLook(rig, ghost);
       const x = p.id === myId ? this.localX : p.x;
+      const y = p.id === myId ? this.localY : p.y;
       const z = p.id === myId ? this.localZ : p.z;
       const yaw = p.id === myId ? (this.watch ? this.bodyYaw : this.yaw) : p.yaw;
       const prevX = rig.group.position.x;
       const prevZ = rig.group.position.z;
       if (p.id === myId) {
-        rig.group.position.set(x, 0, z);
+        rig.group.position.set(x, y, z);
         rig.group.rotation.y = yaw;
       } else {
         rig.group.position.x += (x - rig.group.position.x) * 0.28;
+        rig.group.position.y += (y - rig.group.position.y) * 0.28;
         rig.group.position.z += (z - rig.group.position.z) * 0.28;
         rig.group.rotation.y = yaw;
       }
@@ -341,14 +362,25 @@ export class GameWorld {
         if (p.id !== myId) this.playShot(p.id, false);
       }
       const caughtT =
-        room.lastTag && room.lastTag.id === p.id ? 1 - (now - room.lastTag.at) / 900 : 0;
+        room.lastTag && room.lastTag.id === p.id ? 1 - (now - room.lastTag.at) / 1800 : 0;
       animateCharacter(rig, {
         moving,
         ghost,
         caughtT,
         dt,
         hunter: isHunter(room, p.id) && room.phase !== "lobby",
+        airborne: y > 0.08,
       });
+    }
+    if (room.lastTag && room.lastTag.at !== this.seenTagAt) {
+      this.seenTagAt = room.lastTag.at;
+      const vic = snaps.find((p) => p.id === room.lastTag!.id);
+      if (vic) {
+        const vx = vic.id === myId ? this.localX : vic.x;
+        const vy = vic.id === myId ? this.localY : vic.y;
+        const vz = vic.id === myId ? this.localZ : vic.z;
+        this.spawnKillFx(vx, vy, vz, room.lastTag.byName, room.lastTag.name);
+      }
     }
     for (const [id, rig] of this.players) {
       if (!seen.has(id)) {
@@ -378,7 +410,7 @@ export class GameWorld {
     this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     this.camera.fov = 70;
     const want = opts.paintOpen ? 2.4 : 4.0;
-    this.camEye.set(this.localX, 1.48, this.localZ);
+    this.camEye.set(this.localX, 1.48 + this.localY, this.localZ);
     this.camPos.copy(this.camEye).addScaledVector(this.forward, -want);
     this.camPos.y = Math.max(0.55, this.camPos.y);
     this.camDir.copy(this.camPos).sub(this.camEye);
@@ -396,6 +428,59 @@ export class GameWorld {
     }
     this.camera.position.y = Math.max(0.42, this.camera.position.y);
     this.camera.updateProjectionMatrix();
+  }
+
+  private spawnKillFx(x: number, y: number, z: number, killer: string, victim: string) {
+    const g = new THREE.Group();
+    g.position.set(x, y + 0.15, z);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.18, 0.5, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xff4d6d,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    const ball = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 14, 10),
+      new THREE.MeshBasicMaterial({
+        color: 0xffe7a8,
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+      }),
+    );
+    ball.position.y = 1.05;
+    const spr = makeKillSprite(`${killer}  처치  ${victim}`);
+    spr.position.y = 2.15;
+    g.add(ring, ball, spr);
+    this.scene.add(g);
+    this.killFx.push({ group: g, start: Date.now(), until: Date.now() + 1800 });
+  }
+
+  private tickKillFx() {
+    const now = Date.now();
+    this.killFx = this.killFx.filter((fx) => {
+      const t = Math.min(1, (now - fx.start) / 1800);
+      const ring = fx.group.children[0] as THREE.Mesh;
+      const ball = fx.group.children[1] as THREE.Mesh;
+      const spr = fx.group.children[2] as THREE.Sprite;
+      ring.scale.setScalar(1 + t * 5.5);
+      (ring.material as THREE.MeshBasicMaterial).opacity = 0.95 * (1 - t);
+      ball.scale.setScalar(1 + t * 2.2);
+      (ball.material as THREE.MeshBasicMaterial).opacity = 0.75 * Math.max(0, 1 - t * 1.6);
+      spr.position.y = 2.15 + t * 0.9;
+      (spr.material as THREE.SpriteMaterial).opacity = 1 - t;
+      if (now >= fx.until) {
+        this.scene.remove(fx.group);
+        disposeObject(fx.group);
+        return false;
+      }
+      return true;
+    });
   }
 
   playShot(hunterId: string, recoil = false) {
@@ -442,6 +527,7 @@ export class GameWorld {
 
   render() {
     this.tickTracers();
+    this.tickKillFx();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -542,9 +628,35 @@ export class GameWorld {
       disposeObject(rig.group);
     }
     this.players.clear();
+    for (const fx of this.killFx) {
+      this.scene.remove(fx.group);
+      disposeObject(fx.group);
+    }
+    this.killFx = [];
     disposeObject(this.mapGroup);
     this.renderer.dispose();
   }
+}
+
+function makeKillSprite(text: string) {
+  const c = document.createElement("canvas");
+  c.width = 640;
+  c.height = 96;
+  const g = c.getContext("2d")!;
+  g.clearRect(0, 0, 640, 96);
+  g.font = "700 34px sans-serif";
+  g.textAlign = "center";
+  g.lineWidth = 8;
+  g.strokeStyle = "rgba(0,0,0,0.75)";
+  g.fillStyle = "#ffe4ec";
+  g.strokeText(text, 320, 58);
+  g.fillText(text, 320, 58);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const spr = new THREE.Sprite(mat);
+  spr.scale.set(2.6, 0.4, 1);
+  return spr;
 }
 
 function canvasTexture(canvas: HTMLCanvasElement) {

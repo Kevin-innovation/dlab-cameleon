@@ -27,6 +27,7 @@ export type CharacterRig = {
   muzzle: THREE.Mesh;
   shootUntil: number;
   shootSeq: number;
+  catching: boolean;
 };
 
 function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBlob[], part: BodyPart) {
@@ -177,6 +178,7 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     muzzle,
     shootUntil: 0,
     shootSeq: 0,
+    catching: false,
   };
 }
 
@@ -245,27 +247,73 @@ export function setGhostLook(rig: CharacterRig, ghost: boolean) {
 
 export function animateCharacter(
   rig: CharacterRig,
-  opts: { moving: boolean; ghost: boolean; caughtT: number; dt: number; hunter: boolean },
+  opts: {
+    moving: boolean;
+    ghost: boolean;
+    caughtT: number;
+    dt: number;
+    hunter: boolean;
+    airborne?: boolean;
+  },
 ) {
-  const catchK = Math.max(0, Math.min(1, opts.caughtT));
-  if (catchK > 0) {
-    const k = 1 - catchK;
-    rig.body.rotation.x = -1.15 * k;
-    rig.body.rotation.z = Math.sin(k * 18) * 0.28 * k;
-    rig.body.position.y = 0.12 * k;
+  const remain = Math.max(0, Math.min(1, opts.caughtT));
+  if (remain > 0) {
+    rig.catching = true;
+    const elapsed = 1 - remain;
+    const impact = Math.max(0, 1 - elapsed / 0.14);
+    const fall = Math.min(1, elapsed / 0.2);
+    rig.body.rotation.x = -1.62 * fall;
+    rig.body.rotation.y = 0.55 * fall;
+    rig.body.rotation.z = 0.72 * fall + Math.sin(elapsed * 48) * 0.55 * impact;
+    rig.body.position.y = 0.42 * impact;
+    rig.body.position.z = -0.85 * fall;
+    const punch = 1 + 0.22 * impact;
+    rig.body.scale.set(punch, punch, punch);
     rig.gun.visible = false;
+    for (const part of Object.values(rig.parts)) {
+      const mat = part.mesh.material as THREE.MeshStandardMaterial;
+      mat.emissive.set(impact > 0.2 ? "#ffe8a8" : "#ff2a2a");
+      mat.emissiveIntensity = 1.15 * Math.max(impact, 0.35 * (1 - elapsed));
+    }
     return;
   }
-  rig.body.rotation.x = 0;
+  if (rig.catching) {
+    rig.catching = false;
+    applyPose(rig, rig.pose);
+    if (opts.ghost) {
+      for (const part of Object.values(rig.parts)) {
+        const mat = part.mesh.material as THREE.MeshStandardMaterial;
+        mat.emissive.set("#7ecbff");
+        mat.emissiveIntensity = 0.45;
+      }
+    }
+  }
+  if (!opts.ghost) {
+    for (const part of Object.values(rig.parts)) {
+      const mat = part.mesh.material as THREE.MeshStandardMaterial;
+      if (mat.emissiveIntensity > 0 && mat.emissive.getHexString() === "ff2a2a") {
+        mat.emissive.set("#000000");
+        mat.emissiveIntensity = 0;
+      }
+    }
+  }
+  rig.body.rotation.x = rig.pose === "lie" ? rig.body.rotation.x : 0;
   rig.body.rotation.z = 0;
 
-  const walkOn = opts.moving && rig.pose !== "lie" && rig.pose !== "sit" && rig.pose !== "ball";
+  const airborne = !!opts.airborne;
+  const walkOn = opts.moving && !airborne && rig.pose !== "lie" && rig.pose !== "sit" && rig.pose !== "ball";
   if (walkOn) rig.walkT += opts.dt * (opts.ghost ? 6.5 : 10);
   const swing = walkOn ? Math.sin(rig.walkT) * 0.7 : 0;
   const bob = walkOn ? Math.abs(Math.sin(rig.walkT)) * 0.05 : 0;
-  rig.parts.legL.mesh.rotation.x = swing;
-  rig.parts.legR.mesh.rotation.x = -swing;
-  rig.parts.armL.mesh.rotation.x = -swing * 0.85;
+  if (airborne) {
+    rig.parts.legL.mesh.rotation.x = 0.42;
+    rig.parts.legR.mesh.rotation.x = -0.18;
+    rig.parts.armL.mesh.rotation.x = -0.95;
+  } else {
+    rig.parts.legL.mesh.rotation.x = swing;
+    rig.parts.legR.mesh.rotation.x = -swing;
+    rig.parts.armL.mesh.rotation.x = -swing * 0.85;
+  }
   const shooting = Date.now() < rig.shootUntil;
   const kick = shooting ? Math.min(1, (rig.shootUntil - Date.now()) / 180) : 0;
   if (opts.hunter) {
@@ -278,12 +326,13 @@ export function animateCharacter(
     rig.muzzle.scale.setScalar(0.7 + kick * 1.8);
   } else {
     rig.gun.visible = false;
-    rig.parts.armR.mesh.rotation.x = swing * 0.85;
+    rig.parts.armR.mesh.rotation.x = airborne ? -0.95 : swing * 0.85;
     rig.parts.armR.mesh.rotation.z = 0;
     const flash = rig.muzzle.material as THREE.MeshBasicMaterial;
     flash.opacity = 0;
   }
   rig.body.position.y = (opts.ghost ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0) + bob;
+  if (airborne) rig.body.position.y += 0.05;
 }
 
 export function uvPaint(

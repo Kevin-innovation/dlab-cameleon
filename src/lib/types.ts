@@ -82,7 +82,8 @@ export type RoomState = {
   hunterCount: number;
   ammoCount: number;
   ammo: Record<string, number>;
-  lastTag?: { id: string; by: string; name: string; at: number };
+  lastTag?: { id: string; by: string; name: string; byName: string; at: number };
+  feed: { id: string; by: string; name: string; byName: string; at: number }[];
   taunts: { x: number; y: number; at: number; id: string }[];
   winner?: "hunters" | "hiders";
 };
@@ -92,6 +93,7 @@ export type PlayerSnap = {
   name: string;
   ready: boolean;
   x: number;
+  y: number;
   z: number;
   yaw: number;
   pose: Pose;
