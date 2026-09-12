@@ -230,6 +230,8 @@ export function createPractice(nickname: string): Session {
   let room = emptyRoom();
   room.mode = "infection";
   room.hunterCount = 1;
+  room.hunterMode = "ai";
+  room.hunterPlayerId = id;
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
   const doorListeners = new Set<(doorId: string) => void>();
   return {

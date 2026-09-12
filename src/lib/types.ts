@@ -4,6 +4,8 @@ export type Phase = "lobby" | "hide" | "hunt" | "reveal" | "result";
 
 export type Mode = "normal" | "infection";
 
+export type HunterMode = "random" | "human" | "ai";
+
 export type Role = "hider" | "hunter" | "spectator";
 
 export type Pattern =
@@ -92,6 +94,8 @@ export type RoomState = {
   round: number;
   phaseEndsAt: number;
   hunterIds: string[];
+  hunterMode: HunterMode;
+  hunterPlayerId?: string;
   caughtIds: string[];
   scores: Record<string, number>;
   hideTime: number;

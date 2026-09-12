@@ -18,6 +18,7 @@ export function emptyRoom(): RoomState {
     round: 0,
     phaseEndsAt: 0,
     hunterIds: [],
+    hunterMode: "random",
     caughtIds: [],
     scores: {},
     hideTime: DEFAULT_HIDE,
@@ -53,7 +54,14 @@ export function beginRound(
 ): RoomState {
   const ids = shuffle(playerIds);
   const hc = hunterCountFor(ids.length, prev.hunterCount || 1);
-  const hunterIds = ids.slice(0, hc);
+  let hunterIds = ids.slice(0, hc);
+  const fixedHunter = prev.hunterPlayerId && playerIds.includes(prev.hunterPlayerId) ? prev.hunterPlayerId : undefined;
+  if (fixedHunter && prev.hunterMode === "human") {
+    hunterIds = [fixedHunter, ...ids.filter((id) => id !== fixedHunter)].slice(0, hc);
+  } else if (fixedHunter && prev.hunterMode === "ai") {
+    hunterIds = ids.filter((id) => id !== fixedHunter).slice(0, hc);
+    if (hunterIds.length < hc) hunterIds.push(fixedHunter);
+  }
   const scores = { ...prev.scores };
   for (const id of ids) scores[id] ??= 0;
   const mag = prev.ammoCount || DEFAULT_AMMO;

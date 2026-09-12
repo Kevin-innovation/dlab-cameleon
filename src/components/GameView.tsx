@@ -1077,6 +1077,27 @@ function Lobby({
               <option value="normal">노말</option>
             </select>
           </label>
+          {session.kind === "practice" && (
+            <label className="rounded-xl bg-white/8 p-2">
+              술래 설정
+              <select
+                className="mt-1 w-full bg-transparent"
+                value={room.hunterMode ?? "ai"}
+                onChange={(e) => {
+                  const hunterMode = e.target.value as RoomState["hunterMode"];
+                  session.setRoom({
+                    ...room,
+                    hunterMode,
+                    hunterPlayerId: hunterMode === "random" ? undefined : session.myId(),
+                  });
+                }}
+              >
+                <option value="ai">AI 술래 (내가 숨기)</option>
+                <option value="human">내가 술래</option>
+                <option value="random">랜덤</option>
+              </select>
+            </label>
+          )}
           <label className="rounded-xl bg-white/8 p-2">
             술래 수
             <input

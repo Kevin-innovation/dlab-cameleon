@@ -5,6 +5,8 @@ import { hiderAlive, isHunter, roleOf } from "./round";
 import type { Session } from "./session";
 import type { GameMap, PaintBlob, Pose, RoomState } from "./types";
 
+type HideSpot = { x: number; z: number; pose: Pose; fill: string };
+
 type Brain = {
   tx: number;
   tz: number;
@@ -16,6 +18,9 @@ type Brain = {
   patrol: number;
   turn: number;
   doorAt: number;
+  searchSpots: HideSpot[];
+  searchSpotIndex: number;
+  pauseUntil: number;
 };
 
 const brains = new Map<string, Brain>();
@@ -34,9 +39,9 @@ function colliders(map: GameMap, room: RoomState) {
   return [...mapColliders(map), ...doors];
 }
 
-function hideSpot(map: GameMap, i: number): { x: number; z: number; pose: Pose; fill: string } {
+function hideSpot(map: GameMap, i: number, round: number): HideSpot {
   const props = map.boxes.filter((b) => b.h >= 0.55 && b.h <= 3.4 && b.w < map.w * 0.2 && b.d < map.d * 0.2);
-  const rnd = mul(`spot${i}${map.id}`);
+  const rnd = mul(`spot${i}${map.id}${round}`);
   const p = props[Math.floor(rnd() * Math.max(1, props.length))] ?? {
     x: map.w * (0.2 + rnd() * 0.6),
     z: map.d * (0.2 + rnd() * 0.6),
@@ -86,30 +91,37 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
     if (p.id === session.myId()) continue;
     const i = Number(String(p.id).replace("bot-", "")) || 0;
     const role = roleOf(room, p.id);
-    const hid = hideSpot(map, i);
-    const sp = role === "hunter" ? map.hunterSpawns[i % map.hunterSpawns.length] : hid;
+    const searchSpots =
+      role === "hunter"
+        ? []
+        : [hideSpot(map, i, room.round), hideSpot(map, i + 13, room.round), hideSpot(map, i + 29, room.round)];
+    const finalSpot = searchSpots[searchSpots.length - 1];
+    const sp = role === "hunter" ? map.hunterSpawns[i % map.hunterSpawns.length] : map.spawns[i % map.spawns.length];
     p.set("x", sp.x);
     p.set("z", sp.z);
     p.set("y", 0);
     p.set("yaw", 0);
-    p.set("pose", role === "hunter" ? "stand" : hid.pose);
-    p.set("fill", role === "hunter" ? WHITE : hid.fill);
-    p.set("blobs", role === "hunter" ? [] : blobsFor(hid.fill, i));
+    p.set("pose", "stand");
+    p.set("fill", WHITE);
+    p.set("blobs", []);
     p.set("ready", true);
     p.set("alive", true);
     p.set("role", role);
     p.set("shootSeq", 0);
     brains.set(p.id, {
-      tx: role === "hunter" ? sp.x : hid.x,
-      tz: role === "hunter" ? sp.z : hid.z,
-      pose: role === "hunter" ? "stand" : hid.pose,
-      fill: role === "hunter" ? WHITE : hid.fill,
-      blobs: role === "hunter" ? [] : blobsFor(hid.fill, i),
+      tx: finalSpot?.x ?? sp.x,
+      tz: finalSpot?.z ?? sp.z,
+      pose: finalSpot?.pose ?? "stand",
+      fill: finalSpot?.fill ?? WHITE,
+      blobs: finalSpot ? blobsFor(finalSpot.fill, i) : [],
       settled: false,
       shootAt: 0,
       patrol: i,
       turn: 0,
       doorAt: 0,
+      searchSpots,
+      searchSpotIndex: 0,
+      pauseUntil: 0,
     });
   }
 }
@@ -223,6 +235,11 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
     }
 
     if (!hunter) {
+      const target = br.searchSpots[br.searchSpotIndex];
+      if (target) {
+        br.tx = target.x;
+        br.tz = target.z;
+      }
       const dx = br.tx - x;
       const dz = br.tz - z;
       const dist = Math.hypot(dx, dz);
@@ -237,8 +254,26 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         p.set("z", z);
         p.set("yaw", yaw);
         p.set("pose", "stand");
+        p.set("fill", WHITE);
+        p.set("blobs", []);
       } else {
-        br.settled = true;
+        if (!br.settled && room.phase === "hide") {
+          br.pauseUntil ||= now + 950 + ((br.patrol + br.searchSpotIndex) % 3) * 350;
+          const finalWindow = Math.max(8000, Math.min(14000, room.hideTime * 250));
+          const lastSpot = br.searchSpotIndex >= br.searchSpots.length - 1;
+          if (!lastSpot && now >= br.pauseUntil && now < room.phaseEndsAt - finalWindow) {
+            br.searchSpotIndex += 1;
+            br.pauseUntil = 0;
+            continue;
+          }
+          br.settled = lastSpot || now >= room.phaseEndsAt - finalWindow;
+        }
+        if (!br.settled) {
+          p.set("pose", "stand");
+          p.set("fill", WHITE);
+          p.set("blobs", []);
+          continue;
+        }
         p.set("x", br.tx);
         p.set("z", br.tz);
         p.set("pose", br.pose);
