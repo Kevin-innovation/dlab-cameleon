@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { APP_NAME, DEFAULT_ROOM_CODE, MAX_PLAYERS, NICK_KEY, SERVERS } from "@/lib/config";
 import { MAPS } from "@/lib/maps";
 import { connectOnline, createPractice, type Session } from "@/lib/session";
+import { AccessibleModal } from "./AccessibleModal";
 import { GameView } from "./GameView";
 
 type Screen =
@@ -23,7 +24,7 @@ export default function GameApp() {
   const joinGame = async () => {
     const name = nick.trim().slice(0, 12);
     if (name.length < 2) {
-      setError("닉네임은 2~12자");
+      setError("닉네임은 2~12자로 입력해 주세요.");
       return;
     }
     sessionStorage.setItem(NICK_KEY, name);
@@ -39,7 +40,11 @@ export default function GameApp() {
       setScreen({ t: "play" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "접속 실패";
-      setError(msg.includes("ROOM_LIMIT") || msg.includes("full") ? `통합 룸이 가득 찼습니다 (최대 ${MAX_PLAYERS}인)` : msg);
+      setError(
+        msg.includes("ROOM_LIMIT") || msg.includes("full")
+          ? `통합 룸이 가득 찼습니다 (최대 ${MAX_PLAYERS}인). 잠시 후 다시 시도해 주세요.`
+          : "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      );
       setScreen({ t: "home" });
     }
   };
@@ -47,9 +52,10 @@ export default function GameApp() {
   const startPractice = () => {
     const name = nick.trim().slice(0, 12);
     if (name.length < 2) {
-      setError("닉네임은 2~12자");
+      setError("닉네임은 2~12자로 입력해 주세요.");
       return;
     }
+    setError("");
     sessionStorage.setItem(NICK_KEY, name);
     setNick(name);
     setSession(createPractice(name));
@@ -67,7 +73,13 @@ export default function GameApp() {
   }
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-moss text-paper">
+    <div className="safe-screen relative min-h-dvh overflow-x-hidden bg-moss text-paper">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-lime focus:px-3 focus:py-2 focus:text-sm focus:text-black"
+      >
+        본문으로 건너뛰기
+      </a>
       <div
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
@@ -101,9 +113,9 @@ export default function GameApp() {
           />
         )}
         {screen.t === "connecting" && (
-          <div className="flex flex-1 flex-col items-center justify-center">
-            <Image src="/mascot.jpg" alt="" width={96} height={96} className="h-24 w-24 animate-pulse rounded-3xl object-cover" />
-            <p className="mt-4 font-display text-2xl">방 입장 중...</p>
+          <div className="flex flex-1 flex-col items-center justify-center" role="status" aria-live="polite" aria-busy="true">
+            <Image src="/mascot.jpg" alt="" width={96} height={96} priority className="h-24 w-24 animate-pulse rounded-3xl object-cover" />
+            <p className="mt-4 font-display text-2xl">방 입장 중…</p>
             <p className="text-white/60">한국 서버 통합 룸에 접속하고 있습니다</p>
           </div>
         )}
@@ -127,11 +139,17 @@ function Home({
   onPlay: () => void;
   onPractice: () => void;
 }) {
+  const nicknameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (error) nicknameRef.current?.focus();
+  }, [error]);
+
   return (
-    <main className="flex flex-1 flex-col items-start justify-center gap-8 py-10 md:flex-row md:items-center md:justify-between">
+    <main id="main-content" className="flex flex-1 flex-col items-start justify-center gap-8 py-10 md:flex-row md:items-center md:justify-between">
       <div className="max-w-xl">
         <p className="text-sm text-lime">IO 숨바꼭질 · 페인트 위장</p>
-        <h1 className="mt-2 font-display text-5xl leading-tight md:text-7xl">
+        <h1 className="text-wrap-balance mt-2 font-display text-5xl leading-tight md:text-7xl">
           흰 몸으로 들어가
           <br />
           배경이 되어 나와라
@@ -147,15 +165,30 @@ function Home({
             onPlay();
           }}
         >
-          <label className="text-xs tracking-wide text-white/60">닉네임</label>
+          <label htmlFor="nickname" className="text-xs tracking-wide text-white/60">
+            닉네임
+          </label>
           <input
+            ref={nicknameRef}
+            id="nickname"
+            name="nickname"
+            type="text"
+            inputMode="text"
+            autoComplete="nickname"
+            spellCheck={false}
             value={nick}
             onChange={(e) => setNick(e.target.value)}
             maxLength={12}
-            placeholder="예: 초록커튼"
-            className="rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-lg outline-none ring-lime/40 focus:ring-2"
+            placeholder="예: 초록커튼…"
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "nickname-error" : undefined}
+            className="rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-lg outline-none ring-lime/40 focus-visible:ring-2"
           />
-          {error && <p className="text-sm text-pink">{error}</p>}
+          {error && (
+            <p id="nickname-error" className="text-sm text-pink" aria-live="polite">
+              {error}
+            </p>
+          )}
           <button type="submit" className="rounded-full bg-lime py-3 font-display text-xl text-black">
             한국 서버 입장
           </button>
@@ -173,6 +206,7 @@ function Home({
         alt="카멜론"
         width={288}
         height={288}
+        priority
         className="mx-auto h-56 w-56 rounded-[2.2rem] object-cover shadow-2xl ring-4 ring-lime/30 md:h-72 md:w-72"
       />
     </main>
@@ -181,36 +215,34 @@ function Home({
 
 function HowTo({ onClose }: { onClose: () => void }) {
   return (
-    <div className="absolute inset-0 z-50 grid place-items-center bg-black/75 p-4" onClick={onClose}>
-      <div className="max-h-[90dvh] w-full max-w-lg overflow-auto rounded-3xl bg-[#142019] p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-display text-3xl">메챠 카멜레온 룰</h2>
-        <div className="mt-4 space-y-3 text-sm leading-relaxed text-white/80">
-          <p>
-            파티형 숨바꼭질입니다. 숨는 쪽은 새하얀 몸을 <b className="text-lime">직접 칠해서</b> 배경에
-            녹아들고, 술래는 색온도·윤곽·자세가 어색한 지점을 찾아 태그합니다.
-          </p>
-          <p>
-            <b>1. 역할</b> — 라운드 시작 시 술래와 카멜레온이 랜덤 배정됩니다.
-          </p>
-          <p>
-            <b>2. 위장 시간</b> — 술래는 맵에 들어올 수 없습니다. 화면을 클릭해 마우스로 둘러보고 WASD로
-            걷습니다. 스포이드로 3D 벽·가구 색을 찍고, 내 캐릭터를 클릭해 칠하고, 자세를 맞춥니다.
-          </p>
-          <p>
-            <b>3. 수색</b> — 술래가 입장합니다. 가까이 가서 클릭하면 태그. 노말은 아웃, 감염 모드는 술래가
-            됩니다. 카멜레온끼리는 수색 중 서로 보이지 않습니다.
-          </p>
-          <p>
-            <b>4. 승리</b> — 제한 시간 안에 전원 발견이면 술래 승. 한 명이라도 남으면 카멜레온 승.
-          </p>
-          <p>
-            맵: {MAPS.map((m) => m.name).join(" / ")}
-          </p>
-        </div>
-        <button type="button" onClick={onClose} className="mt-6 w-full rounded-full bg-lime py-2 font-display text-black">
-          알겠어요
-        </button>
+    <AccessibleModal titleId="howto-title" onClose={onClose} panelClassName="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-[#142019] p-6 shadow-2xl">
+      <h2 id="howto-title" className="text-wrap-balance font-display text-3xl">
+        메챠 카멜레온 룰
+      </h2>
+      <div className="mt-4 space-y-3 text-sm leading-relaxed text-white/80">
+        <p>
+          파티형 숨바꼭질입니다. 숨는 쪽은 새하얀 몸을 <b className="text-lime">직접 칠해서</b> 배경에
+          녹아들고, 술래는 색온도·윤곽·자세가 어색한 지점을 찾아 태그합니다.
+        </p>
+        <p>
+          <b>1. 역할</b> — 라운드 시작 시 술래와 카멜레온이 랜덤 배정됩니다.
+        </p>
+        <p>
+          <b>2. 위장 시간</b> — 술래는 맵에 들어올 수 없습니다. 화면을 클릭해 마우스로 둘러보고 WASD로
+          걷습니다. 스포이드로 3D 벽·가구 색을 찍고, 내 캐릭터를 클릭해 칠하고, 자세를 맞춥니다.
+        </p>
+        <p>
+          <b>3. 수색</b> — 술래가 입장합니다. 가까이 가서 클릭하면 태그. 노말은 아웃, 감염 모드는 술래가
+          됩니다. 카멜레온끼리는 수색 중 서로 보이지 않습니다.
+        </p>
+        <p>
+          <b>4. 승리</b> — 제한 시간 안에 전원 발견이면 술래 승. 한 명이라도 남으면 카멜레온 승.
+        </p>
+        <p>맵: {MAPS.map((m) => m.name).join(" / ")}</p>
       </div>
-    </div>
+      <button type="button" onClick={onClose} className="mt-6 w-full rounded-full bg-lime py-2 font-display text-black">
+        알겠어요
+      </button>
+    </AccessibleModal>
   );
 }

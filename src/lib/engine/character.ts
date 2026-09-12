@@ -297,8 +297,10 @@ export function animateCharacter(
     dt: number;
     hunter: boolean;
     airborne?: boolean;
+    reducedMotion?: boolean;
   },
 ) {
+  const reducedMotion = !!opts.reducedMotion;
   const remain = Math.max(0, Math.min(1, opts.caughtT));
   if (remain > 0) {
     rig.catching = true;
@@ -307,9 +309,9 @@ export function animateCharacter(
     const fall = Math.min(1, elapsed / 0.2);
     rig.body.rotation.x = -1.62 * fall;
     rig.body.rotation.y = 0.55 * fall;
-    rig.body.rotation.z = 0.72 * fall + Math.sin(elapsed * 48) * 0.55 * impact;
-    rig.body.position.y = 0.42 * impact;
-    rig.body.position.z = -0.85 * fall;
+    rig.body.rotation.z = 0.72 * fall + (reducedMotion ? 0 : Math.sin(elapsed * 48) * 0.55 * impact);
+    rig.body.position.y = reducedMotion ? 0 : 0.42 * impact;
+    rig.body.position.z = reducedMotion ? 0 : -0.85 * fall;
     const punch = 1 + 0.22 * impact;
     rig.body.scale.set(punch, punch, punch);
     rig.gun.visible = false;
@@ -351,9 +353,9 @@ export function animateCharacter(
     rig.pose !== "sit" &&
     rig.pose !== "ball" &&
     rig.pose !== "stick";
-  if (walkOn) rig.walkT += opts.dt * (opts.ghost ? 6.5 : 10);
-  const swing = walkOn ? Math.sin(rig.walkT) * 0.7 : 0;
-  const bob = walkOn ? Math.abs(Math.sin(rig.walkT)) * 0.05 : 0;
+  if (walkOn && !reducedMotion) rig.walkT += opts.dt * (opts.ghost ? 6.5 : 10);
+  const swing = walkOn && !reducedMotion ? Math.sin(rig.walkT) * 0.7 : 0;
+  const bob = walkOn && !reducedMotion ? Math.abs(Math.sin(rig.walkT)) * 0.05 : 0;
   if (airborne) {
     rig.parts.legL.mesh.rotation.x = 0.42;
     rig.parts.legR.mesh.rotation.x = -0.18;
@@ -380,7 +382,7 @@ export function animateCharacter(
     const flash = rig.muzzle.material as THREE.MeshBasicMaterial;
     flash.opacity = 0;
   }
-  rig.body.position.y = (opts.ghost ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0) + bob;
+  rig.body.position.y = (opts.ghost && !reducedMotion ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0) + bob;
   if (airborne) rig.body.position.y += 0.05;
   if (rig.pose === "stick") {
     rig.body.position.z = 0;

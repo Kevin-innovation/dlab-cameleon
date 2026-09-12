@@ -92,8 +92,10 @@ export class GameWorld {
   private fpMuzzle: THREE.Mesh;
   private fpKick = 0;
   private viewBob = 0;
+  private reducedMotion = false;
 
   constructor(canvas: HTMLCanvasElement) {
+    this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -669,6 +671,7 @@ export class GameWorld {
         dt,
         hunter: isHunter(room, p.id) && room.phase !== "lobby",
         airborne: y > 0.08 && p.pose !== "stick",
+        reducedMotion: this.reducedMotion,
       });
     }
     if (room.lastTag && room.lastTag.at !== this.seenTagAt) {
@@ -714,7 +717,7 @@ export class GameWorld {
     this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     if (opts.fps && !this.hunterTps) {
       this.viewBob += opts.moving ? 0.26 : 0.05;
-      const bob = opts.moving ? Math.sin(this.viewBob) * 0.028 : 0;
+      const bob = !this.reducedMotion && opts.moving ? Math.sin(this.viewBob) * 0.028 : 0;
       this.camEye.set(this.localX, (this.crouching ? 1.08 : 1.58) + this.localY + bob, this.localZ);
       this.camEye.y = Math.min(this.camEye.y, this.map.ceiling - 0.3);
       this.camera.position.copy(this.camEye);

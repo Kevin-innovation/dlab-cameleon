@@ -31,6 +31,7 @@ import { snapsFrom, type Session } from "@/lib/session";
 import { resetSoloBots, tickSoloBots } from "@/lib/ai";
 import type { PaintBlob, PlayerSnap, Pose, RoomState } from "@/lib/types";
 import { POSES } from "@/lib/types";
+import { AccessibleModal } from "./AccessibleModal";
 
 type Tool = "brush" | "dropper" | "fill";
 
@@ -637,6 +638,18 @@ export function GameView({
   const myRole = me ? roleOf(hud, me.id) : "spectator";
   const hunterHide = myRole === "hunter" && hud.phase === "hide";
   const timeLeft = remaining(hud, nowTick);
+  const phaseAnnouncement =
+    hud.phase === "lobby"
+      ? "대기실"
+      : hud.phase === "hide"
+        ? "위장 시간"
+        : hud.phase === "hunt"
+          ? "수색 중"
+          : hud.phase === "reveal"
+            ? "검증 라운드"
+            : hud.winner === "hiders"
+              ? "카멜레온 승리"
+              : "술래 승리";
 
   const startRound = (force = false) => {
     if (!session.isHost()) return;
@@ -647,7 +660,17 @@ export function GameView({
   };
 
   return (
-    <div className="relative flex h-dvh w-full overflow-hidden bg-[#0b100d] text-paper">
+    <main id="main-content" aria-label="카멜레온 게임" className="safe-screen relative flex h-dvh w-full flex-col overflow-hidden bg-[#0b100d] text-paper md:flex-row">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-lime focus:px-3 focus:py-2 focus:text-sm focus:text-black"
+      >
+        본문으로 건너뛰기
+      </a>
+      <h1 className="sr-only">카멜레온 게임</h1>
+      <p id="game-accessibility-help" className="sr-only">
+        게임 화면에 포커스를 둔 뒤 WASD로 이동하고 마우스로 시점을 조작합니다. Tab으로 현황을 확인하고 Escape로 열린 패널을 닫습니다.
+      </p>
       {hud.phase === "lobby" && (
         <Lobby
           session={session}
@@ -659,15 +682,17 @@ export function GameView({
         />
       )}
 
-      <div className="relative min-w-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1">
         <canvas
           ref={canvasRef}
           tabIndex={0}
           aria-label="3D 게임 화면"
+          aria-describedby="game-accessibility-help"
+          aria-keyshortcuts="W A S D Tab Escape"
           className={`absolute inset-0 h-full w-full touch-none ${paintOpen ? "cursor-crosshair" : locked ? "cursor-none" : "cursor-default"}`}
         />
 
-        <div className="pointer-events-none absolute left-3 top-[4.5rem] z-30 flex w-[min(100%,300px)] flex-col gap-1.5">
+        <div aria-live="polite" aria-atomic="false" className="pointer-events-none absolute left-3 top-[4.5rem] z-30 flex w-[min(100%,300px)] flex-col gap-1.5">
           {(hud.feed ?? [])
             .filter((f) => nowTick - f.at < 9000)
             .slice(-6)
@@ -718,6 +743,11 @@ export function GameView({
           </div>
         </header>
 
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          현재 상태: {phaseAnnouncement}
+          {myRole === "hunter" ? " · 술래" : myRole === "hider" ? " · 카멜레온" : " · 관전"}
+        </div>
+
         {!locked && !paintOpen && !hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
           <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-sm">
             {myRole === "hunter" && hud.phase === "hunt"
@@ -756,14 +786,14 @@ export function GameView({
         {hunterHide && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0b100d] text-center">
             <p className="text-sm text-lime">술래는 아직 입장할 수 없습니다</p>
-            <h2 className="mt-2 font-display text-5xl">위장 중...</h2>
+            <h2 className="text-wrap-balance mt-2 font-display text-5xl">위장 중…</h2>
             <p className="mt-3 text-white/70">카멜레온들이 3D 맵에서 몸을 칠하고 있습니다</p>
             <div className="mt-8 font-display text-7xl text-lime">{timeLeft}</div>
           </div>
         )}
 
         {hud.lastTag && nowTick - hud.lastTag.at < 2200 && hud.phase === "hunt" && (
-          <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-2xl bg-pink px-6 py-2 text-center text-black shadow-lg">
+          <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-2xl bg-pink px-6 py-2 text-center text-black shadow-lg" role="status" aria-live="polite">
             <div className="text-[11px] font-semibold tracking-[0.2em]">처치</div>
             <div className="font-display text-2xl leading-none">
               {hud.lastTag.byName} → {hud.lastTag.name}
@@ -809,7 +839,7 @@ export function GameView({
         {hud.phase === "reveal" && <RevealPanel room={hud} timeLeft={timeLeft} />}
 
         {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
-          <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
+          <div id="game-instructions" className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
                 <div>술래 1인칭 · 우클릭 3인칭 · WASD · Shift 달리기 · Ctrl 숙이기</div>
@@ -861,14 +891,19 @@ export function GameView({
         </div>
 
         {paintOpen && myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
-          <aside className="absolute bottom-24 right-3 z-20 w-[230px] rounded-2xl border border-white/10 bg-[#121a16]/95 p-3 shadow-xl">
+          <aside
+            className="absolute bottom-24 right-3 z-20 w-[230px] overscroll-contain rounded-2xl border border-white/10 bg-[#121a16]/95 p-3 shadow-xl"
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="paint-panel-title"
+          >
             <div className="mb-2 flex items-center justify-between text-sm">
-              <span className="font-display">위장 팔레트</span>
+              <span id="paint-panel-title" className="font-display">위장 팔레트</span>
               <button type="button" onClick={() => setPaintOpen(false)}>
                 닫기
               </button>
             </div>
-            <canvas ref={previewRef} width={200} height={200} className="w-full rounded-xl bg-[#0b100d]" />
+            <canvas ref={previewRef} width={200} height={200} aria-label="현재 내 캐릭터 미리보기" className="w-full rounded-xl bg-[#0b100d]" />
             <div className="mt-2 flex gap-1">
               {(
                 [
@@ -891,6 +926,8 @@ export function GameView({
               색
               <input
                 type="color"
+                name="paintColor"
+                autoComplete="off"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 className="h-8 w-full cursor-pointer bg-transparent"
@@ -900,6 +937,8 @@ export function GameView({
               붓
               <input
                 type="range"
+                name="brushSize"
+                autoComplete="off"
                 min={6}
                 max={28}
                 value={brush}
@@ -953,28 +992,26 @@ export function GameView({
       />
 
       {help && (
-        <div className="absolute inset-0 z-40 grid place-items-center bg-black/70 p-4" onClick={() => setHelp(false)}>
-          <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-2xl">3D 카멜론</h3>
-            <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
-              <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
-              <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
-              <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 대기실·숨은 채 관전, E로 문. 열고 지나가면 닫힙니다.</li>
-              <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
-              <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
-              <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
-            </ol>
-            <button
-              type="button"
-              className="mt-5 w-full rounded-full bg-lime py-2 font-display text-black"
-              onClick={() => setHelp(false)}
-            >
-              닫기
-            </button>
-          </div>
-        </div>
+        <AccessibleModal titleId="game-help-title" onClose={() => setHelp(false)} panelClassName="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-[#17241c] p-6 shadow-2xl">
+          <h2 id="game-help-title" className="text-wrap-balance font-display text-2xl">3D 카멜론</h2>
+          <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
+            <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
+            <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
+            <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 대기실·숨은 채 관전, E로 문. 열고 지나가면 닫힙니다.</li>
+            <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
+            <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
+            <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
+          </ol>
+          <button
+            type="button"
+            className="mt-5 w-full rounded-full bg-lime py-2 font-display text-black"
+            onClick={() => setHelp(false)}
+          >
+            닫기
+          </button>
+        </AccessibleModal>
       )}
-    </div>
+    </main>
   );
 }
 
@@ -1016,11 +1053,11 @@ function Lobby({
   const readyCount = people.filter((p) => p.ready).length;
   const allReady = people.length >= 1 && readyCount === people.length;
   return (
-    <aside className="z-20 flex h-full w-[min(100%,360px)] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#121c17] p-4">
+    <aside className="z-20 flex max-h-[46dvh] w-full shrink-0 flex-col overflow-y-auto overscroll-contain border-b border-white/10 bg-[#121c17] p-4 md:h-full md:max-h-none md:w-[min(100%,360px)] md:border-b-0 md:border-r">
       <p className="text-xs text-lime">
         {serverName} · {roomLabel}
       </p>
-      <h2 className="font-display text-3xl">방 대기실</h2>
+      <h2 className="text-wrap-balance font-display text-3xl">방 대기실</h2>
       <p className="mt-1 text-sm text-white/65">오른쪽 맵에서 WASD로 걸어보세요. 전원 준비 완료 후에만 호스트가 시작할 수 있습니다.</p>
       <ul className="mt-4 space-y-2">
         {people.map((p) => (
@@ -1047,15 +1084,16 @@ function Lobby({
         </button>
       </div>
       <div className="mt-4 rounded-2xl bg-black/25 p-3">
-        <label className="text-xs text-white/60">맵</label>
-        <div className="mt-1 grid grid-cols-1 gap-2">
-          {MAPS.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              disabled={!host}
-              onClick={() => session.setRoom({ ...room, mapId: m.id, doors: {} })}
-              className={`rounded-xl px-3 py-2 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
+          <div id="map-label" className="text-xs text-white/60">맵</div>
+          <div className="mt-1 grid grid-cols-1 gap-2" role="group" aria-labelledby="map-label">
+            {MAPS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                disabled={!host}
+                aria-pressed={room.mapId === m.id}
+                onClick={() => session.setRoom({ ...room, mapId: m.id, doors: {} })}
+                className={`rounded-xl px-3 py-2 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
             >
               <div className="font-display">
                 {m.name} · {m.difficulty}
@@ -1068,7 +1106,9 @@ function Lobby({
           <label className="rounded-xl bg-white/8 p-2">
             모드
             <select
-              className="mt-1 w-full bg-transparent"
+              name="mode"
+              autoComplete="off"
+              className="mt-1 w-full bg-[#121c17] text-paper"
               disabled={!host}
               value={room.mode}
               onChange={(e) => session.setRoom({ ...room, mode: e.target.value as RoomState["mode"] })}
@@ -1081,7 +1121,9 @@ function Lobby({
             <label className="rounded-xl bg-white/8 p-2">
               술래 설정
               <select
-                className="mt-1 w-full bg-transparent"
+                name="hunterMode"
+                autoComplete="off"
+                className="mt-1 w-full bg-[#121c17] text-paper"
                 value={room.hunterMode ?? "ai"}
                 onChange={(e) => {
                   const hunterMode = e.target.value as RoomState["hunterMode"];
@@ -1102,6 +1144,9 @@ function Lobby({
             술래 수
             <input
               type="number"
+              name="hunterCount"
+              autoComplete="off"
+              inputMode="numeric"
               min={1}
               max={3}
               disabled={!host}
@@ -1114,6 +1159,9 @@ function Lobby({
             위장(초)
             <input
               type="number"
+              name="hideTime"
+              autoComplete="off"
+              inputMode="numeric"
               min={30}
               max={180}
               disabled={!host}
@@ -1126,6 +1174,9 @@ function Lobby({
             수색(초)
             <input
               type="number"
+              name="huntTime"
+              autoComplete="off"
+              inputMode="numeric"
               min={60}
               max={300}
               disabled={!host}
@@ -1138,6 +1189,9 @@ function Lobby({
             술래 탄 수 (난사 방지)
             <input
               type="number"
+              name="ammoCount"
+              autoComplete="off"
+              inputMode="numeric"
               min={3}
               max={12}
               disabled={!host}
@@ -1154,12 +1208,13 @@ function Lobby({
             <button
               type="button"
               onClick={onStart}
+              aria-describedby="round-start-status"
               disabled={!allReady}
               className="mt-4 w-full rounded-full bg-lime py-3 font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
             >
               {people.length < 2 ? "연습 라운드 시작" : "라운드 시작"}
             </button>
-            <p className="mt-2 text-center text-xs text-white/55">
+            <p id="round-start-status" className="mt-2 text-center text-xs text-white/55">
               {allReady ? "전원 준비됨" : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
             </p>
             <p className="mt-2 text-center text-[11px] text-white/40">
@@ -1223,12 +1278,12 @@ function RoomSocialPanel({
       {open && (
         <section
           id="room-social-panel"
-          aria-label="접속자 및 방 채팅"
+          aria-labelledby="room-social-title"
           className="mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#101a14]/95 shadow-2xl backdrop-blur-md"
         >
           <div className="border-b border-white/10 px-3 py-2">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg">통합 룸</h2>
+              <h2 id="room-social-title" className="text-wrap-balance font-display text-lg">통합 룸</h2>
               <span className="text-xs text-lime">최대 {MAX_PLAYERS}인</span>
             </div>
             <p className="mt-0.5 text-[11px] text-white/50">현재 접속 중인 플레이어</p>
@@ -1285,11 +1340,14 @@ function RoomSocialPanel({
               </label>
               <input
                 id="room-chat-input"
+                name="message"
+                autoComplete="off"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={120}
-                placeholder="메시지를 입력하세요"
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-xs outline-none focus:border-lime/50 focus:ring-1 focus:ring-lime/40"
+                placeholder="예: 여기로 와!…"
+                aria-label="채팅 메시지"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-xs outline-none focus-visible:border-lime/50 focus-visible:ring-1 focus-visible:ring-lime/40"
               />
               <button type="submit" className="rounded-lg bg-lime px-3 py-2 text-xs font-semibold text-black">
                 전송
@@ -1339,10 +1397,14 @@ function ScoreTab({
     </li>
   );
   return (
-    <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-black/55 p-4">
+    <section
+      className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-black/55 p-4"
+      aria-label="게임 현황"
+      aria-live="polite"
+    >
       <div className="w-full max-w-4xl rounded-3xl border border-white/10 bg-[#121c17]/95 p-5 shadow-2xl">
         <div className="flex items-end justify-between">
-          <h3 className="font-display text-3xl">현황</h3>
+          <h2 className="text-wrap-balance font-display text-3xl">현황</h2>
           <p className="text-xs text-white/50">Tab을 떼면 닫힙니다</p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -1367,7 +1429,7 @@ function ScoreTab({
           점수 기준 · 처치 +{SCORE_TAG} · 카멜레온 생존 승리 +{SCORE_SURVIVE} · 술래 팀 승리 +{SCORE_HUNT_WIN}
         </p>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -1384,10 +1446,12 @@ function ResultPanel({
 }) {
   const ranked = [...people].sort((a, b) => (room.scores[b.id] ?? 0) - (room.scores[a.id] ?? 0));
   return (
-    <div className="absolute inset-0 z-20 grid place-items-center bg-black/55 p-4">
-      <div className="w-full max-w-md rounded-3xl bg-[#121c17] p-6 text-center">
+    <AccessibleModal
+      titleId="result-title"
+      panelClassName="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-[#121c17] p-6 text-center shadow-2xl"
+    >
         <p className="text-lime">라운드 {room.round}</p>
-        <h2 className="font-display text-4xl">{room.winner === "hiders" ? "카멜레온 승!" : "술래 승!"}</h2>
+        <h2 id="result-title" className="text-wrap-balance font-display text-4xl">{room.winner === "hiders" ? "카멜레온 승!" : "술래 승!"}</h2>
         <p className="mt-2 text-xs text-white/55">
           처치 +{SCORE_TAG} · 생존 승리 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN}
         </p>
@@ -1406,8 +1470,7 @@ function ResultPanel({
             다음 라운드
           </button>
         )}
-      </div>
-    </div>
+    </AccessibleModal>
   );
 }
 
@@ -1416,7 +1479,7 @@ function RevealPanel({ room, timeLeft }: { room: RoomState; timeLeft: number }) 
     <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-black/25 p-4">
       <div className="w-full max-w-md rounded-3xl border border-lime/25 bg-[#121c17]/90 p-6 text-center shadow-2xl backdrop-blur-sm">
         <p className="text-sm tracking-[0.18em] text-lime">마지막 {REVEAL_TIME}초</p>
-        <h2 className="mt-2 font-display text-4xl">검증 라운드</h2>
+        <h2 className="text-wrap-balance mt-2 font-display text-4xl">검증 라운드</h2>
         <p className="mt-3 text-sm text-white/75">
           모든 카멜레온의 위치가 공개됩니다.
           <br />
