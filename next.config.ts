@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ["playroomkit"],
+  turbopack: {
+    root: process.cwd(),
+  },
 };
 
 export default nextConfig;
