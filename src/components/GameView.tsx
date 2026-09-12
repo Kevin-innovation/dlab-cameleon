@@ -429,11 +429,6 @@ export function GameView({
         setWatching(false);
       }
       if (watchingRef.current) world.stepSpectate(dt, keys);
-      if (world.clinging()) {
-        if (pose !== "stick") session.me().set("pose", "stick", true);
-      } else if (pose === "stick") {
-        session.me().set("pose", "stand", true);
-      }
       const localMoving =
         !watchingRef.current &&
         (keys.has("w") ||
@@ -451,6 +446,11 @@ export function GameView({
         pose,
         ghost,
       );
+      if (world.clinging()) {
+        if (pose !== "stick") session.me().set("pose", "stick", true);
+      } else if (pose === "stick") {
+        session.me().set("pose", "stand", true);
+      }
       if (!watchingRef.current) session.me().set("yaw", world.yaw, false);
 
       if (me && room.phase === "hunt" && hiderAlive(room, me.id)) {

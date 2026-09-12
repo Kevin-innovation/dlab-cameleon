@@ -634,8 +634,10 @@ function isSolidProp(b: BoxDef) {
   return b.h >= 0.45 && b.w >= 0.45 && b.d >= 0.45;
 }
 
+export const BOX_COLLIDE_OUTSET = 0.06;
+
 export function mapColliders(map: GameMap) {
-  const pad = -0.06;
+  const pad = -BOX_COLLIDE_OUTSET;
   return map.boxes
     .filter(isSolidProp)
     .map((b) => ({

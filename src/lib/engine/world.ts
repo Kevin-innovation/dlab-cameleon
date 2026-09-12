@@ -1,11 +1,10 @@
 import * as THREE from "three";
 import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, SNEAK_SPEED, WHITE } from "../config";
-import { doorColliders, getMap, mapColliders } from "../maps";
+import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
 import type { BodyPart, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
 import {
   blocked,
-  circleHitsBox,
   edgeMargin,
   headHit,
   landOn,
@@ -48,7 +47,7 @@ export class GameWorld {
   colliders: Collider[] = [];
   private baseColliders: Collider[] = [];
   private doorRigs: { def: DoorDef; pivot: THREE.Group; leaf: THREE.Mesh }[] = [];
-  private doorPass = new Map<string, Map<string, number>>();
+  private doorPass = new Map<string, Map<string, { side: number; crossed: boolean }>>();
   map!: GameMap;
   yaw = 0;
   pitch = 0;
@@ -270,24 +269,27 @@ export class GameWorld {
         rec = new Map();
         this.doorPass.set(id, rec);
       }
+      if (!open[id]) {
+        rec.clear();
+        continue;
+      }
       for (const p of people) {
-        if (Math.hypot(p.x - d.def.x, p.z - d.def.z) > 3.4) continue;
-        const side = doorPlaneSide(d.def, p.x, p.z);
-        const prev = rec.get(p.id);
-        if (
-          open[id] &&
-          prev !== undefined &&
-          side !== 0 &&
-          prev !== side &&
-          alongDoorway(d.def, p.x, p.z) &&
-          !doorColliders(d.def, false).some((c) => circleHitsBox(p.x, p.z, 0.34, c))
-        ) {
-          close.push(id);
+        const along = d.def.along === "x" ? p.x - d.def.x : p.z - d.def.z;
+        const thru = d.def.along === "x" ? p.z - d.def.z : p.x - d.def.x;
+        const inLane = Math.abs(along) <= d.def.w / 2 + 1.15;
+        if (Math.hypot(p.x - d.def.x, p.z - d.def.z) > 4.2) continue;
+        const side = Math.abs(thru) < 0.08 ? 0 : thru > 0 ? 1 : -1;
+        let st = rec.get(p.id);
+        if (!st) {
+          st = { side, crossed: false };
+          rec.set(p.id, st);
         }
-        if (side !== 0) rec.set(p.id, side);
+        if (inLane && st.side !== 0 && side !== 0 && side !== st.side) st.crossed = true;
+        if (side !== 0) st.side = side;
+        if (st.crossed && Math.abs(thru) > 0.68) close.push(id);
       }
     }
-    return close;
+    return [...new Set(close)];
   }
 
   lookDelta(dx: number, dy: number) {
@@ -357,14 +359,13 @@ export class GameWorld {
     const hit = nearestSurface(this.localX, this.localZ, this.colliders, 0.58);
     if (!hit || hit.dist < 0.04 || hit.dist > 0.55) return false;
     const box = hit.box;
-    const r = poseRadius("stick");
-    const pad = clingPad(r);
+    const pad = clingPad();
     if (Math.abs(hit.nx) >= Math.abs(hit.nz)) {
       const sign = hit.nx >= 0 ? 1 : -1;
       this.cling = {
         axis: "x",
         sign,
-        plane: sign > 0 ? box.maxX : box.minX,
+        plane: clingVisualFace(box, "x", sign),
         minA: box.minZ + 0.04,
         maxA: box.maxZ - 0.04,
         maxY: box.maxY,
@@ -376,7 +377,7 @@ export class GameWorld {
       this.cling = {
         axis: "z",
         sign,
-        plane: sign > 0 ? box.maxZ : box.minZ,
+        plane: clingVisualFace(box, "z", sign),
         minA: box.minX + 0.04,
         maxA: box.maxX - 0.04,
         maxY: box.maxY,
@@ -540,7 +541,7 @@ export class GameWorld {
     if (!cling) return;
     const nx = cling.axis === "x" ? cling.sign : 0;
     const nz = cling.axis === "z" ? cling.sign : 0;
-    const pad = clingPad(r);
+    const pad = clingPad();
     if (keys.has("shift")) {
       this.localX += nx * 0.32;
       this.localZ += nz * 0.32;
@@ -981,19 +982,13 @@ export class GameWorld {
   }
 }
 
-function clingPad(r: number) {
-  return r + 0.01;
+function clingPad() {
+  return 0.01;
 }
 
-function doorPlaneSide(def: DoorDef, x: number, z: number) {
-  const delta = def.along === "x" ? z - def.z : x - def.x;
-  if (Math.abs(delta) < 0.14) return 0;
-  return delta > 0 ? 1 : -1;
-}
-
-function alongDoorway(def: DoorDef, x: number, z: number) {
-  const a = def.along === "x" ? Math.abs(x - def.x) : Math.abs(z - def.z);
-  return a <= def.w / 2 + 0.55;
+function clingVisualFace(box: Collider, axis: "x" | "z", sign: number) {
+  const face = axis === "x" ? (sign > 0 ? box.maxX : box.minX) : sign > 0 ? box.maxZ : box.minZ;
+  return face - sign * BOX_COLLIDE_OUTSET;
 }
 
 function makeDoor(def: DoorDef) {
