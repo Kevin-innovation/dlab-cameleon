@@ -34,6 +34,44 @@ import { POSES } from "@/lib/types";
 
 type Tool = "brush" | "dropper" | "fill";
 
+const KEY_BY_CODE: Record<string, string> = {
+  KeyW: "w",
+  KeyA: "a",
+  KeyS: "s",
+  KeyD: "d",
+  ArrowUp: "arrowup",
+  ArrowDown: "arrowdown",
+  ArrowLeft: "arrowleft",
+  ArrowRight: "arrowright",
+  Space: " ",
+  ShiftLeft: "shift",
+  ShiftRight: "shift",
+  ControlLeft: "control",
+  ControlRight: "control",
+  Tab: "tab",
+  Escape: "escape",
+  KeyF: "f",
+  KeyH: "h",
+  KeyR: "r",
+  KeyC: "c",
+  KeyT: "t",
+  KeyE: "e",
+  KeyB: "b",
+  KeyV: "v",
+  Digit1: "1",
+  Digit2: "2",
+  Digit3: "3",
+  Digit4: "4",
+  Digit5: "5",
+  Digit6: "6",
+  Digit7: "7",
+  Digit8: "8",
+};
+
+function normalizeKey(e: KeyboardEvent) {
+  return KEY_BY_CODE[e.code] ?? e.key.toLowerCase();
+}
+
 export function GameView({
   session,
   serverName,
@@ -60,6 +98,7 @@ export function GameView({
   const [tabOpen, setTabOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(() => session.getRoom().phase === "lobby");
   const paintOpenRef = useRef(false);
+  const viewActiveRef = useRef(false);
   const watchingRef = useRef(false);
   const helpRef = useRef(false);
   const colorRef = useRef(color);
@@ -111,14 +150,17 @@ export function GameView({
     const typing = (e: Event) => {
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
-      return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
+      return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || !!el?.isContentEditable;
     };
 
     const tryLock = () => {
       if (paintOpenRef.current || helpRef.current) return;
       if (document.pointerLockElement === canvas) return;
       try {
-        canvas.requestPointerLock();
+        const lockRequest = canvas.requestPointerLock();
+        void Promise.resolve(lockRequest).catch(() => {
+          // Some browsers reject pointer lock; the click-activated fallback remains available.
+        });
       } catch {
         /* ignore */
       }
@@ -126,18 +168,22 @@ export function GameView({
 
     const onKey = (e: KeyboardEvent, down: boolean) => {
       if (typing(e)) return;
-      const k = e.key.toLowerCase();
+      const k = normalizeKey(e);
       if (down) {
         if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "tab"].includes(k)) {
           e.preventDefault();
-          tryLock();
         }
         if (k === "tab") {
           e.preventDefault();
           setTabOpen(true);
         }
         if (k === "f") setPaintOpen((v) => !v);
-        if (k === "escape") setPaintOpen(false);
+        if (k === "escape") {
+          setPaintOpen(false);
+          setHelp(false);
+          viewActiveRef.current = false;
+          keys.clear();
+        }
         if (k === "h" || k === "?") setHelp((v) => !v);
         if (k === "r") cyclePose(session, world, 1);
         if (k === "1") tryTaunt();
@@ -202,27 +248,35 @@ export function GameView({
     const ku = (e: KeyboardEvent) => onKey(e, false);
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
-    const onBlur = () => setTabOpen(false);
+    const onBlur = () => {
+      setTabOpen(false);
+      viewActiveRef.current = false;
+      keys.clear();
+    };
     window.addEventListener("blur", onBlur);
 
     const onMouseMove = (e: MouseEvent) => {
       if (paintOpenRef.current || helpRef.current) return;
       const lockedNow = document.pointerLockElement === canvas;
-      if (lockedNow) {
-        world.lookDelta(e.movementX, e.movementY);
-        return;
-      }
-      const stage = canvas.parentElement;
-      const overGame =
-        e.target === canvas ||
-        (stage !== null && stage.contains(e.target as Node) && (e.target as HTMLElement).closest("button, input, select, aside") === null);
-      if (overGame) {
-        world.lookDelta(e.movementX, e.movementY);
-      }
+      if (!lockedNow && !viewActiveRef.current) return;
+      if (!lockedNow && e.target !== canvas) return;
+      world.lookDelta(e.movementX, e.movementY);
     };
     document.addEventListener("mousemove", onMouseMove);
 
-    const onLock = () => setLocked(document.pointerLockElement === canvas);
+    let hadPointerLock = document.pointerLockElement === canvas;
+    const onLock = () => {
+      const isLocked = document.pointerLockElement === canvas;
+      setLocked(isLocked);
+      if (isLocked) {
+        hadPointerLock = true;
+        viewActiveRef.current = true;
+      } else if (hadPointerLock) {
+        hadPointerLock = false;
+        viewActiveRef.current = false;
+        keys.clear();
+      }
+    };
     document.addEventListener("pointerlockchange", onLock);
 
     const stage = canvas.parentElement;
@@ -282,7 +336,10 @@ export function GameView({
       }
       if (e.button !== 0) return;
       const el = e.target as HTMLElement;
-      if (el.closest("button, input, select, textarea, aside, label")) return;
+      if (el.closest("button, input, select, textarea, aside, label")) {
+        viewActiveRef.current = false;
+        return;
+      }
       const room = session.getRoom();
       const me = snapsFrom(session).find((p) => p.id === session.myId());
       if (!me) return;
@@ -311,6 +368,8 @@ export function GameView({
         return;
       }
 
+      viewActiveRef.current = true;
+      canvas.focus({ preventScroll: true });
       tryLock();
 
       if (room.phase === "hunt" && isHunter(room, me.id)) {
@@ -560,6 +619,7 @@ export function GameView({
       unshot();
       undoor();
       world.dispose();
+      viewActiveRef.current = false;
       worldRef.current = null;
     };
   }, [session]);
@@ -602,6 +662,8 @@ export function GameView({
       <div className="relative min-w-0 flex-1">
         <canvas
           ref={canvasRef}
+          tabIndex={0}
+          aria-label="3D 게임 화면"
           className={`absolute inset-0 h-full w-full touch-none ${paintOpen ? "cursor-crosshair" : locked ? "cursor-none" : "cursor-default"}`}
         />
 
