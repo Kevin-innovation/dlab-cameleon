@@ -121,8 +121,9 @@ export function GameView({
         if (k === "escape") setPaintOpen(false);
         if (k === "h" || k === "?") setHelp((v) => !v);
         if (k === "r") cyclePose(session, world, 1);
-        if (k >= "1" && k <= "7") {
-          const pose = POSES[Number(k) - 1]?.id;
+        if (k === "1") tryTaunt();
+        if (k >= "2" && k <= "8") {
+          const pose = POSES[Number(k) - 2]?.id;
           if (pose) applyPosePick(session, world, pose);
         }
         if (k === "c" && !watchingRef.current) {
@@ -144,7 +145,16 @@ export function GameView({
           }
         }
         if (k === "b") setTool("brush");
-        if (k === "v") {
+        if (paintOpenRef.current && (k === " " || k === "space")) {
+          e.preventDefault();
+          const c = world.sampleWorld(lastMx, lastMy);
+          if (c) {
+            setColor(c);
+            colorRef.current = c;
+            setTool("dropper");
+          }
+        }
+        if (k === "v" || k === "5") {
           const room = session.getRoom();
           const snap = snapsFrom(session).find((p) => p.id === session.myId());
           const hiding =
@@ -223,7 +233,25 @@ export function GameView({
       session.me().set("tauntY", world.localZ, true);
     }
 
+    let lastMx = window.innerWidth / 2;
+    let lastMy = window.innerHeight / 2;
+    const trackMouse = (e: PointerEvent | MouseEvent) => {
+      lastMx = e.clientX;
+      lastMy = e.clientY;
+    };
+    window.addEventListener("pointermove", trackMouse);
+
+    const onContext = (e: Event) => e.preventDefault();
+    stage?.addEventListener("contextmenu", onContext);
+
     const onPointerDown = (e: PointerEvent) => {
+      if (e.button === 2) {
+        const room = session.getRoom();
+        const me = snapsFrom(session).find((p) => p.id === session.myId());
+        if (me && room.phase === "hunt" && isHunter(room, me.id)) world.toggleHunterView();
+        e.preventDefault();
+        return;
+      }
       if (e.button !== 0) return;
       const el = e.target as HTMLElement;
       if (el.closest("button, input, select, textarea, aside, label")) return;
@@ -483,6 +511,8 @@ export function GameView({
       window.removeEventListener("pointermove", onPointerMovePaint);
       window.removeEventListener("pointerup", onPointerUpPaint);
       window.removeEventListener("pointercancel", onPointerUpPaint);
+      window.removeEventListener("pointermove", trackMouse);
+      canvas.parentElement?.removeEventListener("contextmenu", onContext);
       ro.disconnect();
       unshot();
       undoor();
@@ -670,13 +700,13 @@ export function GameView({
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
-                <div>술래 1인칭 · 마우스 조준 · WASD 이동 · Space 점프</div>
-                <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
+                <div>술래 1인칭 · 우클릭 3인칭 · WASD · Shift 달리기 · Ctrl 숙이기</div>
+                <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 탄 회복 · 빗나가면 1발 소모</div>
               </>
             ) : (
               <>
-                <div>마우스 이동 = 시점 · WASD 이동 · Space 점프(상자 위)</div>
-                <div>C 벽에 붙기 · E 문 · Shift 살금 · F 페인트 · V 관전</div>
+                <div>WASD 걷기 · Shift 달리기 · Space 점프/벽오르기 · Ctrl 내려가기</div>
+                <div>F 페인트 · Space 스포이드 · 1 도발 · 5 관전 · E 문</div>
               </>
             )}
           </div>
@@ -799,11 +829,11 @@ export function GameView({
           <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-2xl">3D 카멜론</h3>
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
-              <li>WASD로 걷고 Space로 점프해 상자·소파 위에 오를 수 있습니다.</li>
-              <li>문 앞에서 E로 열고 방에 들어가세요. 벽 너머는 보이지 않습니다.</li>
-              <li>벽 가까이 C로 붙습니다. A/D 좌우, W/S 오르내리기. 같은 면에만 붙고 벽을 통과하지 않습니다.</li>
-              <li>F로 페인트를 연 뒤 스포이드로 벽 색을 찍고, 붓으로 드래그해 칠하세요.</li>
-              <li>술래는 1인칭으로 총을 들고 수색합니다. 조준점 중앙에 맞추고 좌클릭으로 발사하세요.</li>
+              <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
+              <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
+              <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 숨은 채 관전, E로 문.</li>
+              <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
+              <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
             </ol>
             <button
               type="button"
@@ -914,8 +944,8 @@ function Lobby({
               value={room.mode}
               onChange={(e) => session.setRoom({ ...room, mode: e.target.value as RoomState["mode"] })}
             >
+              <option value="infection">감염 (기본)</option>
               <option value="normal">노말</option>
-              <option value="infection">감염</option>
             </select>
           </label>
           <label className="rounded-xl bg-white/8 p-2">

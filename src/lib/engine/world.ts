@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, SNEAK_SPEED, WHITE } from "../config";
+import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, SNEAK_SPEED, WHITE } from "../config";
 import { doorCollider, getMap, mapColliders } from "../maps";
 import type { BodyPart, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
@@ -62,6 +62,8 @@ export class GameWorld {
     maxY: number;
   } | null = null;
   grounded = true;
+  crouching = false;
+  hunterTps = false;
   watch = false;
   bodyYaw = 0;
   specX = 0;
@@ -278,6 +280,11 @@ export class GameWorld {
     return this.cling !== null;
   }
 
+  toggleHunterView() {
+    this.hunterTps = !this.hunterTps;
+    return this.hunterTps;
+  }
+
   exitCling() {
     this.cling = null;
   }
@@ -354,9 +361,10 @@ export class GameWorld {
     const boxes = ghost ? [] : this.colliders;
     const bounds = { w: this.map.w, d: this.map.d };
     if (ghost && this.cling) this.cling = null;
-    if (this.cling && pose !== "stick") this.cling = null;
-    const r = poseRadius(this.cling ? "stick" : pose);
-    const h = poseHeight(this.cling ? "stick" : pose);
+    const k0 = input.keys;
+    this.crouching = k0.has("control") && !this.cling && !input.paintOpen;
+    const r = poseRadius(this.cling ? "stick" : this.crouching ? "crouch" : pose);
+    const h = poseHeight(this.cling ? "stick" : this.crouching ? "crouch" : pose);
     const feet = this.localY;
     const head = this.localY + h;
     if (!this.cling) {
@@ -389,7 +397,8 @@ export class GameWorld {
     if (this.wish.lengthSq() > 0) {
       this.wish.normalize();
       let speed = PLAYER_SPEED;
-      if (k.has("shift")) speed = SNEAK_SPEED;
+      if (k.has("shift")) speed = RUN_SPEED;
+      if (this.crouching) speed = SNEAK_SPEED;
       if (input.paintOpen) speed = PAINT_SPEED;
       if (pose === "lie") speed *= 0.45;
       if (pose === "crouch" || pose === "sit") speed *= 0.72;
@@ -416,7 +425,12 @@ export class GameWorld {
       }
     }
 
-    if (this.grounded && (k.has(" ") || k.has("space"))) {
+    if (this.grounded && (k.has(" ") || k.has("space")) && !input.paintOpen) {
+      const wall = nearestSurface(this.localX, this.localZ, boxes, 0.52);
+      if (wall && wall.dist < 0.48 && this.tryCling(pose)) {
+        this.stepCling(dt, k, poseRadius("stick"));
+        return { x: this.localX, z: this.localZ, yaw: this.yaw };
+      }
       this.vy = JUMP_SPEED;
       this.grounded = false;
     }
@@ -453,6 +467,8 @@ export class GameWorld {
     this.vy = 0;
     this.cling = null;
     this.grounded = true;
+    this.hunterTps = false;
+    this.crouching = false;
     if (yaw !== undefined) this.yaw = yaw;
   }
 
@@ -462,20 +478,19 @@ export class GameWorld {
     const nx = cling.axis === "x" ? cling.sign : 0;
     const nz = cling.axis === "z" ? cling.sign : 0;
     const pad = r + 0.07;
-    if (keys.has(" ") || keys.has("space")) {
-      this.localX += nx * 0.45;
-      this.localZ += nz * 0.45;
-      this.vy = JUMP_SPEED * 0.78;
+    if (keys.has("shift")) {
+      this.localX += nx * 0.32;
+      this.localZ += nz * 0.32;
       this.cling = null;
-      this.grounded = false;
+      this.grounded = this.localY <= 0.04;
       return;
     }
     let along = 0;
     if (keys.has("d") || keys.has("arrowright")) along += 1;
     if (keys.has("a") || keys.has("arrowleft")) along -= 1;
     let climb = 0;
-    if (keys.has("w") || keys.has("arrowup")) climb += 1;
-    if (keys.has("s") || keys.has("arrowdown")) climb -= 1;
+    if (keys.has(" ") || keys.has("space") || keys.has("w") || keys.has("arrowup")) climb += 1;
+    if (keys.has("control") || keys.has("s") || keys.has("arrowdown")) climb -= 1;
     if (climb < 0 && this.localY <= 0.03) {
       this.localX += nx * 0.32;
       this.localZ += nz * 0.32;
@@ -609,10 +624,10 @@ export class GameWorld {
       return;
     }
     this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
-    if (opts.fps) {
+    if (opts.fps && !this.hunterTps) {
       this.viewBob += opts.moving ? 0.26 : 0.05;
       const bob = opts.moving ? Math.sin(this.viewBob) * 0.028 : 0;
-      this.camEye.set(this.localX, 1.58 + this.localY + bob, this.localZ);
+      this.camEye.set(this.localX, (this.crouching ? 1.08 : 1.58) + this.localY + bob, this.localZ);
       this.camera.position.copy(this.camEye);
       this.camera.fov = 78;
       this.fpKick *= 0.78;
@@ -629,7 +644,7 @@ export class GameWorld {
     this.fpGun.visible = false;
     this.camera.fov = 70;
     const want = opts.paintOpen ? 2.4 : 4.0;
-    this.camEye.set(this.localX, 1.48 + this.localY, this.localZ);
+    this.camEye.set(this.localX, (this.crouching ? 1.05 : 1.48) + this.localY, this.localZ);
     this.camPos.copy(this.camEye).addScaledVector(this.forward, -want);
     this.camPos.y = Math.max(0.55, this.camPos.y);
     this.camDir.copy(this.camPos).sub(this.camEye);

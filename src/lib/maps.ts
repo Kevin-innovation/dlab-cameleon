@@ -41,7 +41,7 @@ const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67
 const mansion: GameMap = {
   id: "mansion",
   name: "숨바꼭질 저택",
-  blurb: "방과 문이 있는 저택. 상자 위에 오르고 벽에 붙어 숨으세요.",
+  blurb: "무도회장·서재·주방. 책장·액자·타일에 녹아드세요.",
   difficulty: "쉬움",
   w: 48,
   d: 36,
@@ -87,6 +87,9 @@ const mansion: GameMap = {
     B(40, 26, 1.6, 1.8, "#eef6f4", { h: 1.6, pattern: "tiles" }),
     B(43, 26, 1.6, 1.8, "#9ec5c1", { h: 0.55, pattern: "tiles" }),
     B(4, 28, 2.4, 2.4, "#2f4f3a", { h: 1.3, pattern: "leaves" }),
+    B(15, 8, 1.8, 0.08, "#d4b483", { h: 1.3, y: 1.1, collide: true, pattern: "stripes", colors: ["#d4b483", "#6b3a2a"] }),
+    B(34, 7, 1.6, 0.08, "#2e6a8f", { h: 1.2, y: 1.2, collide: true, pattern: "dots", colors: ["#2e6a8f", "#f3f1ea"] }),
+    B(9, 15, 0.9, 0.9, "#c9a66b", { h: 1.1, collide: true, pattern: "wood" }),
     wall(0, 0, 48, 0.4),
     wall(0, 35.6, 20, 0.4),
     wall(28, 35.6, 20, 0.4),
@@ -98,7 +101,7 @@ const mansion: GameMap = {
 const farm: GameMap = {
   id: "farm",
   name: "실내 농장",
-  blurb: "마구간과 헛간 방. 문을 열고 건초 더미 위에 숨으세요.",
+  blurb: "소·건초·호박·빨간 문. 넓은 색면에 붙기 좋습니다.",
   difficulty: "쉬움",
   w: 52,
   d: 38,
@@ -144,6 +147,10 @@ const farm: GameMap = {
     B(34, 22, 1.6, 1.3, "#e67e22", { h: 0.7 }),
     B(38, 24, 1.6, 1.3, "#d35400", { h: 0.7 }),
     B(42, 22, 2.2, 1.8, "#6fbf57", { h: 1.2, pattern: "leaves" }),
+    B(14, 14, 1.3, 1.3, "#e67e22", { h: 0.85, collide: true }),
+    B(16, 15, 1.1, 1.1, "#d35400", { h: 0.7, collide: true }),
+    B(22, 16, 2.0, 1.1, "#f4f0e4", { h: 1.6, collide: true, pattern: "dots", colors: ["#f4f0e4", "#111"] }),
+    B(44, 12, 1.4, 0.9, "#c0392b", { h: 2.1, collide: true, pattern: "wood" }),
     wall(0, 0, 52, 0.4, "#5a3a22", 5.5),
     wall(0, 37.6, 22, 0.4, "#5a3a22", 5.5),
     wall(30, 37.6, 22, 0.4, "#5a3a22", 5.5),
@@ -155,7 +162,7 @@ const farm: GameMap = {
 const sewer: GameMap = {
   id: "sewer",
   name: "하수도",
-  blurb: "터널과 챔버. 철문을 열고 파이프 뒤에 숨으세요.",
+  blurb: "파이프·드럼·그래피티. 어두운 구석보다 무늬에 녹으세요.",
   difficulty: "보통",
   w: 46,
   d: 34,
@@ -209,6 +216,53 @@ const sewer: GameMap = {
     wall(28, 33.6, 18, 0.4, "#1b2420", 4.2),
     wall(0, 0, 0.4, 34, "#1b2420", 4.2),
     wall(45.6, 0, 0.4, 34, "#1b2420", 4.2),
+    B(18, 18, 1.1, 0.7, "#2c3e50", { h: 1.8, collide: true }),
+    B(28, 20, 1.4, 0.8, "#c0392b", { h: 1.7, collide: true, pattern: "dots", colors: ["#c0392b", "#111"] }),
+  ],
+};
+
+const backrooms: GameMap = {
+  id: "backrooms",
+  name: "백룸",
+  blurb: "노란 사무실. 의자·서랍·형광 벽 가장자리에 붙으세요.",
+  difficulty: "어려움",
+  w: 40,
+  d: 30,
+  ceiling: 3.6,
+  fog: "#b8a84a",
+  floor: "#d4c56a",
+  doors: [],
+  hunterSpawns: [{ x: 20, z: 27.5 }],
+  spawns: [
+    { x: 6, z: 6 },
+    { x: 14, z: 8 },
+    { x: 22, z: 7 },
+    { x: 30, z: 9 },
+    { x: 33, z: 16 },
+    { x: 24, z: 20 },
+    { x: 12, z: 18 },
+    { x: 7, z: 14 },
+  ],
+  boxes: [
+    B(1, 1, 38, 28, "#d4c56a", { h: 0.04, pattern: "tiles", colors: ["#d4c56a", "#c4b44a"] }),
+    B(2, 2, 10, 0.18, "#e2d36a", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#e2d36a", "#c9b84a"] }),
+    B(14, 2, 12, 0.18, "#e8dc7a", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#e8dc7a", "#d4c56a"] }),
+    B(28, 2, 10, 0.18, "#d4c56a", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#d4c56a", "#b8a84a"] }),
+    B(6, 8, 1.4, 0.7, "#6d5c3a", { h: 0.95, collide: true, pattern: "wood" }),
+    B(8, 8, 0.55, 0.55, "#2c2c2c", { h: 1.05, collide: true }),
+    B(18, 10, 1.6, 0.8, "#6d5c3a", { h: 0.9, collide: true, pattern: "wood" }),
+    B(20, 10, 0.55, 0.55, "#1a1a1a", { h: 1.05, collide: true }),
+    B(26, 9, 1.2, 1.2, "#4a4a4a", { h: 1.2, collide: true }),
+    B(12, 16, 0.9, 0.9, "#5a4a32", { h: 0.85, collide: true, pattern: "wood" }),
+    B(13, 16.2, 0.9, 0.9, "#5a4a32", { h: 0.85, y: 0.85, collide: true, pattern: "wood" }),
+    B(30, 14, 1.8, 1.1, "#3d3d3d", { h: 1.15, collide: true }),
+    B(5, 20, 1.3, 1.0, "#2f2f2f", { h: 1.3, collide: true, pattern: "bricks", colors: ["#2f2f2f", "#111"] }),
+    B(22, 18, 2.2, 0.16, "#e74c3c", { h: 1.4, y: 0.9, collide: true, pattern: "stripes", colors: ["#e74c3c", "#f1c40f"] }),
+    wall(0, 0, 40, 0.4, "#c9b84a", 3.5),
+    wall(0, 29.6, 16, 0.4, "#c9b84a", 3.5),
+    wall(24, 29.6, 16, 0.4, "#c9b84a", 3.5),
+    wall(0, 0, 0.4, 30, "#c9b84a", 3.5),
+    wall(39.6, 0, 0.4, 30, "#c9b84a", 3.5),
   ],
 };
 
@@ -244,6 +298,17 @@ function alcove(x: number, z: number, color: string, pattern: Pattern, colors?: 
 
 function cluster(theme: string, x: number, z: number, kind: number, rnd: () => number): BoxDef[] {
   const j = () => (rnd() - 0.5) * 1.1;
+  if (theme === "backrooms") {
+    if (kind === 0) return [B(x, z, 1.5, 0.7, "#6d5c3a", { h: 0.9, collide: true, pattern: "wood" })];
+    if (kind === 1) return [B(x, z, 0.55, 0.55, "#222", { h: 1.05, collide: true })];
+    if (kind === 2) return nook(x, z, "#e2d36a", "wallpaper", ["#e2d36a", "#c9b84a"], 2.4);
+    if (kind === 3)
+      return [
+        B(x, z, 0.9, 0.9, "#5a4a32", { h: 0.8, collide: true, pattern: "wood" }),
+        B(x + 0.1, z + 0.1, 0.9, 0.9, "#5a4a32", { h: 0.8, y: 0.8, collide: true, pattern: "wood" }),
+      ];
+    return [B(x, z, 1.3, 0.9, "#3a3a3a", { h: 1.15, collide: true })];
+  }
   if (theme === "farm") {
     if (kind === 0) return [B(x, z, 1.8, 1.3, "#e39b2d", { h: 1.05, collide: true, pattern: "hay" })];
     if (kind === 1)
@@ -312,6 +377,7 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
 function wallTheme(id: string): { color: string; pattern: Pattern; colors: string[] } {
   if (id === "farm") return { color: "#6d4420", pattern: "wood", colors: ["#6d4420", "#8b5a2b"] };
   if (id === "sewer") return { color: "#1b2420", pattern: "bricks", colors: ["#1b2420", "#2a3830"] };
+  if (id === "backrooms") return { color: "#d4c56a", pattern: "wallpaper", colors: ["#e2d36a", "#c9b84a"] };
   return { color: "#4a3428", pattern: "wallpaper", colors: ["#4a3428", "#6b3a2a"] };
 }
 
@@ -379,6 +445,9 @@ function partitionMap(map: GameMap): GameMap {
   } else if (map.id === "sewer") {
     xs = [24, 46, 68, 90];
     zs = [22, 42, 64];
+  } else if (map.id === "backrooms") {
+    xs = [28, 52, 76];
+    zs = [22, 46];
   } else {
     xs = [32, 64, 96];
     zs = [26, 52, 74];
@@ -461,7 +530,7 @@ function expandMap(map: GameMap, s: number): GameMap {
   };
 }
 
-export const MAPS: GameMap[] = [mansion, farm, sewer].map((m) =>
+export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) =>
   clearSpawns(clutterMap(partitionMap(expandMap(m, 2.5)))),
 );
 

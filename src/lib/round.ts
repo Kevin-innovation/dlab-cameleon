@@ -4,7 +4,7 @@ import type { PlayerSnap, RoomState } from "./types";
 export function emptyRoom(): RoomState {
   return {
     phase: "lobby",
-    mode: "normal",
+    mode: "infection",
     mapId: "mansion",
     round: 0,
     phaseEndsAt: 0,
@@ -131,6 +131,7 @@ export function processFire(
         ...next,
         caughtIds,
         scores,
+        ammo: { ...next.ammo, [hunterId]: left },
         lastTag: entry,
         feed: [...(next.feed ?? []), entry].slice(-10),
       };

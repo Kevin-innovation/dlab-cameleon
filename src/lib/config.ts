@@ -1,8 +1,9 @@
 export const APP_NAME = "카멜론";
-export const MAX_PLAYERS = 8;
+export const MAX_PLAYERS = 10;
 export const ROOMS_PER_SERVER = 8;
-export const PLAYER_SPEED = 8.8;
-export const SNEAK_SPEED = 3.4;
+export const PLAYER_SPEED = 5.6;
+export const RUN_SPEED = 9.4;
+export const SNEAK_SPEED = 3.2;
 export const PAINT_SPEED = 2.0;
 export const JUMP_SPEED = 8.4;
 export const GRAVITY = 22;
@@ -15,8 +16,8 @@ export const TAUNT_COOLDOWN = 8000;
 export const FORCED_TAUNT = 22000;
 export const MAX_BLOBS = 140;
 export const SYNC_HZ = 14;
-export const DEFAULT_HIDE = 70;
-export const DEFAULT_HUNT = 150;
+export const DEFAULT_HIDE = 60;
+export const DEFAULT_HUNT = 180;
 export const WHITE = "#f3f1ea";
 
 export const SERVERS = [
