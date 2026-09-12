@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MAX_BLOBS, SHOT_COOLDOWN, SYNC_HZ, TAUNT_COOLDOWN, FORCED_TAUNT, TAG_RANGE, WHITE } from "@/lib/config";
+import {
+  MAX_BLOBS,
+  SHOT_COOLDOWN,
+  SYNC_HZ,
+  TAUNT_COOLDOWN,
+  FORCED_TAUNT,
+  TAG_RANGE,
+  WHITE,
+  SCORE_TAG,
+  SCORE_SURVIVE,
+  SCORE_HUNT_WIN,
+} from "@/lib/config";
 import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
 import { getMap, MAPS } from "@/lib/maps";
@@ -44,6 +55,7 @@ export function GameView({
   const [watching, setWatching] = useState(false);
   const [nowTick, setNowTick] = useState(0);
   const [atDoor, setAtDoor] = useState(false);
+  const [tabOpen, setTabOpen] = useState(false);
   const paintOpenRef = useRef(false);
   const watchingRef = useRef(false);
   const helpRef = useRef(false);
@@ -114,9 +126,13 @@ export function GameView({
       if (typing(e)) return;
       const k = e.key.toLowerCase();
       if (down) {
-        if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) {
+        if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "tab"].includes(k)) {
           e.preventDefault();
           tryLock();
+        }
+        if (k === "tab") {
+          e.preventDefault();
+          setTabOpen(true);
         }
         if (k === "f") setPaintOpen((v) => !v);
         if (k === "escape") setPaintOpen(false);
@@ -176,6 +192,7 @@ export function GameView({
           }
         }
       }
+      if (!down && k === "tab") setTabOpen(false);
       if (down) keys.add(k);
       else keys.delete(k);
     };
@@ -183,6 +200,8 @@ export function GameView({
     const ku = (e: KeyboardEvent) => onKey(e, false);
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
+    const onBlur = () => setTabOpen(false);
+    window.addEventListener("blur", onBlur);
 
     const onMouseMove = (e: MouseEvent) => {
       if (paintOpenRef.current || helpRef.current) return;
@@ -513,6 +532,7 @@ export function GameView({
       clearInterval(hudIv);
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.removeEventListener("blur", onBlur);
       document.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("resize", resize);
       document.removeEventListener("pointerlockchange", onLock);
@@ -710,12 +730,12 @@ export function GameView({
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
                 <div>술래 1인칭 · 우클릭 3인칭 · WASD · Shift 달리기 · Ctrl 숙이기</div>
-                <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 탄 회복 · 빗나가면 1발 소모</div>
+                <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 탄 회복 · Tab 현황</div>
               </>
             ) : (
               <>
                 <div>WASD 걷기 · Shift 달리기 · Space 점프/벽오르기 · Ctrl 내려가기</div>
-                <div>F 페인트 · Space 스포이드 · 1 도발 · 5 관전 · E 문</div>
+                <div>F 페인트 · 1 도발 · 5 관전 · E 문 · Tab 현황</div>
               </>
             )}
           </div>
@@ -833,6 +853,14 @@ export function GameView({
         )}
       </div>
 
+      {tabOpen && (
+        <ScoreTab
+          room={hud}
+          people={people}
+          myId={session.myId()}
+        />
+      )}
+
       {help && (
         <div className="absolute inset-0 z-40 grid place-items-center bg-black/70 p-4" onClick={() => setHelp(false)}>
           <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
@@ -843,6 +871,7 @@ export function GameView({
               <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 숨은 채 관전, E로 문.</li>
               <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
               <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
+              <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
             </ol>
             <button
               type="button"
@@ -1021,14 +1050,82 @@ function Lobby({
             <p className="mt-2 text-center text-xs text-white/55">
               {allReady ? "전원 준비됨" : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
             </p>
+            <p className="mt-2 text-center text-[11px] text-white/40">
+              점수: 처치 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
+            </p>
           </>
         ) : (
-          <p className="mt-4 text-center text-sm text-white/60">
-            호스트 시작 대기 · 준비 {readyCount}/{people.length}
-          </p>
+          <>
+            <p className="mt-4 text-center text-sm text-white/60">
+              호스트 시작 대기 · 준비 {readyCount}/{people.length}
+            </p>
+            <p className="mt-2 text-center text-[11px] text-white/40">
+              점수: 처치 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
+            </p>
+          </>
         )}
       </div>
     </aside>
+  );
+}
+
+function ScoreTab({
+  room,
+  people,
+  myId,
+}: {
+  room: RoomState;
+  people: PlayerSnap[];
+  myId: string;
+}) {
+  const survivors = people.filter((p) => hiderAlive(room, p.id));
+  const dead = people.filter((p) => room.caughtIds.includes(p.id));
+  const ranked = [...people].sort((a, b) => (room.scores[b.id] ?? 0) - (room.scores[a.id] ?? 0));
+  const row = (p: PlayerSnap) => (
+    <li
+      key={p.id}
+      className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm ${
+        p.id === myId ? "bg-lime/15" : "bg-white/5"
+      }`}
+    >
+      <span className="truncate">
+        {p.name}
+        {p.id === myId ? " (나)" : ""}
+        {room.phase !== "lobby" && isHunter(room, p.id) ? " · 술래" : ""}
+      </span>
+      <span className="ml-2 shrink-0 tabular-nums text-lime">{room.scores[p.id] ?? 0}</span>
+    </li>
+  );
+  return (
+    <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-black/55 p-4">
+      <div className="w-full max-w-4xl rounded-3xl border border-white/10 bg-[#121c17]/95 p-5 shadow-2xl">
+        <div className="flex items-end justify-between">
+          <h3 className="font-display text-3xl">현황</h3>
+          <p className="text-xs text-white/50">Tab을 떼면 닫힙니다</p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <section className="rounded-2xl bg-black/30 p-3">
+            <h4 className="text-xs tracking-wide text-white/55">참여자 {ranked.length}</h4>
+            <ul className="mt-2 space-y-1">{ranked.map(row)}</ul>
+          </section>
+          <section className="rounded-2xl bg-black/30 p-3">
+            <h4 className="text-xs tracking-wide text-lime/80">생존자 {survivors.length}</h4>
+            <ul className="mt-2 space-y-1">
+              {survivors.length ? survivors.map(row) : <li className="text-sm text-white/40">없음</li>}
+            </ul>
+          </section>
+          <section className="rounded-2xl bg-black/30 p-3">
+            <h4 className="text-xs tracking-wide text-pink/80">죽은자 {dead.length}</h4>
+            <ul className="mt-2 space-y-1">
+              {dead.length ? dead.map(row) : <li className="text-sm text-white/40">없음</li>}
+            </ul>
+          </section>
+        </div>
+        <p className="mt-4 text-center text-xs text-white/55">
+          점수 기준 · 처치 +{SCORE_TAG} · 카멜레온 생존 승리 +{SCORE_SURVIVE} · 술래 팀 승리 +{SCORE_HUNT_WIN}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -1049,6 +1146,9 @@ function ResultPanel({
       <div className="w-full max-w-md rounded-3xl bg-[#121c17] p-6 text-center">
         <p className="text-lime">라운드 {room.round}</p>
         <h2 className="font-display text-4xl">{room.winner === "hiders" ? "카멜레온 승!" : "술래 승!"}</h2>
+        <p className="mt-2 text-xs text-white/55">
+          처치 +{SCORE_TAG} · 생존 승리 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN}
+        </p>
         <ul className="mt-4 space-y-1 text-left">
           {ranked.map((p, i) => (
             <li key={p.id} className="flex justify-between rounded-lg bg-white/5 px-3 py-1">

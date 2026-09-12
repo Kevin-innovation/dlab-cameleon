@@ -19,6 +19,9 @@ export const SYNC_HZ = 14;
 export const DEFAULT_HIDE = 60;
 export const DEFAULT_HUNT = 180;
 export const WHITE = "#f3f1ea";
+export const SCORE_TAG = 80;
+export const SCORE_SURVIVE = 150;
+export const SCORE_HUNT_WIN = 40;
 
 export const SERVERS = [
   { id: "kr1", name: "한국 1", city: "서울", ping: "9ms", flavor: "제일 붐빔" },

@@ -1,6 +1,6 @@
 import { SHOT_COOLDOWN, TAG_RANGE, WHITE } from "./config";
 import { moveWithSlide, poseRadius } from "./engine/collision";
-import { doorCollider, mapColliders } from "./maps";
+import { doorColliders, mapColliders } from "./maps";
 import { hiderAlive, isHunter, roleOf } from "./round";
 import type { Session } from "./session";
 import type { GameMap, PaintBlob, Pose, RoomState } from "./types";
@@ -30,9 +30,7 @@ function mul(id: string) {
 }
 
 function colliders(map: GameMap, room: RoomState) {
-  const doors = (map.doors ?? [])
-    .filter((d) => !room.doors?.[d.id])
-    .map(doorCollider);
+  const doors = (map.doors ?? []).flatMap((d) => doorColliders(d, !!room.doors?.[d.id]));
   return [...mapColliders(map), ...doors];
 }
 

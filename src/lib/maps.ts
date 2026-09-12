@@ -495,7 +495,7 @@ function clutterMap(map: GameMap): GameMap {
 }
 
 function clearSpawns(map: GameMap): GameMap {
-  const cols = [...mapColliders(map), ...(map.doors ?? []).map(doorCollider)];
+  const cols = [...mapColliders(map), ...(map.doors ?? []).flatMap((d) => doorColliders(d))];
   const bounds = { w: map.w, d: map.d };
   const fix = (p: { x: number; z: number }) => resolveStuck(p.x, p.z, 0.45, cols, bounds);
   return {
@@ -575,25 +575,52 @@ export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) =>
   clearSpawns(clutterMap(partitionMap(sealPerimeter(expandMap(m, 1.35))))),
 );
 
-export function doorCollider(door: DoorDef): Collider {
-  if (door.along === "z") {
-    return {
-      minX: door.x - door.d / 2,
-      maxX: door.x + door.d / 2,
-      minZ: door.z - door.w / 2,
-      maxZ: door.z + door.w / 2,
-      minY: 0,
-      maxY: door.h,
-    };
+function rotY(x: number, z: number, ang: number) {
+  const c = Math.cos(ang);
+  const s = Math.sin(ang);
+  return { x: x * c - z * s, z: x * s + z * c };
+}
+
+function doorSegment(door: DoorDef, ang: number, a: number, b: number, pad: number): Collider {
+  const hx = door.along === "x" ? door.x - door.w / 2 : door.x;
+  const hz = door.along === "z" ? door.z - door.w / 2 : door.z;
+  const corners: { x: number; z: number }[] = [];
+  if (door.along === "x") {
+    for (const lx of [a, b]) {
+      for (const lz of [-door.d / 2, door.d / 2]) {
+        const r = rotY(lx, lz, ang);
+        corners.push({ x: hx + r.x, z: hz + r.z });
+      }
+    }
+  } else {
+    for (const lz of [a, b]) {
+      for (const lx of [-door.d / 2, door.d / 2]) {
+        const r = rotY(lx, lz, ang);
+        corners.push({ x: hx + r.x, z: hz + r.z });
+      }
+    }
   }
+  const xs = corners.map((c) => c.x);
+  const zs = corners.map((c) => c.z);
   return {
-    minX: door.x - door.w / 2,
-    maxX: door.x + door.w / 2,
-    minZ: door.z - door.d / 2,
-    maxZ: door.z + door.d / 2,
+    minX: Math.min(...xs) - pad,
+    maxX: Math.max(...xs) + pad,
+    minZ: Math.min(...zs) - pad,
+    maxZ: Math.max(...zs) + pad,
     minY: 0,
     maxY: door.h,
   };
+}
+
+export function doorColliders(door: DoorDef, open = false): Collider[] {
+  const ang = open ? 1.84 : 0;
+  const pad = open ? 0.05 : 0.1;
+  const n = Math.max(5, Math.ceil(door.w / 0.26));
+  const out: Collider[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push(doorSegment(door, ang, (i / n) * door.w, ((i + 1) / n) * door.w, pad));
+  }
+  return out;
 }
 
 export function getMap(id: string) {

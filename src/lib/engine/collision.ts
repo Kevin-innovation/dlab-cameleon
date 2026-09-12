@@ -85,7 +85,7 @@ export function resolveStuck(
   return { x, z };
 }
 
-export function moveWithSlide(
+function slideOnce(
   x: number,
   z: number,
   dx: number,
@@ -93,8 +93,8 @@ export function moveWithSlide(
   r: number,
   boxes: Collider[],
   bounds: { w: number; d: number },
-  feetY = 0,
-  headY = 1.72,
+  feetY: number,
+  headY: number,
 ) {
   const freed = resolveStuck(x, z, r, boxes, bounds, feetY, headY);
   x = freed.x;
@@ -107,6 +107,30 @@ export function moveWithSlide(
     return resolveStuck(x, z, r, boxes, bounds, feetY, headY);
   }
   return resolveStuck(nx, nz, r, boxes, bounds, feetY, headY);
+}
+
+export function moveWithSlide(
+  x: number,
+  z: number,
+  dx: number,
+  dz: number,
+  r: number,
+  boxes: Collider[],
+  bounds: { w: number; d: number },
+  feetY = 0,
+  headY = 1.72,
+) {
+  const dist = Math.hypot(dx, dz);
+  const maxStep = 0.14;
+  const steps = Math.max(1, Math.ceil(dist / maxStep));
+  let cx = x;
+  let cz = z;
+  for (let i = 0; i < steps; i++) {
+    const next = slideOnce(cx, cz, dx / steps, dz / steps, r, boxes, bounds, feetY, headY);
+    cx = next.x;
+    cz = next.z;
+  }
+  return { x: cx, z: cz };
 }
 
 export function landOn(x: number, z: number, r: number, prevY: number, nextY: number, boxes: Collider[]) {

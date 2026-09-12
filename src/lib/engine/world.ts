@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, SNEAK_SPEED, WHITE } from "../config";
-import { doorCollider, getMap, mapColliders } from "../maps";
+import { doorColliders, getMap, mapColliders } from "../maps";
 import type { BodyPart, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
 import {
@@ -231,8 +231,22 @@ export class GameWorld {
     }
     this.colliders = [
       ...this.baseColliders,
-      ...this.doorRigs.filter((d) => !open[d.def.id]).map((d) => doorCollider(d.def)),
+      ...this.doorRigs.flatMap((d) => doorColliders(d.def, !!open[d.def.id])),
     ];
+    if (this.map) {
+      const r = 0.3;
+      const freed = resolveStuck(
+        this.localX,
+        this.localZ,
+        r,
+        this.colliders,
+        { w: this.map.w, d: this.map.d },
+        this.localY,
+        this.localY + 1.7,
+      );
+      this.localX = freed.x;
+      this.localZ = freed.z;
+    }
   }
 
   nearDoor() {

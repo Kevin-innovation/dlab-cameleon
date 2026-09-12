@@ -1,4 +1,4 @@
-import { DEFAULT_AMMO, DEFAULT_HIDE, DEFAULT_HUNT, TAG_RANGE } from "./config";
+import { DEFAULT_AMMO, DEFAULT_HIDE, DEFAULT_HUNT, SCORE_HUNT_WIN, SCORE_SURVIVE, SCORE_TAG, TAG_RANGE } from "./config";
 import type { PlayerSnap, RoomState } from "./types";
 
 export function emptyRoom(): RoomState {
@@ -118,7 +118,7 @@ export function processFire(
         ? next.caughtIds
         : [...next.caughtIds, best.id];
       const scores = { ...next.scores };
-      scores[hunterId] = (scores[hunterId] ?? 0) + 80;
+      scores[hunterId] = (scores[hunterId] ?? 0) + SCORE_TAG;
       tagged = best;
       const entry = {
         id: best.id,
@@ -159,10 +159,10 @@ export function finishRound(
   const scores = { ...room.scores };
   if (winner === "hiders") {
     for (const p of players) {
-      if (hiderAlive(room, p.id)) scores[p.id] = (scores[p.id] ?? 0) + 150;
+      if (hiderAlive(room, p.id)) scores[p.id] = (scores[p.id] ?? 0) + SCORE_SURVIVE;
     }
   } else {
-    for (const id of room.hunterIds) scores[id] = (scores[id] ?? 0) + 40;
+    for (const id of room.hunterIds) scores[id] = (scores[id] ?? 0) + SCORE_HUNT_WIN;
   }
   return {
     ...room,
