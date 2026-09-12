@@ -5,6 +5,7 @@ import type { BodyPart, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose,
 import { hiderAlive, isHunter } from "../round";
 import {
   blocked,
+  edgeMargin,
   headHit,
   landOn,
   moveWithSlide,
@@ -457,6 +458,9 @@ export class GameWorld {
         this.vy = 0;
       }
     }
+    const m = edgeMargin(r);
+    this.localX = Math.max(m, Math.min(this.map.w - m, this.localX));
+    this.localZ = Math.max(m, Math.min(this.map.d - m, this.localZ));
     return { x: this.localX, z: this.localZ, yaw: this.yaw };
   }
 
@@ -511,6 +515,9 @@ export class GameWorld {
     this.localY = Math.max(0, Math.min(cling.maxY - 0.45, this.localY + climb * speed));
     this.vy = 0;
     this.yaw = Math.atan2(nx, nz);
+    const m = edgeMargin(r);
+    this.localX = Math.max(m, Math.min(this.map.w - m, this.localX));
+    this.localZ = Math.max(m, Math.min(this.map.d - m, this.localZ));
   }
 
   syncPlayers(
@@ -629,6 +636,13 @@ export class GameWorld {
       const bob = opts.moving ? Math.sin(this.viewBob) * 0.028 : 0;
       this.camEye.set(this.localX, (this.crouching ? 1.08 : 1.58) + this.localY + bob, this.localZ);
       this.camera.position.copy(this.camEye);
+      this.camRay.set(this.camEye, this.forward);
+      this.camRay.near = 0.02;
+      this.camRay.far = 0.42;
+      const wallHit = this.camRay.intersectObjects(this.camBlockers, false)[0];
+      if (wallHit && wallHit.distance < 0.28) {
+        this.camera.position.addScaledVector(this.forward, wallHit.distance - 0.28);
+      }
       this.camera.fov = 78;
       this.fpKick *= 0.78;
       const kick = this.fpKick;

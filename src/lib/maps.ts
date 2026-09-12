@@ -440,17 +440,17 @@ function partitionMap(map: GameMap): GameMap {
   let xs: number[];
   let zs: number[];
   if (map.id === "farm") {
-    xs = [36, 70, 104];
-    zs = [30, 58];
+    xs = [0.33, 0.54, 0.75].map((t) => t * map.w);
+    zs = [0.38, 0.64].map((t) => t * map.d);
   } else if (map.id === "sewer") {
-    xs = [24, 46, 68, 90];
-    zs = [22, 42, 64];
+    xs = [0.28, 0.48, 0.68, 0.84].map((t) => t * map.w);
+    zs = [0.32, 0.52, 0.72].map((t) => t * map.d);
   } else if (map.id === "backrooms") {
-    xs = [28, 52, 76];
-    zs = [22, 46];
+    xs = [0.32, 0.54, 0.76].map((t) => t * map.w);
+    zs = [0.36, 0.62].map((t) => t * map.d);
   } else {
-    xs = [32, 64, 96];
-    zs = [26, 52, 74];
+    xs = [0.3, 0.52, 0.74].map((t) => t * map.w);
+    zs = [0.34, 0.56, 0.76].map((t) => t * map.d);
   }
   const xLines = [pad, ...xs.filter((x) => x > pad + 2 && x < map.w - pad - 2), map.w - pad];
   const zLines = [pad, ...zs.filter((z) => z > pad + 2 && z < map.d - pad - 2), map.d - pad];
@@ -479,7 +479,7 @@ function clutterMap(map: GameMap): GameMap {
   const rnd = mulberry(map.id.split("").reduce((a, c) => a + c.charCodeAt(0) * 17, 11));
   const cols = mapColliders(map);
   const extras: BoxDef[] = [];
-  const step = 10;
+  const step = 7;
   for (let gx = 8; gx < map.w - 8; gx += step) {
     for (let gz = 8; gz < map.d - 8; gz += step) {
       const x = gx + (rnd() - 0.5) * 4.2;
@@ -518,9 +518,12 @@ function expandMap(map: GameMap, s: number): GameMap {
       const thin = b.w <= 0.55 || b.d <= 0.55;
       let w = b.w;
       let d = b.d;
-      if (floor || outer) {
+      if (floor) {
         w *= s;
         d *= s;
+      } else if (outer) {
+        if (b.w >= b.d) w *= s;
+        else d *= s;
       } else if (thin) {
         if (b.d <= 0.55) w *= s;
         if (b.w <= 0.55) d *= s;
@@ -530,8 +533,46 @@ function expandMap(map: GameMap, s: number): GameMap {
   };
 }
 
+function sealPerimeter(map: GameMap): GameMap {
+  const t = 0.5;
+  const h = Math.max(map.ceiling - 0.04, 3.5);
+  const theme = wallTheme(map.id);
+  const hx = map.hunterSpawns[0]?.x ?? map.w * 0.5;
+  const gap = 1.9;
+  const doorX = Math.max(t + gap, Math.min(map.w - t - gap, hx));
+  const northZ = map.d - t;
+  const walls: BoxDef[] = [
+    B(0, 0, map.w, t, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }),
+    B(0, 0, t, map.d, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }),
+    B(map.w - t, 0, t, map.d, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }),
+    B(0, northZ, Math.max(t, doorX - gap / 2), t, theme.color, {
+      h,
+      collide: true,
+      pattern: theme.pattern,
+      colors: theme.colors,
+    }),
+    B(doorX + gap / 2, northZ, Math.max(t, map.w - (doorX + gap / 2)), t, theme.color, {
+      h,
+      collide: true,
+      pattern: theme.pattern,
+      colors: theme.colors,
+    }),
+  ];
+  const door: DoorDef = {
+    id: `${map.id}-gate`,
+    x: doorX,
+    z: northZ + t / 2,
+    w: gap - 0.12,
+    h: Math.min(2.3, h - 0.2),
+    d: t + 0.06,
+    along: "x",
+    color: "#5c3a22",
+  };
+  return { ...map, boxes: [...map.boxes, ...walls], doors: [...(map.doors ?? []), door] };
+}
+
 export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) =>
-  clearSpawns(clutterMap(partitionMap(expandMap(m, 2.5)))),
+  clearSpawns(clutterMap(partitionMap(sealPerimeter(expandMap(m, 1.35))))),
 );
 
 export function doorCollider(door: DoorDef): Collider {

@@ -27,6 +27,10 @@ function solidAt(x: number, z: number, r: number, feetY: number, headY: number, 
   return circleHitsBox(x, z, r, b);
 }
 
+export function edgeMargin(r: number) {
+  return Math.max(r + 0.55, 0.88);
+}
+
 export function blocked(
   x: number,
   z: number,
@@ -36,7 +40,7 @@ export function blocked(
   feetY = 0,
   headY = 1.72,
 ) {
-  const m = r + 0.28;
+  const m = edgeMargin(r);
   if (x < m || z < m || x > bounds.w - m || z > bounds.d - m) return true;
   for (const b of boxes) {
     if (solidAt(x, z, r, feetY, headY, b)) return true;
@@ -53,11 +57,11 @@ export function resolveStuck(
   feetY = 0,
   headY = 1.72,
 ) {
-  const m = r + 0.32;
+  const m = edgeMargin(r);
   x = clamp(x, m, bounds.w - m);
   z = clamp(z, m, bounds.d - m);
-  const pad = r + 0.04;
-  for (let iter = 0; iter < 8; iter++) {
+  const pad = r + 0.06;
+  for (let iter = 0; iter < 10; iter++) {
     for (const b of boxes) {
       if (!solidAt(x, z, r, feetY, headY, b)) continue;
       const cx = clamp(x, b.minX, b.maxX);
@@ -66,15 +70,10 @@ export function resolveStuck(
       let dz = z - cz;
       let len = Math.hypot(dx, dz);
       if (len < 1e-5) {
-        const left = x - b.minX;
-        const right = b.maxX - x;
-        const top = z - b.minZ;
-        const bot = b.maxZ - z;
-        const nearest = Math.min(left, right, top, bot);
-        if (nearest === left) x = b.minX - pad;
-        else if (nearest === right) x = b.maxX + pad;
-        else if (nearest === top) z = b.minZ - pad;
-        else z = b.maxZ + pad;
+        const inwardX = bounds.w * 0.5 - x;
+        const inwardZ = bounds.d * 0.5 - z;
+        if (Math.abs(inwardX) >= Math.abs(inwardZ)) x += Math.sign(inwardX || 1) * pad;
+        else z += Math.sign(inwardZ || 1) * pad;
       } else {
         x = cx + (dx / len) * pad;
         z = cz + (dz / len) * pad;
