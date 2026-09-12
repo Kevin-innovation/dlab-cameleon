@@ -90,7 +90,56 @@ export function moveWithSlide(
 }
 
 export function poseRadius(pose: string) {
+  if (pose === "stick") return 0.16;
   if (pose === "stretch") return 0.2;
   if (pose === "lie" || pose === "ball") return 0.3;
   return 0.26;
+}
+
+export function nearestSurface(
+  x: number,
+  z: number,
+  boxes: Collider[],
+  maxDist: number,
+): { x: number; z: number; nx: number; nz: number; dist: number; box: Collider } | null {
+  let best: { x: number; z: number; nx: number; nz: number; dist: number; box: Collider } | null = null;
+  for (const b of boxes) {
+    const inside = x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
+    if (inside) {
+      const left = x - b.minX;
+      const right = b.maxX - x;
+      const top = z - b.minZ;
+      const bot = b.maxZ - z;
+      const m = Math.min(left, right, top, bot);
+      let nx = 0;
+      let nz = 0;
+      let px = x;
+      let pz = z;
+      if (m === left) {
+        nx = -1;
+        px = b.minX;
+      } else if (m === right) {
+        nx = 1;
+        px = b.maxX;
+      } else if (m === top) {
+        nz = -1;
+        pz = b.minZ;
+      } else {
+        nz = 1;
+        pz = b.maxZ;
+      }
+      if (!best || m < best.dist) best = { x: px, z: pz, nx, nz, dist: 0, box: b };
+      continue;
+    }
+    const cx = clamp(x, b.minX, b.maxX);
+    const cz = clamp(z, b.minZ, b.maxZ);
+    const dx = x - cx;
+    const dz = z - cz;
+    const dist = Math.hypot(dx, dz);
+    if (dist > maxDist || dist < 1e-6) continue;
+    const nx = dx / dist;
+    const nz = dz / dist;
+    if (!best || dist < best.dist) best = { x: cx, z: cz, nx, nz, dist, box: b };
+  }
+  return best;
 }

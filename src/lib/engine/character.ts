@@ -30,6 +30,31 @@ export type CharacterRig = {
   catching: boolean;
 };
 
+function stampBlob(ctx: CanvasRenderingContext2D, b: PaintBlob, w: number, h: number) {
+  const x0 = b.x * w;
+  const y0 = b.y * h;
+  const x1 = (b.tx ?? b.x) * w;
+  const y1 = (b.ty ?? b.y) * h;
+  const rad = Math.max(1.2, b.r * w);
+  ctx.strokeStyle = b.c;
+  ctx.fillStyle = b.c;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = rad * 2;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x0, y0, rad, 0, Math.PI * 2);
+  ctx.fill();
+  if (x0 !== x1 || y0 !== y1) {
+    ctx.beginPath();
+    ctx.arc(x1, y1, rad, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBlob[], part: BodyPart) {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
@@ -38,10 +63,7 @@ function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBl
   for (const b of blobs) {
     if (b.part && b.part !== part) continue;
     if (!b.part && part !== "torso") continue;
-    ctx.fillStyle = b.c;
-    ctx.beginPath();
-    ctx.arc(b.x * w, b.y * h, b.r * w, 0, Math.PI * 2);
-    ctx.fill();
+    stampBlob(ctx, b, w, h);
   }
 }
 
@@ -184,7 +206,7 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
 
 export function applyPaint(rig: CharacterRig, fill: string, blobs: PaintBlob[]) {
   const last = blobs[blobs.length - 1];
-  const sig = `${fill}|${blobs.length}|${last?.part ?? ""}|${last?.c ?? ""}|${last?.x ?? 0}`;
+  const sig = `${fill}|${blobs.length}|${last?.part ?? ""}|${last?.c ?? ""}|${last?.x ?? 0}|${last?.tx ?? ""}|${last?.ty ?? ""}`;
   if (rig.paintSig === sig) return;
   rig.fill = fill;
   rig.blobs = blobs;
@@ -216,6 +238,9 @@ export function applyPose(rig: CharacterRig, pose: Pose) {
   } else if (pose === "ball") {
     b.scale.set(1.25, 0.7, 1.25);
     b.position.y = 0.1;
+  } else if (pose === "stick") {
+    b.scale.set(1.12, 1.04, 0.22);
+    b.position.z = 0.1;
   }
 }
 
@@ -301,7 +326,13 @@ export function animateCharacter(
   rig.body.rotation.z = 0;
 
   const airborne = !!opts.airborne;
-  const walkOn = opts.moving && !airborne && rig.pose !== "lie" && rig.pose !== "sit" && rig.pose !== "ball";
+  const walkOn =
+    opts.moving &&
+    !airborne &&
+    rig.pose !== "lie" &&
+    rig.pose !== "sit" &&
+    rig.pose !== "ball" &&
+    rig.pose !== "stick";
   if (walkOn) rig.walkT += opts.dt * (opts.ghost ? 6.5 : 10);
   const swing = walkOn ? Math.sin(rig.walkT) * 0.7 : 0;
   const bob = walkOn ? Math.abs(Math.sin(rig.walkT)) * 0.05 : 0;
@@ -343,9 +374,40 @@ export function uvPaint(
   color: string,
   part: BodyPart,
 ): PaintBlob {
-  const blob: PaintBlob = { x: u, y: 1 - v, r, c: color, part };
+  const blob: PaintBlob = { x: u, y: 1 - v, r, c: color, part, tx: u, ty: 1 - v };
   applyPaint(rig, rig.fill, [...rig.blobs, blob]);
   return blob;
+}
+
+export function extendPaint(
+  rig: CharacterRig,
+  blobs: PaintBlob[],
+  u: number,
+  v: number,
+  r: number,
+  color: string,
+  part: BodyPart,
+  dragging: boolean,
+): PaintBlob[] {
+  const x = u;
+  const y = 1 - v;
+  const next = blobs.slice();
+  const last = next[next.length - 1];
+  const endX = last?.tx ?? last?.x ?? 0;
+  const endY = last?.ty ?? last?.y ?? 0;
+  if (
+    dragging &&
+    last &&
+    last.part === part &&
+    last.c === color &&
+    Math.hypot(endX - x, endY - y) < 0.45
+  ) {
+    next[next.length - 1] = { ...last, tx: x, ty: y };
+  } else {
+    next.push({ x, y, r, c: color, part, tx: x, ty: y });
+  }
+  applyPaint(rig, rig.fill, next);
+  return next;
 }
 
 export function drawBodyPreview(
@@ -371,10 +433,19 @@ export function drawBodyPreview(
     ctx.strokeRect(box.x, box.y, box.w, box.h);
     for (const b of blobs) {
       if ((b.part || "torso") !== id) continue;
-      ctx.fillStyle = b.c;
-      ctx.beginPath();
-      ctx.arc(box.x + b.x * box.w, box.y + b.y * box.h, b.r * box.w, 0, Math.PI * 2);
-      ctx.fill();
+      stampBlob(
+        ctx,
+        {
+          ...b,
+          x: box.x / W + (b.x * box.w) / W,
+          y: box.y / H + (b.y * box.h) / H,
+          tx: box.x / W + ((b.tx ?? b.x) * box.w) / W,
+          ty: box.y / H + ((b.ty ?? b.y) * box.h) / H,
+          r: (b.r * box.w) / W,
+        },
+        W,
+        H,
+      );
     }
   }
 }

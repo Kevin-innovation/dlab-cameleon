@@ -119,10 +119,20 @@ export function GameView({
         if (k === "f") setPaintOpen((v) => !v);
         if (k === "escape") setPaintOpen(false);
         if (k === "h" || k === "?") setHelp((v) => !v);
-        if (k === "r") cyclePose(session, 1);
-        if (k >= "1" && k <= "6") {
+        if (k === "r") cyclePose(session, world, 1);
+        if (k >= "1" && k <= "7") {
           const pose = POSES[Number(k) - 1]?.id;
-          if (pose) session.me().set("pose", pose, true);
+          if (pose) applyPosePick(session, world, pose);
+        }
+        if (k === "c" && !watchingRef.current) {
+          const room = session.getRoom();
+          const snap = snapsFrom(session).find((p) => p.id === session.myId());
+          const canStick =
+            !!snap &&
+            !isHunter(room, snap.id) &&
+            (room.phase === "lobby" ||
+              ((room.phase === "hide" || room.phase === "hunt") && hiderAlive(room, snap.id)));
+          if (canStick) applyPosePick(session, world, "stick");
         }
         if (k === "t") tryTaunt();
         if (k === "e") setTool("dropper");
@@ -170,6 +180,28 @@ export function GameView({
     const onLock = () => setLocked(document.pointerLockElement === canvas);
     document.addEventListener("pointerlockchange", onLock);
 
+    const stage = canvas.parentElement;
+    let paintHeld = false;
+    let lastPaintSync = 0;
+
+    function strokePaint(clientX: number, clientY: number, dragging: boolean) {
+      const prev = ((session.me().get("blobs") as PaintBlob[]) || []) as PaintBlob[];
+      const next = world.paintDrag(
+        clientX,
+        clientY,
+        colorRef.current,
+        brushRef.current,
+        session.myId(),
+        prev,
+        dragging,
+      );
+      if (!next) return;
+      const clipped = next.slice(-MAX_BLOBS);
+      const now = Date.now();
+      session.me().set("blobs", clipped, !dragging || now - lastPaintSync > 90);
+      if (now - lastPaintSync > 90) lastPaintSync = now;
+    }
+
     function tryTaunt() {
       const room = session.getRoom();
       const me = snapsFrom(session).find((p) => p.id === session.myId());
@@ -206,11 +238,13 @@ export function GameView({
           session.me().set("blobs", [], true);
           return;
         }
-        const blob = world.paintSelf(e.clientX, e.clientY, colorRef.current, brushRef.current, me.id);
-        if (blob) {
-          const prev = ((session.me().get("blobs") as PaintBlob[]) || []).concat(blob);
-          session.me().set("blobs", prev.slice(-MAX_BLOBS), true);
+        paintHeld = true;
+        try {
+          stage?.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
         }
+        strokePaint(e.clientX, e.clientY, false);
         return;
       }
 
@@ -234,8 +268,23 @@ export function GameView({
         session.callShot(hit);
       }
     };
-    const stage = canvas.parentElement;
+    const onPointerMovePaint = (e: PointerEvent) => {
+      if (!paintHeld || !paintOpenRef.current) return;
+      if (toolRef.current !== "brush") return;
+      e.preventDefault();
+      strokePaint(e.clientX, e.clientY, true);
+    };
+    const onPointerUpPaint = () => {
+      if (!paintHeld) return;
+      paintHeld = false;
+      const blobs = ((session.me().get("blobs") as PaintBlob[]) || []) as PaintBlob[];
+      session.me().set("blobs", blobs, true);
+    };
+
     stage?.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMovePaint);
+    window.addEventListener("pointerup", onPointerUpPaint);
+    window.addEventListener("pointercancel", onPointerUpPaint);
 
     const unshot = session.onShot((hunterId, targetId) => {
       if (!session.isHost()) return;
@@ -309,6 +358,11 @@ export function GameView({
         setWatching(false);
       }
       if (watchingRef.current) world.stepSpectate(dt, keys);
+      if (world.clinging()) {
+        if (pose !== "stick") session.me().set("pose", "stick", true);
+      } else if (pose === "stick") {
+        session.me().set("pose", "stand", true);
+      }
       const localMoving =
         !watchingRef.current &&
         (keys.has("w") ||
@@ -407,6 +461,9 @@ export function GameView({
       window.removeEventListener("resize", resize);
       document.removeEventListener("pointerlockchange", onLock);
       canvas.parentElement?.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMovePaint);
+      window.removeEventListener("pointerup", onPointerUpPaint);
+      window.removeEventListener("pointercancel", onPointerUpPaint);
       ro.disconnect();
       unshot();
       world.dispose();
@@ -556,8 +613,15 @@ export function GameView({
           </div>
         )}
 
-        {watching && myRole === "hider" && (
+        {me?.pose === "stick" && (
           <div className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
+            <div className="font-display text-xl text-lime">벽에 붙음</div>
+            <p className="text-sm text-white/75">A/D 좌우 · W/S 오르내리기 · C 또는 Space 떼기</p>
+          </div>
+        )}
+
+        {watching && myRole === "hider" && (
+          <div className="pointer-events-none absolute left-1/2 top-44 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
             <div className="font-display text-xl text-lime">숨은 채 관전</div>
             <p className="text-sm text-white/75">몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · V 복귀</p>
           </div>
@@ -577,7 +641,7 @@ export function GameView({
         {!hunterHide && hud.phase !== "result" && (
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
             <div>마우스 이동 = 시점 · WASD 이동 · Space 점프</div>
-            <div>Shift 살금 · F 페인트 · R 자세 · V 숨은 채 관전</div>
+            <div>C 벽에 붙기 · Shift 살금 · F 페인트 · R 자세 · V 관전</div>
             {myRole === "hunter" && hud.phase === "hunt" && (
               <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
             )}
@@ -602,7 +666,14 @@ export function GameView({
               <button
                 key={p.id}
                 type="button"
-                onClick={() => session.me().set("pose", p.id, true)}
+                onClick={() => {
+                  const w = worldRef.current;
+                  if (!w) {
+                    session.me().set("pose", p.id, true);
+                    return;
+                  }
+                  applyPosePick(session, w, p.id);
+                }}
                 className={`rounded-lg px-2 py-1 text-[11px] ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
               >
                 {p.label}
@@ -681,7 +752,7 @@ export function GameView({
               </button>
             </div>
             <p className="mt-2 text-[11px] leading-snug text-white/55">
-              스포이드로 벽을 찍고, 붓으로 머리·몸·팔·다리를 따로 클릭해 칠하세요.
+              스포이드로 벽 색을 찍고, 붓으로 몸을 클릭한 채 드래그하면 선이 그어집니다.
             </p>
           </aside>
         )}
@@ -692,11 +763,11 @@ export function GameView({
           <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-2xl">3D 카멜론</h3>
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
-              <li>마우스를 움직이면 시점이 돌아가고, WASD로 그 방향으로 걷습니다. Space로 점프합니다.</li>
-              <li>숨은 뒤 V를 누르면 몸은 고정되고 카메라만 날리며 관전할 수 있습니다. 다시 V로 돌아옵니다.</li>
-              <li>위장 시간에 자리를 고르고 F로 페인트를 연 뒤, 스포이드로 벽 색을 찍고 팔·몸·머리를 따로 칠합니다.</li>
-              <li>자세를 바꿔 소파·책장·파이프 실루엣에 맞추세요.</li>
-              <li>술래는 조준점을 맞추고 클릭해서 태그합니다. 누가 누구를 잡았는지는 왼쪽 위 킬 로그에 뜹니다.</li>
+              <li>마우스를 움직이면 시점이 돌아가고, WASD로 걷고 Space로 점프합니다.</li>
+              <li>벽이나 가구 가까이에서 C를 누르면 면에 붙어 오를 수 있습니다. W/S 높이, A/D 좌우, 다시 C나 Space로 뗍니다.</li>
+              <li>숨은 뒤 V를 누르면 몸은 고정되고 카메라만 날리며 관전할 수 있습니다.</li>
+              <li>F로 페인트를 연 뒤 스포이드로 벽 색을 찍고, 붓으로 드래그해 몸을 칠하세요.</li>
+              <li>술래는 조준점을 맞추고 클릭해서 태그합니다. 처치는 왼쪽 위 킬 로그에 뜹니다.</li>
             </ol>
             <button
               type="button"
@@ -712,11 +783,22 @@ export function GameView({
   );
 }
 
-function cyclePose(session: Session, dir: number) {
+function applyPosePick(session: Session, world: GameWorld, pose: Pose) {
+  if (pose === "stick") {
+    const cur = ((session.me().get("pose") as Pose) || "stand") as Pose;
+    const on = world.tryCling(cur);
+    session.me().set("pose", on ? "stick" : "stand", true);
+    return;
+  }
+  world.exitCling();
+  session.me().set("pose", pose, true);
+}
+
+function cyclePose(session: Session, world: GameWorld, dir: number) {
   const cur = (session.me().get("pose") as Pose) || "stand";
   const i = POSES.findIndex((p) => p.id === cur);
   const next = POSES[(i + dir + POSES.length) % POSES.length];
-  session.me().set("pose", next.id, true);
+  applyPosePick(session, world, next.id);
 }
 
 function Lobby({

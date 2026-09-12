@@ -1,4 +1,4 @@
-export type Pose = "stand" | "crouch" | "sit" | "lie" | "stretch" | "ball";
+export type Pose = "stand" | "crouch" | "sit" | "lie" | "stretch" | "ball" | "stick";
 
 export type Phase = "lobby" | "hide" | "hunt" | "result";
 
@@ -31,6 +31,8 @@ export type PaintBlob = {
   r: number;
   c: string;
   part: BodyPart;
+  tx?: number;
+  ty?: number;
 };
 
 export type BoxDef = {
@@ -51,6 +53,8 @@ export type Collider = {
   maxX: number;
   minZ: number;
   maxZ: number;
+  minY: number;
+  maxY: number;
 };
 
 export type GameMap = {
@@ -111,4 +115,5 @@ export const POSES: { id: Pose; label: string; hint: string }[] = [
   { id: "lie", label: "눕기", hint: "러그·바닥" },
   { id: "stretch", label: "늘이기", hint: "문틀·파이프" },
   { id: "ball", label: "공", hint: "원형 소품" },
+  { id: "stick", label: "붙기", hint: "벽·가구 면" },
 ];

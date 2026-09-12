@@ -41,7 +41,7 @@ const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67
 const mansion: GameMap = {
   id: "mansion",
   name: "숨바꼭질 저택",
-  blurb: "넓은 홀. 소파·책장·상자에 붙어 위장하세요. 안으로 들어갈 수는 없습니다.",
+  blurb: "홀과 구석. 벽·소파·책장 면에 붙어 위장하세요.",
   difficulty: "쉬움",
   w: 48,
   d: 36,
@@ -61,9 +61,14 @@ const mansion: GameMap = {
   ],
   boxes: [
     B(1, 1, 46, 34, "#c4a06a", { h: 0.04, pattern: "wood" }),
-    B(2, 2, 8, 0.18, "#6b3a2a", { h: 3.6, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
-    B(12, 2, 10, 0.18, "#1f4d6e", { h: 3.2, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
-    B(28, 2, 8, 0.18, "#6a8f6a", { h: 2.8, pattern: "leaves" }),
+    B(2, 2, 8, 0.18, "#6b3a2a", { h: 3.6, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
+    B(12, 2, 10, 0.18, "#1f4d6e", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
+    B(28, 2, 8, 0.18, "#6a8f6a", { h: 2.8, collide: true, pattern: "leaves" }),
+    B(10, 11, 0.2, 8, "#6b3a2a", { h: 2.9, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
+    B(20, 9, 9, 0.2, "#1f4d6e", { h: 2.5, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
+    B(33, 12, 0.2, 7, "#6a8f6a", { h: 2.7, collide: true, pattern: "leaves" }),
+    B(5, 8, 2.6, 1.1, "#a32638", { h: 0.85 }),
+    B(26, 14, 2.4, 0.5, "#5c2e12", { h: 2.35, pattern: books, colors: bookColors }),
     B(2.4, 3.2, 3.4, 1.1, "#a32638", { h: 0.85 }),
     B(7, 3.4, 2.8, 0.5, "#5c2e12", { h: 2.5, pattern: books, colors: bookColors }),
     B(18, 3.5, 1.4, 1.4, "#2c6e4a", { h: 1.5, pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"] }),
@@ -92,7 +97,7 @@ const mansion: GameMap = {
 const farm: GameMap = {
   id: "farm",
   name: "실내 농장",
-  blurb: "탁 트인 헛간. 건초·상자 겉면에 붙어 숨으세요. 물체 속은 막혀 있습니다.",
+  blurb: "헛간. 건초·기둥·칸막이 면에 붙어 숨으세요.",
   difficulty: "쉬움",
   w: 52,
   d: 38,
@@ -113,10 +118,14 @@ const farm: GameMap = {
   boxes: [
     B(1, 1, 50, 36, "#c2a05a", { h: 0.05, pattern: "hay", colors: ["#c2a05a", "#d4b36a"] }),
     B(1, 1, 50, 0.1, "#7ec8e8", { h: 5.5, y: 3.2 }),
-    B(2, 2, 8, 0.22, "#d3533a", { h: 3.2, pattern: "wood", colors: ["#d3533a", "#b43c28"] }),
-    B(14, 2, 10, 0.22, "#f0c43a", { h: 2.8, pattern: "dots", colors: ["#f0c43a", "#e0a820"] }),
-    B(28, 2, 10, 0.22, "#5aa0d6", { h: 2.8, pattern: "wallpaper", colors: ["#5aa0d6", "#3d7eaf"] }),
-    B(42, 2, 8, 0.22, "#6fbf57", { h: 2.6, pattern: "leaves" }),
+    B(2, 2, 8, 0.22, "#d3533a", { h: 3.2, collide: true, pattern: "wood", colors: ["#d3533a", "#b43c28"] }),
+    B(14, 2, 10, 0.22, "#f0c43a", { h: 2.8, collide: true, pattern: "dots", colors: ["#f0c43a", "#e0a820"] }),
+    B(28, 2, 10, 0.22, "#5aa0d6", { h: 2.8, collide: true, pattern: "wallpaper", colors: ["#5aa0d6", "#3d7eaf"] }),
+    B(42, 2, 8, 0.22, "#6fbf57", { h: 2.6, collide: true, pattern: "leaves" }),
+    B(16, 12, 0.22, 10, "#8b5a2b", { h: 2.4, collide: true, pattern: "wood" }),
+    B(30, 14, 10, 0.22, "#5aa0d6", { h: 2.2, collide: true, pattern: "wallpaper", colors: ["#5aa0d6", "#3d7eaf"] }),
+    B(8, 16, 2.4, 1.5, "#e39b2d", { h: 1.05, pattern: "hay" }),
+    B(36, 16, 1.8, 1.4, "#6fbf57", { h: 1.25, pattern: "leaves" }),
     B(4, 6, 2.2, 1.6, "#e39b2d", { h: 0.95, pattern: "hay" }),
     B(8, 8, 2.2, 1.6, "#e39b2d", { h: 0.95, pattern: "hay" }),
     B(6, 12, 1.6, 1.4, "#d35400", { h: 0.8 }),
@@ -144,7 +153,7 @@ const farm: GameMap = {
 const sewer: GameMap = {
   id: "sewer",
   name: "하수도",
-  blurb: "넓은 지하 홀. 드럼·파이프·상자 겉면에 녹아드세요.",
+  blurb: "지하 홀. 드럼·파이프·그래피티 벽에 녹아드세요.",
   difficulty: "보통",
   w: 46,
   d: 34,
@@ -164,9 +173,18 @@ const sewer: GameMap = {
   ],
   boxes: [
     B(1, 1, 44, 32, "#3d4a43", { h: 0.05, pattern: "bricks", colors: ["#3d4a43", "#2f3a34"] }),
-    B(2, 2, 8, 0.22, "#c0392b", { h: 3.2, pattern: "graffiti", colors: ["#c0392b", "#f1c40f", "#3498db", "#2ecc71"] }),
-    B(14, 2, 10, 0.22, "#1f6f4a", { h: 3.0, pattern: "graffiti", colors: ["#1f6f4a", "#f39c12", "#e74c3c"] }),
-    B(30, 2, 12, 0.22, "#8e44ad", { h: 3.0, pattern: "graffiti", colors: ["#8e44ad", "#f1c40f", "#1abc9c"] }),
+    B(2, 2, 8, 0.22, "#c0392b", {
+      h: 3.2,
+      collide: true,
+      pattern: "graffiti",
+      colors: ["#c0392b", "#f1c40f", "#3498db", "#2ecc71"],
+    }),
+    B(14, 2, 10, 0.22, "#1f6f4a", { h: 3.0, collide: true, pattern: "graffiti", colors: ["#1f6f4a", "#f39c12", "#e74c3c"] }),
+    B(30, 2, 12, 0.22, "#8e44ad", { h: 3.0, collide: true, pattern: "graffiti", colors: ["#8e44ad", "#f1c40f", "#1abc9c"] }),
+    B(12, 12, 0.22, 8, "#1f6f4a", { h: 2.8, collide: true, pattern: "graffiti", colors: ["#1f6f4a", "#f39c12"] }),
+    B(24, 14, 8, 0.22, "#2c3e50", { h: 2.6, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] }),
+    B(6, 14, 1.3, 1.3, "#b03a2e", { h: 1.2 }),
+    B(34, 16, 2.2, 1.5, "#8e44ad", { h: 1.5, pattern: "graffiti", colors: ["#8e44ad", "#f1c40f"] }),
     B(8, 6, 8, 0.55, "#c47a3a", { h: 0.5, y: 3.2, pattern: "pipes" }),
     B(22, 8, 10, 0.55, "#6e8b73", { h: 0.5, y: 3.0, pattern: "pipes" }),
     B(4, 8, 1.2, 1.2, "#b03a2e", { h: 1.15 }),
@@ -206,23 +224,45 @@ function nearSpawn(map: GameMap, x: number, z: number, dist: number) {
   return pts.some((p) => Math.hypot(p.x - x, p.z - z) < dist);
 }
 
+function nook(x: number, z: number, color: string, pattern: Pattern, colors?: string[], h = 2.5): BoxDef[] {
+  return [
+    B(x, z, 2.4, 0.24, color, { h, collide: true, pattern, colors }),
+    B(x, z, 0.24, 2.2, color, { h, collide: true, pattern, colors }),
+  ];
+}
+
+function alcove(x: number, z: number, color: string, pattern: Pattern, colors?: string[]): BoxDef[] {
+  return [
+    B(x, z, 2.6, 0.24, color, { h: 2.4, collide: true, pattern, colors }),
+    B(x, z, 0.24, 1.7, color, { h: 2.4, collide: true, pattern, colors }),
+    B(x + 2.36, z, 0.24, 1.7, color, { h: 2.4, collide: true, pattern, colors }),
+  ];
+}
+
 function cluster(theme: string, x: number, z: number, kind: number, rnd: () => number): BoxDef[] {
-  const j = () => (rnd() - 0.5) * 1.2;
+  const j = () => (rnd() - 0.5) * 1.1;
   if (theme === "farm") {
     if (kind === 0) return [B(x, z, 1.8, 1.3, "#e39b2d", { h: 1.05, collide: true, pattern: "hay" })];
     if (kind === 1)
       return [
         B(x, z, 1.2, 1.2, "#c47a3a", { h: 1.15, collide: true, pattern: "wood" }),
         B(x + 1.35, z + j(), 1.1, 1.1, "#d35400", { h: 0.95, collide: true }),
+        B(x + 0.2, z + 1.3, 1.0, 1.0, "#e67e22", { h: 0.7, collide: true }),
       ];
-    if (kind === 2) return [B(x, z, 1.4, 1.2, "#e67e22", { h: 0.85, collide: true })];
+    if (kind === 2) return nook(x, z, "#8b5a2b", "wood", ["#8b5a2b", "#6d4420"], 2.4);
     if (kind === 3) return [B(x, z, 0.85, 0.85, "#8b5a2b", { h: 2.8, collide: true, pattern: "wood" })];
     if (kind === 4)
       return [
         B(x, z, 2.2, 1.5, "#7b5428", { h: 1.1, collide: true, pattern: "hay" }),
         B(x + 1.6, z + 0.4, 1.3, 1.2, "#6fbf57", { h: 1.3, collide: true, pattern: "leaves" }),
       ];
-    return [B(x, z, 1.5, 1.1, "#c0392b", { h: 1.05, collide: true, pattern: "wood" })];
+    if (kind === 5) return alcove(x, z, "#d3533a", "wood", ["#d3533a", "#b43c28"]);
+    if (kind === 6)
+      return [B(x, z, 2.8, 0.22, "#f0c43a", { h: 2.3, collide: true, pattern: "dots", colors: ["#f0c43a", "#e0a820"] })];
+    return [
+      B(x, z, 1.5, 1.1, "#c0392b", { h: 1.05, collide: true, pattern: "wood" }),
+      B(x + 1.6, z + j(), 1.1, 1.4, "#e39b2d", { h: 0.9, collide: true, pattern: "hay" }),
+    ];
   }
   if (theme === "sewer") {
     if (kind === 0) return [B(x, z, 1.15, 1.15, "#b03a2e", { h: 1.25, collide: true })];
@@ -230,15 +270,18 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
       return [
         B(x, z, 1.2, 1.2, "#922b21", { h: 1.2, collide: true }),
         B(x + 1.3, z + j(), 1.15, 1.15, "#c0392b", { h: 1.15, collide: true }),
+        B(x + 0.4, z + 1.4, 1.1, 1.1, "#b03a2e", { h: 0.85, collide: true }),
       ];
     if (kind === 2) return [B(x, z, 0.9, 0.9, "#c47a3a", { h: 3.2, collide: true, pattern: "pipes" })];
     if (kind === 3)
       return [B(x, z, 2.2, 1.6, "#2c3e50", { h: 1.7, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] })];
-    if (kind === 4) return [B(x, z, 1.6, 1.4, "#1b2420", { h: 1.4, collide: true, pattern: "bricks" })];
+    if (kind === 4) return nook(x, z, "#1b2420", "bricks", ["#1b2420", "#2a3830"], 2.6);
+    if (kind === 5) return alcove(x, z, "#8e44ad", "graffiti", ["#8e44ad", "#f1c40f"]);
+    if (kind === 6)
+      return [B(x, z, 0.22, 2.8, "#c47a3a", { h: 2.5, collide: true, pattern: "pipes" })];
     return [B(x, z, 1.8, 1.3, "#f1c40f", { h: 1.1, collide: true, pattern: "stripes", colors: ["#f1c40f", "#111"] })];
   }
-  if (kind === 0)
-    return [B(x, z, 2.6, 1.05, "#a32638", { h: 0.88, collide: true })];
+  if (kind === 0) return [B(x, z, 2.6, 1.05, "#a32638", { h: 0.88, collide: true })];
   if (kind === 1)
     return [B(x, z, 2.4, 0.55, "#5c2e12", { h: 2.35, collide: true, pattern: books, colors: bookColors })];
   if (kind === 2)
@@ -252,23 +295,28 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
       B(x, z, 1.2, 1.2, "#2c6e4a", { h: 1.45, collide: true, pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"] }),
       B(x + 1.5, z + j(), 1.1, 1.1, "#6d4c2a", { h: 0.95, collide: true, pattern: "wood" }),
     ];
-  return [
-    B(x, z, 1.8, 1.5, "#c45c26", { h: 0.9, collide: true }),
-    B(x + 1.7, z + 0.2, 0.9, 0.9, "#f4f0e6", { h: 1.35, collide: true }),
-  ];
+  if (kind === 5) return nook(x, z, "#6b3a2a", "wallpaper", ["#6b3a2a", "#8a5040"], 2.6);
+  if (kind === 6) return alcove(x, z, "#1f4d6e", "wallpaper", ["#1f4d6e", "#2e6a8f"]);
+  if (kind === 7)
+    return [
+      B(x, z, 1.8, 1.5, "#c45c26", { h: 0.9, collide: true }),
+      B(x + 1.7, z + 0.2, 0.9, 0.9, "#f4f0e6", { h: 1.35, collide: true }),
+      B(x - 0.2, z + 1.5, 2.2, 0.7, "#d9c4a0", { h: 0.45, collide: true, pattern: "wood" }),
+    ];
+  return [B(x, z, 2.2, 0.22, "#6a8f6a", { h: 2.4, collide: true, pattern: "leaves" })];
 }
 
 function clutterMap(map: GameMap): GameMap {
   const rnd = mulberry(map.id.split("").reduce((a, c) => a + c.charCodeAt(0) * 17, 11));
   const extras: BoxDef[] = [];
-  const step = 17;
-  for (let gx = 12; gx < map.w - 12; gx += step) {
-    for (let gz = 12; gz < map.d - 12; gz += step) {
-      const x = gx + (rnd() - 0.5) * 7;
-      const z = gz + (rnd() - 0.5) * 7;
-      if (nearSpawn(map, x, z, 8)) continue;
-      if (rnd() < 0.12) continue;
-      extras.push(...cluster(map.id, x, z, Math.floor(rnd() * 6), rnd));
+  const step = 9;
+  for (let gx = 8; gx < map.w - 8; gx += step) {
+    for (let gz = 8; gz < map.d - 8; gz += step) {
+      const x = gx + (rnd() - 0.5) * 4.5;
+      const z = gz + (rnd() - 0.5) * 4.5;
+      if (nearSpawn(map, x, z, 6.5)) continue;
+      if (rnd() < 0.1) continue;
+      extras.push(...cluster(map.id, x, z, Math.floor(rnd() * 9), rnd));
     }
   }
   return { ...map, boxes: [...map.boxes, ...extras] };
@@ -290,23 +338,20 @@ function expandMap(map: GameMap, s: number): GameMap {
     ...map,
     w: map.w * s,
     d: map.d * s,
-    ceiling: map.ceiling * 1.35,
     spawns: map.spawns.map((p) => ({ x: p.x * s, z: p.z * s })),
     hunterSpawns: map.hunterSpawns.map((p) => ({ x: p.x * s, z: p.z * s })),
     boxes: map.boxes.map((b) => {
       const floor = b.h <= 0.1;
-      const wallLike =
-        !!b.collide &&
-        (b.w >= map.w * 0.25 || b.d >= map.d * 0.25 || b.w <= 0.55 || b.d <= 0.55);
-      const thinDecor = !b.collide && (b.d <= 0.28 || b.w <= 0.28);
+      const outer = b.w >= map.w * 0.25 || b.d >= map.d * 0.25;
+      const thin = b.w <= 0.55 || b.d <= 0.55;
       let w = b.w;
       let d = b.d;
-      if (floor || wallLike) {
+      if (floor || outer) {
         w *= s;
         d *= s;
-      } else if (thinDecor) {
-        if (b.d <= 0.28) w *= s;
-        if (b.w <= 0.28) d *= s;
+      } else if (thin) {
+        if (b.d <= 0.55) w *= s;
+        if (b.w <= 0.55) d *= s;
       }
       return { ...b, x: b.x * s, z: b.z * s, w, d };
     }),
@@ -314,7 +359,7 @@ function expandMap(map: GameMap, s: number): GameMap {
 }
 
 export const MAPS: GameMap[] = [mansion, farm, sewer].map((m) =>
-  clearSpawns(clutterMap(expandMap(m, 5))),
+  clearSpawns(clutterMap(expandMap(m, 2.5))),
 );
 
 export function getMap(id: string) {
@@ -323,12 +368,12 @@ export function getMap(id: string) {
 
 function isSolidProp(b: BoxDef) {
   if (b.h <= 0.22) return false;
+  if (b.collide) return b.w >= 0.16 && b.d >= 0.16;
   if (b.w < 0.32 || b.d < 0.32) return false;
-  if (b.collide) return true;
   return b.h >= 0.45 && b.w >= 0.45 && b.d >= 0.45;
 }
 
-export function mapColliders(map: GameMap): { minX: number; maxX: number; minZ: number; maxZ: number }[] {
+export function mapColliders(map: GameMap) {
   const pad = -0.06;
   return map.boxes
     .filter(isSolidProp)
@@ -337,6 +382,8 @@ export function mapColliders(map: GameMap): { minX: number; maxX: number; minZ: 
       maxX: b.x + b.w / 2 - pad,
       minZ: b.z - b.d / 2 + pad,
       maxZ: b.z + b.d / 2 - pad,
+      minY: b.y - b.h / 2,
+      maxY: b.y + b.h / 2,
     }))
     .filter((b) => b.maxX - b.minX > 0.2 && b.maxZ - b.minZ > 0.2);
 }
