@@ -97,6 +97,7 @@ export type PlayerSnap = {
   blobs: PaintBlob[];
   role: Role;
   alive: boolean;
+  shootSeq: number;
 };
 
 export const POSES: { id: Pose; label: string; hint: string }[] = [

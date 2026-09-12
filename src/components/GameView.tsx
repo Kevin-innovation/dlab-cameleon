@@ -201,6 +201,8 @@ export function GameView({
         const t = Date.now();
         if (t - lastShot < SHOT_COOLDOWN) return;
         lastShot = t;
+        world.playShot(me.id, true);
+        session.me().set("shootSeq", Number(session.me().get("shootSeq") ?? 0) + 1, true);
         const lockedNow = document.pointerLockElement === canvas;
         const aim = lockedNow
           ? world.aimPlayer(me.id)
@@ -487,7 +489,7 @@ export function GameView({
             <div>마우스 이동 = 시점 · WASD 이동</div>
             <div>Shift 살금 · F 페인트 · R 자세</div>
             {myRole === "hunter" && hud.phase === "hunt" && (
-              <div className="mt-1 text-pink">십자선 또는 카멜레온을 직접 클릭해서 태그</div>
+              <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그</div>
             )}
           </div>
         )}

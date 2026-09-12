@@ -48,6 +48,9 @@ export class GameWorld {
   private camEye = new THREE.Vector3();
   private camDir = new THREE.Vector3();
   private camRay = new THREE.Raycaster();
+  private muzzleWorld = new THREE.Vector3();
+  private tracerEnd = new THREE.Vector3();
+  private tracers: { line: THREE.Line; until: number }[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -280,9 +283,19 @@ export class GameWorld {
       const moving =
         (p.id === myId && !!opts.localMoving) ||
         Math.hypot(rig.group.position.x - prevX, rig.group.position.z - prevZ) > 0.012;
+      if (p.shootSeq > rig.shootSeq) {
+        rig.shootSeq = p.shootSeq;
+        if (p.id !== myId) this.playShot(p.id, false);
+      }
       const caughtT =
         room.lastTag && room.lastTag.id === p.id ? 1 - (now - room.lastTag.at) / 900 : 0;
-      animateCharacter(rig, { moving, ghost, caughtT, dt });
+      animateCharacter(rig, {
+        moving,
+        ghost,
+        caughtT,
+        dt,
+        hunter: isHunter(room, p.id) && room.phase !== "lobby",
+      });
     }
     for (const [id, rig] of this.players) {
       if (!seen.has(id)) {
@@ -324,7 +337,50 @@ export class GameWorld {
     this.camera.updateProjectionMatrix();
   }
 
+  playShot(hunterId: string, recoil = false) {
+    const rig = this.players.get(hunterId);
+    if (!rig) return;
+    rig.shootUntil = Date.now() + 200;
+    rig.muzzle.updateMatrixWorld();
+    rig.muzzle.getWorldPosition(this.muzzleWorld);
+    if (recoil) {
+      this.camera.getWorldDirection(this.forward);
+      this.pitch = Math.max(-1.4, this.pitch - 0.05);
+    } else {
+      this.forward.set(0, 0, -1).applyQuaternion(rig.group.quaternion);
+    }
+    this.tracerEnd.copy(this.muzzleWorld).addScaledVector(this.forward, 24);
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      this.muzzleWorld.clone(),
+      this.tracerEnd.clone(),
+    ]);
+    const line = new THREE.Line(
+      geo,
+      new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.95 }),
+    );
+    this.scene.add(line);
+    this.tracers.push({ line, until: Date.now() + 130 });
+    if (recoil) this.pitch = Math.max(-1.4, this.pitch - 0.05);
+  }
+
+  private tickTracers() {
+    const now = Date.now();
+    this.tracers = this.tracers.filter((t) => {
+      const left = t.until - now;
+      const mat = t.line.material as THREE.LineBasicMaterial;
+      mat.opacity = Math.max(0, left / 130);
+      if (left <= 0) {
+        this.scene.remove(t.line);
+        t.line.geometry.dispose();
+        mat.dispose();
+        return false;
+      }
+      return true;
+    });
+  }
+
   render() {
+    this.tickTracers();
     this.renderer.render(this.scene, this.camera);
   }
 

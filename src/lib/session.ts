@@ -43,6 +43,7 @@ function readSnap(p: SessionPlayer): PlayerSnap {
     blobs: (p.get("blobs") as PaintBlob[]) || [],
     role: (p.get("role") as Role) || "spectator",
     alive: p.get("alive") !== false,
+    shootSeq: Number(p.get("shootSeq") ?? 0),
   };
 }
 

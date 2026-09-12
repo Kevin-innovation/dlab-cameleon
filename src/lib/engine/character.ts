@@ -23,6 +23,10 @@ export type CharacterRig = {
   paintSig: string;
   ghost: boolean;
   walkT: number;
+  gun: THREE.Group;
+  muzzle: THREE.Mesh;
+  shootUntil: number;
+  shootSeq: number;
 };
 
 function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBlob[], part: BodyPart) {
@@ -60,6 +64,34 @@ function makeNameSprite(text: string) {
   spr.scale.set(1.4, 0.35, 1);
   spr.position.y = 2.05;
   return spr;
+}
+
+function createGun() {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: "#1c1e22", metalness: 0.82, roughness: 0.25 });
+  const dull = new THREE.MeshStandardMaterial({ color: "#2b2f36", metalness: 0.4, roughness: 0.5 });
+  const accent = new THREE.MeshStandardMaterial({ color: "#c0392b", metalness: 0.35, roughness: 0.4 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.32), metal);
+  body.position.set(0, 0.02, -0.08);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.024, 0.38, 8), metal);
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.set(0, 0.03, -0.32);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.16, 0.08), dull);
+  grip.position.set(0, -0.1, 0.04);
+  grip.rotation.x = 0.28;
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.12, 0.07), accent);
+  mag.position.set(0, -0.13, -0.02);
+  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.06), accent);
+  sight.position.set(0, 0.08, -0.02);
+  const muzzle = new THREE.Mesh(
+    new THREE.ConeGeometry(0.07, 0.16, 8),
+    new THREE.MeshBasicMaterial({ color: "#ffe9a0", transparent: true, opacity: 0, depthWrite: false }),
+  );
+  muzzle.rotation.x = Math.PI / 2;
+  muzzle.position.set(0, 0.03, -0.54);
+  g.add(body, barrel, grip, mag, sight, muzzle);
+  g.visible = false;
+  return { gun: g, muzzle };
 }
 
 function makePart(id: BodyPart, geo: THREE.BufferGeometry, playerId: string): PartLayer {
@@ -105,6 +137,10 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
 
   const parts = { head, torso, armL, armR, legL, legR };
   for (const p of Object.values(parts)) body.add(p.mesh);
+  const { gun, muzzle } = createGun();
+  gun.position.set(0.04, -0.34, -0.1);
+  gun.rotation.set(-1.05, 0.12, 0.05);
+  armR.mesh.add(gun);
 
   const visor = new THREE.Mesh(
     new THREE.ConeGeometry(0.16, 0.32, 8),
@@ -137,6 +173,10 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     paintSig: "",
     ghost: false,
     walkT: 0,
+    gun,
+    muzzle,
+    shootUntil: 0,
+    shootSeq: 0,
   };
 }
 
@@ -205,7 +245,7 @@ export function setGhostLook(rig: CharacterRig, ghost: boolean) {
 
 export function animateCharacter(
   rig: CharacterRig,
-  opts: { moving: boolean; ghost: boolean; caughtT: number; dt: number },
+  opts: { moving: boolean; ghost: boolean; caughtT: number; dt: number; hunter: boolean },
 ) {
   const catchK = Math.max(0, Math.min(1, opts.caughtT));
   if (catchK > 0) {
@@ -213,6 +253,7 @@ export function animateCharacter(
     rig.body.rotation.x = -1.15 * k;
     rig.body.rotation.z = Math.sin(k * 18) * 0.28 * k;
     rig.body.position.y = 0.12 * k;
+    rig.gun.visible = false;
     return;
   }
   rig.body.rotation.x = 0;
@@ -225,7 +266,23 @@ export function animateCharacter(
   rig.parts.legL.mesh.rotation.x = swing;
   rig.parts.legR.mesh.rotation.x = -swing;
   rig.parts.armL.mesh.rotation.x = -swing * 0.85;
-  rig.parts.armR.mesh.rotation.x = swing * 0.85;
+  const shooting = Date.now() < rig.shootUntil;
+  const kick = shooting ? Math.min(1, (rig.shootUntil - Date.now()) / 180) : 0;
+  if (opts.hunter) {
+    rig.gun.visible = true;
+    rig.parts.armR.mesh.rotation.x = -1.12 - kick * 0.55;
+    rig.parts.armR.mesh.rotation.z = 0.18;
+    rig.gun.rotation.x = -1.05 + kick * 0.45;
+    const flash = rig.muzzle.material as THREE.MeshBasicMaterial;
+    flash.opacity = kick * 0.95;
+    rig.muzzle.scale.setScalar(0.7 + kick * 1.8);
+  } else {
+    rig.gun.visible = false;
+    rig.parts.armR.mesh.rotation.x = swing * 0.85;
+    rig.parts.armR.mesh.rotation.z = 0;
+    const flash = rig.muzzle.material as THREE.MeshBasicMaterial;
+    flash.opacity = 0;
+  }
   rig.body.position.y = (opts.ghost ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0) + bob;
 }
 
