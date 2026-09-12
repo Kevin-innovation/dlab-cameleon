@@ -1,3 +1,4 @@
+import { resolveStuck } from "./engine/collision";
 import type { BoxDef, GameMap, Pattern } from "./types";
 
 function B(
@@ -40,7 +41,7 @@ const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67
 const mansion: GameMap = {
   id: "mansion",
   name: "숨바꼭질 저택",
-  blurb: "넓은 홀. 가구에 붙어 위장하세요. 가구는 지나갈 수 있습니다.",
+  blurb: "넓은 홀. 소파·책장·상자에 붙어 위장하세요. 안으로 들어갈 수는 없습니다.",
   difficulty: "쉬움",
   w: 48,
   d: 36,
@@ -91,7 +92,7 @@ const mansion: GameMap = {
 const farm: GameMap = {
   id: "farm",
   name: "실내 농장",
-  blurb: "탁 트인 헛간. 건초·호박에 붙어 숨으세요.",
+  blurb: "탁 트인 헛간. 건초·상자 겉면에 붙어 숨으세요. 물체 속은 막혀 있습니다.",
   difficulty: "쉬움",
   w: 52,
   d: 38,
@@ -143,7 +144,7 @@ const farm: GameMap = {
 const sewer: GameMap = {
   id: "sewer",
   name: "하수도",
-  blurb: "넓은 지하 홀. 드럼·그래피티에 녹아드세요.",
+  blurb: "넓은 지하 홀. 드럼·파이프·상자 겉면에 녹아드세요.",
   difficulty: "보통",
   w: 46,
   d: 34,
@@ -190,6 +191,100 @@ const sewer: GameMap = {
   ],
 };
 
+function mulberry(seed: number) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function nearSpawn(map: GameMap, x: number, z: number, dist: number) {
+  const pts = [...map.spawns, ...map.hunterSpawns];
+  return pts.some((p) => Math.hypot(p.x - x, p.z - z) < dist);
+}
+
+function cluster(theme: string, x: number, z: number, kind: number, rnd: () => number): BoxDef[] {
+  const j = () => (rnd() - 0.5) * 1.2;
+  if (theme === "farm") {
+    if (kind === 0) return [B(x, z, 1.8, 1.3, "#e39b2d", { h: 1.05, collide: true, pattern: "hay" })];
+    if (kind === 1)
+      return [
+        B(x, z, 1.2, 1.2, "#c47a3a", { h: 1.15, collide: true, pattern: "wood" }),
+        B(x + 1.35, z + j(), 1.1, 1.1, "#d35400", { h: 0.95, collide: true }),
+      ];
+    if (kind === 2) return [B(x, z, 1.4, 1.2, "#e67e22", { h: 0.85, collide: true })];
+    if (kind === 3) return [B(x, z, 0.85, 0.85, "#8b5a2b", { h: 2.8, collide: true, pattern: "wood" })];
+    if (kind === 4)
+      return [
+        B(x, z, 2.2, 1.5, "#7b5428", { h: 1.1, collide: true, pattern: "hay" }),
+        B(x + 1.6, z + 0.4, 1.3, 1.2, "#6fbf57", { h: 1.3, collide: true, pattern: "leaves" }),
+      ];
+    return [B(x, z, 1.5, 1.1, "#c0392b", { h: 1.05, collide: true, pattern: "wood" })];
+  }
+  if (theme === "sewer") {
+    if (kind === 0) return [B(x, z, 1.15, 1.15, "#b03a2e", { h: 1.25, collide: true })];
+    if (kind === 1)
+      return [
+        B(x, z, 1.2, 1.2, "#922b21", { h: 1.2, collide: true }),
+        B(x + 1.3, z + j(), 1.15, 1.15, "#c0392b", { h: 1.15, collide: true }),
+      ];
+    if (kind === 2) return [B(x, z, 0.9, 0.9, "#c47a3a", { h: 3.2, collide: true, pattern: "pipes" })];
+    if (kind === 3)
+      return [B(x, z, 2.2, 1.6, "#2c3e50", { h: 1.7, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] })];
+    if (kind === 4) return [B(x, z, 1.6, 1.4, "#1b2420", { h: 1.4, collide: true, pattern: "bricks" })];
+    return [B(x, z, 1.8, 1.3, "#f1c40f", { h: 1.1, collide: true, pattern: "stripes", colors: ["#f1c40f", "#111"] })];
+  }
+  if (kind === 0)
+    return [B(x, z, 2.6, 1.05, "#a32638", { h: 0.88, collide: true })];
+  if (kind === 1)
+    return [B(x, z, 2.4, 0.55, "#5c2e12", { h: 2.35, collide: true, pattern: books, colors: bookColors })];
+  if (kind === 2)
+    return [
+      B(x, z, 1.15, 1.15, "#8b5a2b", { h: 1.1, collide: true, pattern: "wood" }),
+      B(x + 0.15, z + 0.15, 0.95, 0.95, "#6d4c2a", { h: 0.7, y: 1.1, collide: true, pattern: "wood" }),
+    ];
+  if (kind === 3) return [B(x, z, 0.9, 0.9, "#d9c9a5", { h: 3.3, collide: true, pattern: "bricks" })];
+  if (kind === 4)
+    return [
+      B(x, z, 1.2, 1.2, "#2c6e4a", { h: 1.45, collide: true, pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"] }),
+      B(x + 1.5, z + j(), 1.1, 1.1, "#6d4c2a", { h: 0.95, collide: true, pattern: "wood" }),
+    ];
+  return [
+    B(x, z, 1.8, 1.5, "#c45c26", { h: 0.9, collide: true }),
+    B(x + 1.7, z + 0.2, 0.9, 0.9, "#f4f0e6", { h: 1.35, collide: true }),
+  ];
+}
+
+function clutterMap(map: GameMap): GameMap {
+  const rnd = mulberry(map.id.split("").reduce((a, c) => a + c.charCodeAt(0) * 17, 11));
+  const extras: BoxDef[] = [];
+  const step = 17;
+  for (let gx = 12; gx < map.w - 12; gx += step) {
+    for (let gz = 12; gz < map.d - 12; gz += step) {
+      const x = gx + (rnd() - 0.5) * 7;
+      const z = gz + (rnd() - 0.5) * 7;
+      if (nearSpawn(map, x, z, 8)) continue;
+      if (rnd() < 0.12) continue;
+      extras.push(...cluster(map.id, x, z, Math.floor(rnd() * 6), rnd));
+    }
+  }
+  return { ...map, boxes: [...map.boxes, ...extras] };
+}
+
+function clearSpawns(map: GameMap): GameMap {
+  const cols = mapColliders(map);
+  const bounds = { w: map.w, d: map.d };
+  const fix = (p: { x: number; z: number }) => resolveStuck(p.x, p.z, 0.45, cols, bounds);
+  return {
+    ...map,
+    spawns: map.spawns.map(fix),
+    hunterSpawns: map.hunterSpawns.map(fix),
+  };
+}
+
 function expandMap(map: GameMap, s: number): GameMap {
   return {
     ...map,
@@ -218,21 +313,30 @@ function expandMap(map: GameMap, s: number): GameMap {
   };
 }
 
-export const MAPS: GameMap[] = [mansion, farm, sewer].map((m) => expandMap(m, 5));
+export const MAPS: GameMap[] = [mansion, farm, sewer].map((m) =>
+  clearSpawns(clutterMap(expandMap(m, 5))),
+);
 
 export function getMap(id: string) {
   return MAPS.find((m) => m.id === id) ?? MAPS[0];
 }
 
+function isSolidProp(b: BoxDef) {
+  if (b.h <= 0.22) return false;
+  if (b.w < 0.32 || b.d < 0.32) return false;
+  if (b.collide) return true;
+  return b.h >= 0.45 && b.w >= 0.45 && b.d >= 0.45;
+}
+
 export function mapColliders(map: GameMap): { minX: number; maxX: number; minZ: number; maxZ: number }[] {
-  const pad = 0.08;
+  const pad = -0.06;
   return map.boxes
-    .filter((b) => b.collide)
+    .filter(isSolidProp)
     .map((b) => ({
       minX: b.x - b.w / 2 + pad,
       maxX: b.x + b.w / 2 - pad,
       minZ: b.z - b.d / 2 + pad,
       maxZ: b.z + b.d / 2 - pad,
     }))
-    .filter((b) => b.maxX - b.minX > 0.12 && b.maxZ - b.minZ > 0.12);
+    .filter((b) => b.maxX - b.minX > 0.2 && b.maxZ - b.minZ > 0.2);
 }
