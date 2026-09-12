@@ -88,7 +88,7 @@ function createGun() {
     new THREE.ConeGeometry(0.07, 0.16, 8),
     new THREE.MeshBasicMaterial({ color: "#ffe9a0", transparent: true, opacity: 0, depthWrite: false }),
   );
-  muzzle.rotation.x = Math.PI / 2;
+  muzzle.rotation.x = -Math.PI / 2;
   muzzle.position.set(0, 0.03, -0.54);
   g.add(body, barrel, grip, mag, sight, muzzle);
   g.visible = false;
@@ -139,8 +139,8 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
   const parts = { head, torso, armL, armR, legL, legR };
   for (const p of Object.values(parts)) body.add(p.mesh);
   const { gun, muzzle } = createGun();
-  gun.position.set(0.04, -0.34, -0.1);
-  gun.rotation.set(-1.05, 0.12, 0.05);
+  gun.position.set(0.03, -0.28, 0.02);
+  gun.rotation.set(-Math.PI / 2, 0, 0);
   armR.mesh.add(gun);
 
   const visor = new THREE.Mesh(
@@ -318,9 +318,9 @@ export function animateCharacter(
   const kick = shooting ? Math.min(1, (rig.shootUntil - Date.now()) / 180) : 0;
   if (opts.hunter) {
     rig.gun.visible = true;
-    rig.parts.armR.mesh.rotation.x = -1.12 - kick * 0.55;
-    rig.parts.armR.mesh.rotation.z = 0.18;
-    rig.gun.rotation.x = -1.05 + kick * 0.45;
+    rig.parts.armR.mesh.rotation.x = 1.52 + kick * 0.28;
+    rig.parts.armR.mesh.rotation.z = 0.1;
+    rig.gun.rotation.set(-Math.PI / 2 - kick * 0.12, 0, 0);
     const flash = rig.muzzle.material as THREE.MeshBasicMaterial;
     flash.opacity = kick * 0.95;
     rig.muzzle.scale.setScalar(0.7 + kick * 1.8);
