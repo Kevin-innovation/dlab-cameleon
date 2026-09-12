@@ -15,6 +15,7 @@ import {
   processFire,
 } from "@/lib/round";
 import { snapsFrom, type Session } from "@/lib/session";
+import { resetSoloBots, tickSoloBots } from "@/lib/ai";
 import type { PaintBlob, PlayerSnap, Pose, RoomState } from "@/lib/types";
 import { POSES } from "@/lib/types";
 
@@ -122,8 +123,8 @@ export function GameView({
         if (k === "h" || k === "?") setHelp((v) => !v);
         if (k === "r") cyclePose(session, world, 1);
         if (k === "1") tryTaunt();
-        if (k >= "2" && k <= "8") {
-          const pose = POSES[Number(k) - 2]?.id;
+        if ((k >= "2" && k <= "4") || (k >= "6" && k <= "8")) {
+          const pose = POSES[k === "6" ? 4 : k === "7" ? 5 : k === "8" ? 6 : Number(k) - 2]?.id;
           if (pose) applyPosePick(session, world, pose);
         }
         if (k === "c" && !watchingRef.current) {
@@ -165,7 +166,13 @@ export function GameView({
             const on = world.toggleWatch();
             watchingRef.current = on;
             setWatching(on);
-            if (on) setPaintOpen(false);
+            if (on) {
+              setPaintOpen(false);
+              keys.delete(" ");
+              keys.delete("space");
+              keys.delete("shift");
+              keys.delete("control");
+            }
           }
         }
       }
@@ -383,9 +390,11 @@ export function GameView({
           world.exitWatch();
           watchingRef.current = false;
           setWatching(false);
+          if (session.kind === "practice") resetSoloBots(session, map, room);
         }
       }
 
+      if (session.kind === "practice") tickSoloBots(session, map, room, dt, Date.now());
       world.syncDoors(room.doors ?? {});
       const hunterWait = !!(me && isHunter(room, me.id) && room.phase === "hide");
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
@@ -583,7 +592,7 @@ export function GameView({
           <div className="rounded-2xl bg-black/45 px-3 py-2 backdrop-blur-sm">
             <div className="text-[11px] tracking-wide text-lime/80">
               {serverName} · {roomLabel}
-              {session.kind === "practice" ? " · 연습" : ""} · Three.js
+              {session.kind === "practice" ? " · AI 매치" : ""} · Three.js
             </div>
             <div className="font-display text-lg leading-none">
               {hud.phase === "lobby" && "대기실 — WASD로 걸어보세요"}

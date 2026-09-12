@@ -68,8 +68,8 @@ export default function GameApp() {
     return (
       <GameView
         session={session}
-        serverName={screen.t === "practice" ? "연습 스튜디오" : server?.name || "서버"}
-        roomLabel={screen.t === "practice" ? "혼자 위장 연습" : `방 ${screen.room}`}
+        serverName={screen.t === "practice" ? "AI 매치" : server?.name || "서버"}
+        roomLabel={screen.t === "practice" ? "호스트 + AI 7인" : `방 ${screen.room}`}
       />
     );
   }
@@ -188,7 +188,7 @@ function Home({
             onClick={onPractice}
             className="rounded-full border border-white/20 py-3 text-sm"
           >
-            혼자 연습 (페인트·맵)
+            AI와 플레이 (나 + AI 7인)
           </button>
         </form>
       </div>

@@ -7,7 +7,7 @@ import {
   setState,
   getState,
 } from "playroomkit";
-import { MAX_PLAYERS, WHITE } from "./config";
+import { BOT_NAMES, MAX_PLAYERS, WHITE } from "./config";
 import { emptyRoom } from "./round";
 import type { PaintBlob, PlayerSnap, Pose, Role, RoomState } from "./types";
 
@@ -25,7 +25,7 @@ export type Session = {
   setRoom: (room: RoomState) => void;
   players: () => SessionPlayer[];
   me: () => SessionPlayer;
-  callShot: (targetId: string) => void;
+  callShot: (targetId: string, hunterId?: string) => void;
   onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
   callDoor: (id: string) => void;
   onDoor: (cb: (id: string) => void) => () => void;
@@ -164,14 +164,13 @@ export async function connectOnline(opts: {
   };
 }
 
-export function createPractice(nickname: string): Session {
-  const id = "local-me";
+function makeLocalPlayer(id: string, name: string, ox = 0, oz = 0): SessionPlayer {
   const store: Record<string, unknown> = {
-    name: nickname,
+    name,
     ready: true,
-    x: 4.2,
+    x: 4.2 + ox,
     y: 0,
-    z: 3.4,
+    z: 3.4 + oz,
     yaw: 0,
     pose: "stand",
     fill: WHITE,
@@ -179,14 +178,23 @@ export function createPractice(nickname: string): Session {
     role: "hider",
     alive: true,
   };
-  let room = emptyRoom();
-  const me: SessionPlayer = {
+  return {
     id,
     get: (k) => store[k],
     set: (k, v) => {
       store[k] = v;
     },
   };
+}
+
+export function createPractice(nickname: string): Session {
+  const id = "local-me";
+  const me = makeLocalPlayer(id, nickname);
+  const bots = BOT_NAMES.map((n, i) => makeLocalPlayer(`bot-${i}`, `${n}·AI`, (i % 3) * 1.4, Math.floor(i / 3) * 1.6));
+  const everyone = [me, ...bots];
+  let room = emptyRoom();
+  room.mode = "infection";
+  room.hunterCount = 1;
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
   const doorListeners = new Set<(doorId: string) => void>();
   return {
@@ -197,9 +205,9 @@ export function createPractice(nickname: string): Session {
     setRoom: (r) => {
       room = r;
     },
-    players: () => [me],
+    players: () => everyone,
     me: () => me,
-    callShot: (targetId) => shotListeners.forEach((cb) => cb(id, targetId)),
+    callShot: (targetId, hunterId) => shotListeners.forEach((cb) => cb(hunterId ?? id, targetId)),
     onShot: (cb) => {
       shotListeners.add(cb);
       return () => shotListeners.delete(cb);

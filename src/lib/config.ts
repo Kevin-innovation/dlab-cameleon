@@ -36,3 +36,5 @@ export function makeRoomCode(serverId: string, roomIndex: number) {
 }
 
 export const NICK_KEY = "camelon-nick";
+
+export const BOT_NAMES = ["미호", "준혁", "하늘", "소윤", "태민", "리안", "고은"];

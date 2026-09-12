@@ -174,7 +174,7 @@ export class GameWorld {
 
     const ceil = new THREE.Mesh(
       new THREE.PlaneGeometry(map.w, map.d),
-      new THREE.MeshStandardMaterial({ color: "#d9cbb8", roughness: 1 }),
+      new THREE.MeshStandardMaterial({ color: "#d9cbb8", roughness: 1, side: THREE.DoubleSide }),
     );
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(map.w / 2, map.ceiling, map.d / 2);
@@ -260,23 +260,27 @@ export class GameWorld {
     if (this.watch) {
       this.watch = false;
       this.yaw = this.bodyYaw;
+      this.camera.up.set(0, 1, 0);
       return false;
     }
     this.watch = true;
-    this.bodyYaw = this.cling
-      ? Math.atan2(this.cling.axis === "x" ? this.cling.sign : 0, this.cling.axis === "z" ? this.cling.sign : 0)
-      : this.yaw;
-    this.specYaw = this.bodyYaw;
+    this.camera.up.set(0, 1, 0);
+    this.pitch = 0;
+    const nx = this.cling ? (this.cling.axis === "x" ? this.cling.sign : 0) : Math.sin(this.yaw);
+    const nz = this.cling ? (this.cling.axis === "z" ? this.cling.sign : 0) : Math.cos(this.yaw);
+    this.bodyYaw = this.cling ? Math.atan2(nx, nz) : this.yaw;
+    this.specYaw = this.cling ? Math.atan2(nx, nz) : this.yaw;
     this.specPitch = 0;
-    this.specX = this.camera.position.x;
-    this.specY = Math.max(1.2, Math.min(this.map.ceiling - 0.45, this.camera.position.y));
-    this.specZ = this.camera.position.z;
+    this.specX = this.localX + nx * 3.1;
+    this.specZ = this.localZ + nz * 3.1;
+    this.specY = Math.max(1.2, Math.min(this.map.ceiling - 0.55, this.localY + 1.5));
+    this.specX = Math.max(1.2, Math.min(this.map.w - 1.2, this.specX));
+    this.specZ = Math.max(1.2, Math.min(this.map.d - 1.2, this.specZ));
     return true;
   }
 
   private clingFeetMax(boxMaxY: number) {
-    const head = poseHeight("stick");
-    return Math.max(0, Math.min(boxMaxY - 0.28, this.map.ceiling - head - 0.22));
+    return Math.max(0, Math.min(boxMaxY - 0.4, this.map.ceiling - 2.15));
   }
 
   exitWatch() {
@@ -624,8 +628,11 @@ export class GameWorld {
   updateCamera(opts: { paintOpen: boolean; hunterHide: boolean; fps?: boolean; moving?: boolean }) {
     if (this.watch) {
       this.fpGun.visible = false;
+      this.camera.up.set(0, 1, 0);
       this.euler.set(this.specPitch, this.specYaw, 0, "YXZ");
       this.camera.quaternion.setFromEuler(this.euler);
+      this.camera.rotation.set(this.specPitch, this.specYaw, 0, "YXZ");
+      this.specY = Math.min(this.specY, this.map.ceiling - 0.5);
       this.camera.position.set(this.specX, this.specY, this.specZ);
       this.camera.fov = 72;
       this.camera.updateProjectionMatrix();
