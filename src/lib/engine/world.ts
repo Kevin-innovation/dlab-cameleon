@@ -250,7 +250,7 @@ export class GameWorld {
       ...this.baseColliders,
       ...this.doorRigs.flatMap((d) => doorColliders(d.def, !!open[d.def.id])),
     ];
-    if (this.map) {
+    if (this.map && !this.cling) {
       const r = 0.3;
       const freed = resolveStuck(
         this.localX,
@@ -371,7 +371,10 @@ export class GameWorld {
       return false;
     }
     if (pose === "lie" || pose === "ball") return false;
-    const hit = nearestSurface(this.localX, this.localZ, this.colliders, 0.58);
+    // The map boundary keeps normal movement a little inside the room, so its
+    // rendered wall can be more than the body radius away from the player.
+    // C should still reach that wall and snap the player onto its surface.
+    const hit = nearestSurface(this.localX, this.localZ, this.colliders, 0.9);
     if (!hit || hit.dist < 0.04 || hit.dist > 0.55) return false;
     const box = hit.box;
     const pad = clingPad();
@@ -998,12 +1001,16 @@ export class GameWorld {
 }
 
 function clingPad() {
-  return 0.01;
+  // The stick pose is scaled to 0.08 on its local depth axis (0.22 * 0.08).
+  // Keep the body surface on the wall face instead of leaving a visible gap.
+  return 0.018;
 }
 
 function clingVisualFace(box: Collider, axis: "x" | "z", sign: number) {
   const face = axis === "x" ? (sign > 0 ? box.maxX : box.minX) : sign > 0 ? box.maxZ : box.minZ;
-  return face - sign * BOX_COLLIDE_OUTSET;
+  // Colliders are inset by BOX_COLLIDE_OUTSET for normal movement. Clinging
+  // needs the rendered mesh face, so restore that inset before positioning.
+  return face + sign * BOX_COLLIDE_OUTSET;
 }
 
 function makeDoor(def: DoorDef) {

@@ -222,11 +222,11 @@ export function GameView({
         if (k === "v" || k === "5") {
           const room = session.getRoom();
           const snap = snapsFrom(session).find((p) => p.id === session.myId());
-          const hiding =
+          const canWatch =
             !!snap &&
-            (room.phase === "hide" || room.phase === "hunt") &&
-            hiderAlive(room, snap.id);
-          if (hiding) {
+            (room.phase === "lobby" ||
+              ((room.phase === "hide" || room.phase === "hunt") && hiderAlive(room, snap.id)));
+          if (canWatch) {
             const on = world.toggleWatch();
             watchingRef.current = on;
             setWatching(on);
@@ -784,10 +784,14 @@ export function GameView({
           </div>
         )}
 
-        {watching && myRole === "hider" && (
+        {watching && (myRole === "hider" || hud.phase === "lobby") && (
           <div className="pointer-events-none absolute left-1/2 top-44 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
-            <div className="font-display text-xl text-lime">숨은 채 관전</div>
-            <p className="text-sm text-white/75">몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · V 복귀</p>
+            <div className="font-display text-xl text-lime">{hud.phase === "lobby" ? "대기실 관전" : "숨은 채 관전"}</div>
+            <p className="text-sm text-white/75">
+              {hud.phase === "lobby"
+                ? "WASD·Q/E로 맵 둘러보기 · V 복귀"
+                : "몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · V 복귀"}
+            </p>
           </div>
         )}
 
@@ -955,7 +959,7 @@ export function GameView({
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
               <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
               <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
-              <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 숨은 채 관전, E로 문. 열고 지나가면 닫힙니다.</li>
+              <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 대기실·숨은 채 관전, E로 문. 열고 지나가면 닫힙니다.</li>
               <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
               <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
               <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
