@@ -65,7 +65,7 @@ export class GameWorld {
     this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.12, 140);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.12, 700);
     this.camera.rotation.order = "YXZ";
     this.scene.add(this.mapGroup);
     this.resize();
@@ -93,7 +93,7 @@ export class GameWorld {
     }
 
     this.scene.background = new THREE.Color(map.fog);
-    this.scene.fog = new THREE.FogExp2(map.fog, 0.016);
+    this.scene.fog = new THREE.FogExp2(map.fog, 0.0045);
 
     const hemi = new THREE.HemisphereLight("#f2efe6", "#3d2a1c", 1.05);
     const sun = new THREE.DirectionalLight("#fff4e0", 1.35);

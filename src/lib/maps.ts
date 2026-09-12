@@ -190,10 +190,38 @@ const sewer: GameMap = {
   ],
 };
 
-export const MAPS: GameMap[] = [mansion, farm, sewer];
+function expandMap(map: GameMap, s: number): GameMap {
+  return {
+    ...map,
+    w: map.w * s,
+    d: map.d * s,
+    ceiling: map.ceiling * 1.35,
+    spawns: map.spawns.map((p) => ({ x: p.x * s, z: p.z * s })),
+    hunterSpawns: map.hunterSpawns.map((p) => ({ x: p.x * s, z: p.z * s })),
+    boxes: map.boxes.map((b) => {
+      const floor = b.h <= 0.1;
+      const wallLike =
+        !!b.collide &&
+        (b.w >= map.w * 0.25 || b.d >= map.d * 0.25 || b.w <= 0.55 || b.d <= 0.55);
+      const thinDecor = !b.collide && (b.d <= 0.28 || b.w <= 0.28);
+      let w = b.w;
+      let d = b.d;
+      if (floor || wallLike) {
+        w *= s;
+        d *= s;
+      } else if (thinDecor) {
+        if (b.d <= 0.28) w *= s;
+        if (b.w <= 0.28) d *= s;
+      }
+      return { ...b, x: b.x * s, z: b.z * s, w, d };
+    }),
+  };
+}
+
+export const MAPS: GameMap[] = [mansion, farm, sewer].map((m) => expandMap(m, 5));
 
 export function getMap(id: string) {
-  return MAPS.find((m) => m.id === id) ?? mansion;
+  return MAPS.find((m) => m.id === id) ?? MAPS[0];
 }
 
 export function mapColliders(map: GameMap): { minX: number; maxX: number; minZ: number; maxZ: number }[] {
