@@ -1,7 +1,7 @@
 export const APP_NAME = "카멜론";
 export const MAX_PLAYERS = 8;
 export const ROOMS_PER_SERVER = 8;
-export const PLAYER_SPEED = 5.2;
+export const PLAYER_SPEED = 6.4;
 export const SNEAK_SPEED = 2.3;
 export const PAINT_SPEED = 2.0;
 export const PLAYER_RADIUS = 0.32;

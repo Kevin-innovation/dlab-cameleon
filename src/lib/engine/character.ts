@@ -15,11 +15,14 @@ export type CharacterRig = {
   body: THREE.Group;
   visor: THREE.Mesh;
   nameSprite: THREE.Sprite;
+  ghostBadge: THREE.Sprite;
   parts: Record<BodyPart, PartLayer>;
   fill: string;
   blobs: PaintBlob[];
   pose: Pose;
   paintSig: string;
+  ghost: boolean;
+  walkT: number;
 };
 
 function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBlob[], part: BodyPart) {
@@ -72,6 +75,8 @@ function makePart(id: BodyPart, geo: THREE.BufferGeometry, playerId: string): Pa
     map: texture,
     roughness: 0.72,
     metalness: 0.04,
+    transparent: true,
+    opacity: 1,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
@@ -110,8 +115,13 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
   visor.userData.playerId = playerId;
 
   const nameSprite = makeNameSprite(name);
+  const ghostBadge = makeNameSprite("유령");
+  ghostBadge.position.y = 2.42;
+  ghostBadge.scale.set(1.1, 0.3, 1);
+  ghostBadge.visible = false;
+  (ghostBadge.material as THREE.SpriteMaterial).color.set("#9ce8ff");
   body.add(visor);
-  group.add(body, nameSprite);
+  group.add(body, nameSprite, ghostBadge);
   group.userData.playerId = playerId;
 
   return {
@@ -119,11 +129,14 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     body,
     visor,
     nameSprite,
+    ghostBadge,
     parts,
     fill: WHITE,
     blobs: [],
     pose: "stand",
     paintSig: "",
+    ghost: false,
+    walkT: 0,
   };
 }
 
@@ -166,6 +179,54 @@ export function applyPose(rig: CharacterRig, pose: Pose) {
 
 export function setNameVisible(rig: CharacterRig, on: boolean) {
   rig.nameSprite.visible = on;
+  if (!on) rig.ghostBadge.visible = false;
+}
+
+export function setGhostLook(rig: CharacterRig, ghost: boolean) {
+  if (rig.ghost === ghost) {
+    rig.ghostBadge.visible = ghost && rig.nameSprite.visible;
+    return;
+  }
+  rig.ghost = ghost;
+  for (const part of Object.values(rig.parts)) {
+    const mat = part.mesh.material as THREE.MeshStandardMaterial;
+    mat.transparent = true;
+    mat.opacity = ghost ? 0.28 : 1;
+    mat.depthWrite = !ghost;
+    mat.emissive.set(ghost ? "#7ecbff" : "#000000");
+    mat.emissiveIntensity = ghost ? 0.45 : 0;
+    part.mesh.castShadow = !ghost;
+  }
+  const vm = rig.visor.material as THREE.MeshStandardMaterial;
+  vm.transparent = true;
+  vm.opacity = ghost ? 0.25 : 1;
+  rig.ghostBadge.visible = ghost && rig.nameSprite.visible;
+}
+
+export function animateCharacter(
+  rig: CharacterRig,
+  opts: { moving: boolean; ghost: boolean; caughtT: number; dt: number },
+) {
+  const catchK = Math.max(0, Math.min(1, opts.caughtT));
+  if (catchK > 0) {
+    const k = 1 - catchK;
+    rig.body.rotation.x = -1.15 * k;
+    rig.body.rotation.z = Math.sin(k * 18) * 0.28 * k;
+    rig.body.position.y = 0.12 * k;
+    return;
+  }
+  rig.body.rotation.x = 0;
+  rig.body.rotation.z = 0;
+
+  const walkOn = opts.moving && rig.pose !== "lie" && rig.pose !== "sit" && rig.pose !== "ball";
+  if (walkOn) rig.walkT += opts.dt * (opts.ghost ? 6.5 : 10);
+  const swing = walkOn ? Math.sin(rig.walkT) * 0.7 : 0;
+  const bob = walkOn ? Math.abs(Math.sin(rig.walkT)) * 0.05 : 0;
+  rig.parts.legL.mesh.rotation.x = swing;
+  rig.parts.legR.mesh.rotation.x = -swing;
+  rig.parts.armL.mesh.rotation.x = -swing * 0.85;
+  rig.parts.armR.mesh.rotation.x = swing * 0.85;
+  rig.body.position.y = (opts.ghost ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0) + bob;
 }
 
 export function uvPaint(

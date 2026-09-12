@@ -263,11 +263,27 @@ export function GameView({
 
       const hunterWait = !!(me && isHunter(room, me.id) && room.phase === "hide");
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
+      const ghost =
+        !!me &&
+        room.phase === "hunt" &&
+        room.mode === "normal" &&
+        room.caughtIds.includes(me.id) &&
+        !isHunter(room, me.id);
+      const localMoving =
+        keys.has("w") ||
+        keys.has("a") ||
+        keys.has("s") ||
+        keys.has("d") ||
+        keys.has("arrowup") ||
+        keys.has("arrowdown") ||
+        keys.has("arrowleft") ||
+        keys.has("arrowright");
       const moved = world.stepLocal(
         dt,
         { keys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
         !hunterWait && room.phase !== "result",
         pose,
+        ghost,
       );
       session.me().set("yaw", world.yaw, false);
 
@@ -320,7 +336,7 @@ export function GameView({
       }
 
       const live = snapsFrom(session);
-      world.syncPlayers(live, session.myId(), room, false);
+      world.syncPlayers(live, session.myId(), room, { localMoving, dt });
       world.updateCamera({
         paintOpen: paintOpenRef.current,
         hunterHide: hunterWait,
@@ -452,6 +468,13 @@ export function GameView({
         {hud.lastTag && nowTick - hud.lastTag.at < 1800 && hud.phase === "hunt" && (
           <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-full bg-pink px-4 py-1 font-display text-black">
             {hud.lastTag.name} 발견!
+          </div>
+        )}
+
+        {myRole === "spectator" && hud.phase === "hunt" && (
+          <div className="pointer-events-none absolute left-1/2 top-36 z-30 -translate-x-1/2 rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm">
+            <div className="font-display text-2xl text-cyan-100">유령</div>
+            <p className="text-sm text-cyan-50/80">잡혔습니다. 몸은 투명하고, 벽을 지나 맵을 둘러볼 수 있어요.</p>
           </div>
         )}
 

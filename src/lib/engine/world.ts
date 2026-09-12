@@ -3,11 +3,13 @@ import { LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, SNEAK_SPEED, WHITE } from "../con
 import { getMap, mapColliders } from "../maps";
 import type { BodyPart, Collider, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
-import { moveWithSlide, poseRadius } from "./collision";
+import { moveWithSlide, poseRadius, resolveStuck } from "./collision";
 import {
+  animateCharacter,
   applyPaint,
   applyPose,
   createCharacter,
+  setGhostLook,
   setNameVisible,
   uvPaint,
   type CharacterRig,
@@ -63,7 +65,7 @@ export class GameWorld {
     this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.12, 80);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.12, 140);
     this.camera.rotation.order = "YXZ";
     this.scene.add(this.mapGroup);
     this.resize();
@@ -91,7 +93,7 @@ export class GameWorld {
     }
 
     this.scene.background = new THREE.Color(map.fog);
-    this.scene.fog = new THREE.FogExp2(map.fog, 0.045);
+    this.scene.fog = new THREE.FogExp2(map.fog, 0.016);
 
     const hemi = new THREE.HemisphereLight("#f2efe6", "#3d2a1c", 1.05);
     const sun = new THREE.DirectionalLight("#fff4e0", 1.35);
@@ -175,7 +177,14 @@ export class GameWorld {
     input: WorldInput,
     canMove: boolean,
     pose: Pose,
+    ghost = false,
   ) {
+    const boxes = ghost ? [] : this.colliders;
+    const bounds = { w: this.map.w, d: this.map.d };
+    const r = poseRadius(pose);
+    const freed = resolveStuck(this.localX, this.localZ, r, boxes, bounds);
+    this.localX = freed.x;
+    this.localZ = freed.z;
     if (!canMove) return { x: this.localX, z: this.localZ, yaw: this.yaw };
 
     this.euler.set(0, this.yaw, 0, "YXZ");
@@ -200,15 +209,15 @@ export class GameWorld {
       if (input.paintOpen) speed = PAINT_SPEED;
       if (pose === "lie") speed *= 0.45;
       if (pose === "crouch" || pose === "sit") speed *= 0.72;
-      const r = poseRadius(pose);
+      if (ghost) speed *= 1.15;
       const moved = moveWithSlide(
         this.localX,
         this.localZ,
         this.wish.x * speed * dt,
         this.wish.z * speed * dt,
         r,
-        this.colliders,
-        { w: this.map.w, d: this.map.d },
+        boxes,
+        bounds,
       );
       this.localX = moved.x;
       this.localZ = moved.z;
@@ -222,9 +231,16 @@ export class GameWorld {
     if (yaw !== undefined) this.yaw = yaw;
   }
 
-  syncPlayers(snaps: PlayerSnap[], myId: string, room: RoomState, hideLocal = false) {
+  syncPlayers(
+    snaps: PlayerSnap[],
+    myId: string,
+    room: RoomState,
+    opts: { hideLocal?: boolean; localMoving?: boolean; dt?: number } = {},
+  ) {
     const seen = new Set<string>();
     const self = snaps.find((p) => p.id === myId);
+    const dt = opts.dt ?? 0.016;
+    const now = Date.now();
     for (const p of snaps) {
       seen.add(p.id);
       let rig = this.players.get(p.id);
@@ -233,18 +249,26 @@ export class GameWorld {
         this.players.set(p.id, rig);
         this.scene.add(rig.group);
       }
-      const show = canSee(room, self, p) && !(hideLocal && p.id === myId);
+      const ghost =
+        room.phase === "hunt" &&
+        room.mode === "normal" &&
+        room.caughtIds.includes(p.id) &&
+        !isHunter(room, p.id);
+      const show = canSee(room, self, p) && !(opts.hideLocal && p.id === myId);
       rig.group.visible = show;
       applyPaint(rig, p.fill || WHITE, p.blobs || []);
-      applyPose(rig, p.pose);
-      rig.visor.visible = isHunter(room, p.id) && room.phase !== "lobby";
+      if (rig.pose !== p.pose) applyPose(rig, p.pose);
+      rig.visor.visible = isHunter(room, p.id) && room.phase !== "lobby" && !ghost;
       setNameVisible(
         rig,
-        p.id === myId || room.phase !== "hunt" || isHunter(room, p.id),
+        ghost || p.id === myId || room.phase !== "hunt" || isHunter(room, p.id),
       );
+      setGhostLook(rig, ghost);
       const x = p.id === myId ? this.localX : p.x;
       const z = p.id === myId ? this.localZ : p.z;
       const yaw = p.id === myId ? this.yaw : p.yaw;
+      const prevX = rig.group.position.x;
+      const prevZ = rig.group.position.z;
       if (p.id === myId) {
         rig.group.position.set(x, 0, z);
         rig.group.rotation.y = yaw;
@@ -253,6 +277,12 @@ export class GameWorld {
         rig.group.position.z += (z - rig.group.position.z) * 0.28;
         rig.group.rotation.y = yaw;
       }
+      const moving =
+        (p.id === myId && !!opts.localMoving) ||
+        Math.hypot(rig.group.position.x - prevX, rig.group.position.z - prevZ) > 0.012;
+      const caughtT =
+        room.lastTag && room.lastTag.id === p.id ? 1 - (now - room.lastTag.at) / 900 : 0;
+      animateCharacter(rig, { moving, ghost, caughtT, dt });
     }
     for (const [id, rig] of this.players) {
       if (!seen.has(id)) {
@@ -425,6 +455,7 @@ function canSee(room: RoomState, self: PlayerSnap | undefined, other: PlayerSnap
   if (isHunter(room, self.id) || !hiderAlive(room, self.id)) return true;
   if (room.phase === "hide") return !isHunter(room, other.id);
   if (isHunter(room, other.id)) return true;
+  if (room.mode === "normal" && room.caughtIds.includes(other.id)) return true;
   return false;
 }
 
