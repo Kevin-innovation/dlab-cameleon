@@ -80,6 +80,8 @@ export type RoomState = {
   hideTime: number;
   huntTime: number;
   hunterCount: number;
+  ammoCount: number;
+  ammo: Record<string, number>;
   lastTag?: { id: string; by: string; name: string; at: number };
   taunts: { x: number; y: number; at: number; id: string }[];
   winner?: "hunters" | "hiders";

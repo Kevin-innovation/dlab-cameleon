@@ -1,4 +1,4 @@
-import { DEFAULT_HIDE, DEFAULT_HUNT, TAG_RANGE } from "./config";
+import { DEFAULT_AMMO, DEFAULT_HIDE, DEFAULT_HUNT, TAG_RANGE } from "./config";
 import type { PlayerSnap, RoomState } from "./types";
 
 export function emptyRoom(): RoomState {
@@ -14,6 +14,8 @@ export function emptyRoom(): RoomState {
     hideTime: DEFAULT_HIDE,
     huntTime: DEFAULT_HUNT,
     hunterCount: 1,
+    ammoCount: DEFAULT_AMMO,
+    ammo: {},
     taunts: [],
   };
 }
@@ -42,6 +44,9 @@ export function beginRound(
   const hunterIds = ids.slice(0, hc);
   const scores = { ...prev.scores };
   for (const id of ids) scores[id] ??= 0;
+  const mag = prev.ammoCount || DEFAULT_AMMO;
+  const ammo: Record<string, number> = {};
+  for (const id of hunterIds) ammo[id] = mag;
   return {
     ...prev,
     phase: "hide",
@@ -53,6 +58,8 @@ export function beginRound(
     lastTag: undefined,
     taunts: [],
     scores,
+    ammoCount: mag,
+    ammo,
   };
 }
 
@@ -74,38 +81,60 @@ export function hiderAlive(room: RoomState, id: string) {
   return !room.caughtIds.includes(id);
 }
 
-export function processShot(
+export function huntersHaveAmmo(room: RoomState, players: PlayerSnap[]) {
+  return players.some((p) => isHunter(room, p.id) && (room.ammo[p.id] ?? 0) > 0);
+}
+
+export function processFire(
   room: RoomState,
   players: PlayerSnap[],
   hunterId: string,
   targetId: string,
   now: number,
-): { room: RoomState; tagged?: PlayerSnap } {
+): { room: RoomState; tagged?: PlayerSnap; empty?: boolean } {
   if (room.phase !== "hunt") return { room };
   if (!isHunter(room, hunterId)) return { room };
-  const hunter = players.find((p) => p.id === hunterId);
-  const best = players.find((p) => p.id === targetId);
-  if (!hunter || !best) return { room };
-  if (!hiderAlive(room, best.id)) return { room };
-  if (Math.hypot(best.x - hunter.x, best.z - hunter.z) > TAG_RANGE) return { room };
+  const left = room.ammo[hunterId] ?? 0;
+  if (left <= 0) return { room, empty: true };
 
-  const caughtIds = room.caughtIds.includes(best.id)
-    ? room.caughtIds
-    : [...room.caughtIds, best.id];
-  const scores = { ...room.scores };
-  scores[hunterId] = (scores[hunterId] ?? 0) + 80;
-  let next: RoomState = {
-    ...room,
-    caughtIds,
-    scores,
-    lastTag: { id: best.id, by: hunterId, name: best.name, at: now },
-  };
+  const ammo = { ...room.ammo, [hunterId]: left - 1 };
+  let next: RoomState = { ...room, ammo };
+  let tagged: PlayerSnap | undefined;
+
+  if (targetId) {
+    const hunter = players.find((p) => p.id === hunterId);
+    const best = players.find((p) => p.id === targetId);
+    if (
+      hunter &&
+      best &&
+      hiderAlive(next, best.id) &&
+      Math.hypot(best.x - hunter.x, best.z - hunter.z) <= TAG_RANGE
+    ) {
+      const caughtIds = next.caughtIds.includes(best.id)
+        ? next.caughtIds
+        : [...next.caughtIds, best.id];
+      const scores = { ...next.scores };
+      scores[hunterId] = (scores[hunterId] ?? 0) + 80;
+      tagged = best;
+      next = {
+        ...next,
+        caughtIds,
+        scores,
+        lastTag: { id: best.id, by: hunterId, name: best.name, at: now },
+      };
+      if (next.mode === "infection") {
+        next.ammo = { ...next.ammo, [best.id]: next.ammoCount || DEFAULT_AMMO };
+      }
+    }
+  }
 
   const hidersLeft = players.filter((p) => hiderAlive(next, p.id)).length;
   if (hidersLeft === 0) {
     next = finishRound(next, "hunters", players, now);
+  } else if (!huntersHaveAmmo(next, players)) {
+    next = finishRound(next, "hiders", players, now);
   }
-  return { room: next, tagged: best };
+  return { room: next, tagged };
 }
 
 export function finishRound(
@@ -138,6 +167,10 @@ export function tickRoom(room: RoomState, players: PlayerSnap[], now: number): R
   if (room.phase === "hunt" && now >= room.phaseEndsAt) {
     const any = players.some((p) => hiderAlive(room, p.id));
     return finishRound(room, any ? "hiders" : "hunters", players, now);
+  }
+  if (room.phase === "hunt" && !huntersHaveAmmo(room, players)) {
+    const any = players.some((p) => hiderAlive(room, p.id));
+    if (any) return finishRound(room, "hiders", players, now);
   }
   if (room.phase === "result" && now >= room.phaseEndsAt) {
     return { ...room, phase: "lobby", winner: undefined, hunterIds: [], caughtIds: [] };

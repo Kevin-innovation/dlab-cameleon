@@ -12,7 +12,7 @@ import {
   remaining,
   roleOf,
   tickRoom,
-  processShot,
+  processFire,
 } from "@/lib/round";
 import { snapsFrom, type Session } from "@/lib/session";
 import type { PaintBlob, PlayerSnap, Pose, RoomState } from "@/lib/types";
@@ -200,6 +200,9 @@ export function GameView({
       if (room.phase === "hunt" && isHunter(room, me.id)) {
         const t = Date.now();
         if (t - lastShot < SHOT_COOLDOWN) return;
+        const rounds = room.ammoCount || 6;
+        const ammoLeft = room.ammo?.[me.id] ?? rounds;
+        if (ammoLeft <= 0) return;
         lastShot = t;
         world.playShot(me.id, true);
         session.me().set("shootSeq", Number(session.me().get("shootSeq") ?? 0) + 1, true);
@@ -207,9 +210,9 @@ export function GameView({
         const aim = lockedNow
           ? world.aimPlayer(me.id)
           : world.aimPlayer(me.id, e.clientX, e.clientY);
-        if (aim && aim.dist <= TAG_RANGE + 1.2 && hiderAlive(room, aim.id)) {
-          session.callShot(aim.id);
-        }
+        const hit =
+          aim && aim.dist <= TAG_RANGE + 1.2 && hiderAlive(room, aim.id) ? aim.id : "";
+        session.callShot(hit);
       }
     };
     const stage = canvas.parentElement;
@@ -217,8 +220,14 @@ export function GameView({
 
     const unshot = session.onShot((hunterId, targetId) => {
       if (!session.isHost()) return;
-      const result = processShot(session.getRoom(), snapsFrom(session), hunterId, targetId, Date.now());
-      if (result.tagged) session.setRoom(result.room);
+      const result = processFire(
+        session.getRoom(),
+        snapsFrom(session),
+        hunterId,
+        targetId,
+        Date.now(),
+      );
+      session.setRoom(result.room);
     });
 
     const resize = () => world.resize();
@@ -331,7 +340,8 @@ export function GameView({
           next.taunts.length !== room.taunts.length ||
           next.winner !== room.winner ||
           next.round !== room.round ||
-          next.lastTag?.at !== room.lastTag?.at
+          next.lastTag?.at !== room.lastTag?.at ||
+          JSON.stringify(next.ammo) !== JSON.stringify(room.ammo)
         ) {
           session.setRoom(next);
         }
@@ -450,12 +460,31 @@ export function GameView({
           </div>
         )}
 
-        {hud.phase === "hunt" && myRole === "hunter" && (
-          <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center">
-            <div className="h-8 w-8 rounded-full border-2 border-white/80" />
-            <div className="absolute h-px w-10 bg-white/70" />
-            <div className="absolute h-10 w-px bg-white/70" />
-          </div>
+        {hud.phase === "hunt" && myRole === "hunter" && me && (
+          <>
+            <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center">
+              <div className="h-8 w-8 rounded-full border-2 border-white/80" />
+              <div className="absolute h-px w-10 bg-white/70" />
+              <div className="absolute h-10 w-px bg-white/70" />
+            </div>
+            <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-center">
+              <div className="text-[11px] tracking-wide text-white/55">탄약</div>
+              <div className="flex items-center justify-center gap-1">
+                {Array.from({ length: hud.ammoCount || 6 }).map((_, i) => (
+                  <span
+                    key={i}
+                    className={`inline-block h-3 w-2 rounded-sm ${
+                      i < (hud.ammo?.[me.id] ?? 0) ? "bg-amber-300" : "bg-white/20"
+                    }`}
+                  />
+                ))}
+              </div>
+              <div className="font-display text-lg text-amber-200">
+                {hud.ammo?.[me.id] ?? 0}/{hud.ammoCount || 6}
+                {(hud.ammo?.[me.id] ?? 0) <= 0 ? " · 탄 없음" : ""}
+              </div>
+            </div>
+          </>
         )}
 
         {hunterHide && (
@@ -489,7 +518,7 @@ export function GameView({
             <div>마우스 이동 = 시점 · WASD 이동</div>
             <div>Shift 살금 · F 페인트 · R 자세</div>
             {myRole === "hunter" && hud.phase === "hunt" && (
-              <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그</div>
+              <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
             )}
           </div>
         )}
@@ -743,6 +772,20 @@ function Lobby({
               className="mt-1 w-full bg-transparent"
               value={room.huntTime}
               onChange={(e) => session.setRoom({ ...room, huntTime: Number(e.target.value) || 150 })}
+            />
+          </label>
+          <label className="col-span-2 rounded-xl bg-white/8 p-2">
+            술래 탄 수 (난사 방지)
+            <input
+              type="number"
+              min={3}
+              max={12}
+              disabled={!host}
+              className="mt-1 w-full bg-transparent"
+              value={room.ammoCount || 6}
+              onChange={(e) =>
+                session.setRoom({ ...room, ammoCount: Math.max(3, Math.min(12, Number(e.target.value) || 6)) })
+              }
             />
           </label>
         </div>
