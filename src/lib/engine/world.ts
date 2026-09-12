@@ -18,6 +18,7 @@ import {
   applyPaint,
   applyPose,
   createCharacter,
+  createViewGun,
   extendPaint,
   setGhostLook,
   setNameVisible,
@@ -83,6 +84,10 @@ export class GameWorld {
   private tracers: { line: THREE.Line; until: number }[] = [];
   private killFx: { group: THREE.Group; start: number; until: number }[] = [];
   private seenTagAt = 0;
+  private fpGun: THREE.Group;
+  private fpMuzzle: THREE.Mesh;
+  private fpKick = 0;
+  private viewBob = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -100,8 +105,14 @@ export class GameWorld {
     this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.12, 700);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 700);
     this.camera.rotation.order = "YXZ";
+    const view = createViewGun();
+    this.fpGun = view.gun;
+    this.fpMuzzle = view.muzzle;
+    this.fpGun.visible = false;
+    this.camera.add(this.fpGun);
+    this.scene.add(this.camera);
     this.scene.add(this.mapGroup);
     this.resize();
   }
@@ -579,8 +590,9 @@ export class GameWorld {
     }
   }
 
-  updateCamera(opts: { paintOpen: boolean; hunterHide: boolean }) {
+  updateCamera(opts: { paintOpen: boolean; hunterHide: boolean; fps?: boolean; moving?: boolean }) {
     if (this.watch) {
+      this.fpGun.visible = false;
       this.euler.set(this.specPitch, this.specYaw, 0, "YXZ");
       this.camera.quaternion.setFromEuler(this.euler);
       this.camera.position.set(this.specX, this.specY, this.specZ);
@@ -591,11 +603,30 @@ export class GameWorld {
     this.euler.set(this.pitch, this.yaw, 0, "YXZ");
     this.camera.quaternion.setFromEuler(this.euler);
     if (opts.hunterHide) {
+      this.fpGun.visible = false;
       this.camera.position.set(this.map.w / 2, 8, this.map.d / 2);
       this.camera.lookAt(this.map.w / 2, 0, this.map.d / 2);
       return;
     }
     this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    if (opts.fps) {
+      this.viewBob += opts.moving ? 0.26 : 0.05;
+      const bob = opts.moving ? Math.sin(this.viewBob) * 0.028 : 0;
+      this.camEye.set(this.localX, 1.58 + this.localY + bob, this.localZ);
+      this.camera.position.copy(this.camEye);
+      this.camera.fov = 78;
+      this.fpKick *= 0.78;
+      const kick = this.fpKick;
+      this.fpGun.visible = true;
+      this.fpGun.position.set(0.27 + kick * 0.02, -0.22 + bob * 0.35 + kick * 0.05, -0.42 + kick * 0.12);
+      this.fpGun.rotation.set(0.07 + kick * 0.38, 0.1, 0.05);
+      const flash = this.fpMuzzle.material as THREE.MeshBasicMaterial;
+      flash.opacity = kick * 0.9;
+      this.fpMuzzle.scale.setScalar(0.8 + kick * 1.6);
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    this.fpGun.visible = false;
     this.camera.fov = 70;
     const want = opts.paintOpen ? 2.4 : 4.0;
     this.camEye.set(this.localX, 1.48 + this.localY, this.localZ);
@@ -673,15 +704,24 @@ export class GameWorld {
 
   playShot(hunterId: string, recoil = false) {
     const rig = this.players.get(hunterId);
-    if (!rig) return;
-    rig.shootUntil = Date.now() + 200;
-    rig.muzzle.updateMatrixWorld();
-    rig.muzzle.getWorldPosition(this.muzzleWorld);
-    if (recoil) {
+    if (rig) rig.shootUntil = Date.now() + 200;
+    if (recoil && this.fpGun.visible) {
+      this.fpKick = 1;
+      this.fpMuzzle.updateMatrixWorld();
+      this.fpMuzzle.getWorldPosition(this.muzzleWorld);
       this.camera.getWorldDirection(this.forward);
-      this.pitch = Math.max(-1.4, this.pitch - 0.05);
+      this.pitch = Math.max(-1.4, this.pitch - 0.048);
+    } else if (rig) {
+      rig.muzzle.updateMatrixWorld();
+      rig.muzzle.getWorldPosition(this.muzzleWorld);
+      if (recoil) {
+        this.camera.getWorldDirection(this.forward);
+        this.pitch = Math.max(-1.4, this.pitch - 0.05);
+      } else {
+        this.forward.set(0, 0, -1).applyQuaternion(rig.group.quaternion);
+      }
     } else {
-      this.forward.set(0, 0, -1).applyQuaternion(rig.group.quaternion);
+      return;
     }
     this.tracerEnd.copy(this.muzzleWorld).addScaledVector(this.forward, 24);
     const geo = new THREE.BufferGeometry().setFromPoints([
@@ -694,7 +734,6 @@ export class GameWorld {
     );
     this.scene.add(line);
     this.tracers.push({ line, until: Date.now() + 130 });
-    if (recoil) this.pitch = Math.max(-1.4, this.pitch - 0.05);
   }
 
   private tickTracers() {
@@ -841,6 +880,8 @@ export class GameWorld {
       disposeObject(fx.group);
     }
     this.killFx = [];
+    this.camera.remove(this.fpGun);
+    disposeObject(this.fpGun);
     disposeObject(this.mapGroup);
     this.renderer.dispose();
   }

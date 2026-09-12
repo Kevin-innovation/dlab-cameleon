@@ -450,11 +450,14 @@ export function GameView({
         }
       }
 
+      const fpsHunt = !!(me && isHunter(room, me.id) && room.phase === "hunt");
       const live = snapsFrom(session);
-      world.syncPlayers(live, session.myId(), room, { localMoving, dt });
+      world.syncPlayers(live, session.myId(), room, { localMoving, dt, hideLocal: fpsHunt });
       world.updateCamera({
         paintOpen: paintOpenRef.current,
         hunterHide: hunterWait,
+        fps: fpsHunt,
+        moving: localMoving,
       });
       world.render();
       raf = requestAnimationFrame(loop);
@@ -581,7 +584,9 @@ export function GameView({
 
         {!locked && !paintOpen && !hunterHide && hud.phase !== "result" && (
           <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-sm">
-            게임 화면에서 마우스 이동 = 시점 · 좌클릭 = 조준 태그
+            {myRole === "hunter" && hud.phase === "hunt"
+              ? "1인칭 수색 · 마우스 조준 · 좌클릭 발사"
+              : "게임 화면에서 마우스 이동 = 시점 · 좌클릭 = 조준 태그"}
           </div>
         )}
 
@@ -663,10 +668,16 @@ export function GameView({
 
         {!hunterHide && hud.phase !== "result" && (
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
-            <div>마우스 이동 = 시점 · WASD 이동 · Space 점프(상자 위)</div>
-            <div>C 벽에 붙기 · E 문 · Shift 살금 · F 페인트 · V 관전</div>
-            {myRole === "hunter" && hud.phase === "hunt" && (
-              <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
+            {myRole === "hunter" && hud.phase === "hunt" ? (
+              <>
+                <div>술래 1인칭 · 마우스 조준 · WASD 이동 · Space 점프</div>
+                <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 태그 · 탄 떨어지면 카멜레온 승</div>
+              </>
+            ) : (
+              <>
+                <div>마우스 이동 = 시점 · WASD 이동 · Space 점프(상자 위)</div>
+                <div>C 벽에 붙기 · E 문 · Shift 살금 · F 페인트 · V 관전</div>
+              </>
             )}
           </div>
         )}
@@ -684,25 +695,27 @@ export function GameView({
               {paintOpen ? "페인트 ON" : "페인트"}
             </button>
           )}
-          <div className="flex flex-wrap justify-end gap-1">
-            {POSES.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => {
-                  const w = worldRef.current;
-                  if (!w) {
-                    session.me().set("pose", p.id, true);
-                    return;
-                  }
-                  applyPosePick(session, w, p.id);
-                }}
-                className={`rounded-lg px-2 py-1 text-[11px] ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          {!(myRole === "hunter" && hud.phase === "hunt") && (
+            <div className="flex flex-wrap justify-end gap-1">
+              {POSES.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    const w = worldRef.current;
+                    if (!w) {
+                      session.me().set("pose", p.id, true);
+                      return;
+                    }
+                    applyPosePick(session, w, p.id);
+                  }}
+                  className={`rounded-lg px-2 py-1 text-[11px] ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {paintOpen && myRole !== "hunter" && hud.phase !== "result" && (
@@ -790,7 +803,7 @@ export function GameView({
               <li>문 앞에서 E로 열고 방에 들어가세요. 벽 너머는 보이지 않습니다.</li>
               <li>벽 가까이 C로 붙습니다. A/D 좌우, W/S 오르내리기. 같은 면에만 붙고 벽을 통과하지 않습니다.</li>
               <li>F로 페인트를 연 뒤 스포이드로 벽 색을 찍고, 붓으로 드래그해 칠하세요.</li>
-              <li>술래는 조준점을 맞추고 클릭해서 태그합니다.</li>
+              <li>술래는 1인칭으로 총을 들고 수색합니다. 조준점 중앙에 맞추고 좌클릭으로 발사하세요.</li>
             </ol>
             <button
               type="button"

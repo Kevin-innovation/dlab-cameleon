@@ -117,6 +117,24 @@ function createGun() {
   return { gun: g, muzzle };
 }
 
+export function createViewGun() {
+  const { gun, muzzle } = createGun();
+  gun.visible = true;
+  gun.scale.setScalar(1.12);
+  gun.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.renderOrder = 1000;
+    mesh.castShadow = false;
+    const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.Material[];
+    for (const m of mats) {
+      m.depthTest = false;
+      m.depthWrite = false;
+    }
+  });
+  return { gun, muzzle };
+}
+
 function makePart(id: BodyPart, geo: THREE.BufferGeometry, playerId: string): PartLayer {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
