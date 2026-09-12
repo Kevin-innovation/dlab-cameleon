@@ -1,5 +1,4 @@
-import { DEFAULT_HIDE, DEFAULT_HUNT, TAG_RADIUS, TAG_RANGE } from "./config";
-import { poseSize } from "./character";
+import { DEFAULT_HIDE, DEFAULT_HUNT, TAG_RANGE } from "./config";
 import type { PlayerSnap, RoomState } from "./types";
 
 export function emptyRoom(): RoomState {
@@ -79,32 +78,16 @@ export function processShot(
   room: RoomState,
   players: PlayerSnap[],
   hunterId: string,
-  wx: number,
-  wy: number,
+  targetId: string,
   now: number,
 ): { room: RoomState; tagged?: PlayerSnap } {
   if (room.phase !== "hunt") return { room };
   if (!isHunter(room, hunterId)) return { room };
   const hunter = players.find((p) => p.id === hunterId);
-  if (!hunter) return { room };
-
-  const distH = Math.hypot(wx - hunter.x, wy - hunter.y);
-  if (distH > TAG_RANGE) return { room };
-
-  let best: PlayerSnap | undefined;
-  let bestD = TAG_RADIUS;
-  for (const p of players) {
-    if (p.id === hunterId) continue;
-    if (!hiderAlive(room, p.id)) continue;
-    const { hw, hh } = poseSize(p.pose);
-    const r = Math.max(hw, hh) + 6;
-    const d = Math.hypot(wx - p.x, wy - p.y);
-    if (d < Math.min(bestD, r + 8)) {
-      best = p;
-      bestD = d;
-    }
-  }
-  if (!best) return { room };
+  const best = players.find((p) => p.id === targetId);
+  if (!hunter || !best) return { room };
+  if (!hiderAlive(room, best.id)) return { room };
+  if (Math.hypot(best.x - hunter.x, best.z - hunter.z) > TAG_RANGE) return { room };
 
   const caughtIds = room.caughtIds.includes(best.id)
     ? room.caughtIds

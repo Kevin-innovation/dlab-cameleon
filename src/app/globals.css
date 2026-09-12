@@ -49,3 +49,7 @@ button {
 select option {
   color: #111;
 }
+
+canvas {
+  display: block;
+}

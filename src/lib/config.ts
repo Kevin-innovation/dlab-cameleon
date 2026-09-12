@@ -1,11 +1,11 @@
 export const APP_NAME = "카멜론";
 export const MAX_PLAYERS = 8;
 export const ROOMS_PER_SERVER = 8;
-export const PLAYER_SPEED = 240;
-export const SNEAK_SPEED = 110;
-export const PAINT_SPEED = 90;
-export const TAG_RADIUS = 28;
-export const TAG_RANGE = 170;
+export const PLAYER_SPEED = 5.2;
+export const SNEAK_SPEED = 2.3;
+export const PAINT_SPEED = 2.0;
+export const PLAYER_RADIUS = 0.32;
+export const TAG_RANGE = 5.8;
 export const SHOT_COOLDOWN = 700;
 export const TAUNT_COOLDOWN = 8000;
 export const FORCED_TAUNT = 22000;

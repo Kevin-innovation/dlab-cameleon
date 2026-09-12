@@ -25,8 +25,8 @@ export type Session = {
   setRoom: (room: RoomState) => void;
   players: () => SessionPlayer[];
   me: () => SessionPlayer;
-  callShot: (x: number, y: number) => void;
-  onShot: (cb: (hunterId: string, x: number, y: number) => void) => () => void;
+  callShot: (targetId: string) => void;
+  onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
   leave: () => void;
 };
 
@@ -35,16 +35,14 @@ function readSnap(p: SessionPlayer): PlayerSnap {
     id: p.id,
     name: String(p.get("name") ?? "손님"),
     ready: Boolean(p.get("ready")),
-    x: Number(p.get("x") ?? 400),
-    y: Number(p.get("y") ?? 400),
-    dir: Number(p.get("dir") ?? 0),
+    x: Number(p.get("x") ?? 4),
+    z: Number(p.get("z") ?? 4),
+    yaw: Number(p.get("yaw") ?? 0),
     pose: (p.get("pose") as Pose) || "stand",
     fill: String(p.get("fill") ?? WHITE),
     blobs: (p.get("blobs") as PaintBlob[]) || [],
     role: (p.get("role") as Role) || "spectator",
     alive: p.get("alive") !== false,
-    vx: Number(p.get("vx") ?? 0),
-    vy: Number(p.get("vy") ?? 0),
   };
 }
 
@@ -73,6 +71,9 @@ export async function connectOnline(opts: {
       pose: "stand",
       alive: true,
       role: "spectator",
+      x: 4.2,
+      z: 3.4,
+      yaw: 0,
     },
   });
 
@@ -96,17 +97,19 @@ export async function connectOnline(opts: {
   me.setState("fill", WHITE, true);
   me.setState("blobs", [], true);
   me.setState("pose", "stand", true);
+  me.setState("x", 4.2, true);
+  me.setState("z", 3.4, true);
+  me.setState("yaw", 0, true);
 
   if (isHost() && !getState("room")) {
     setState("room", emptyRoom(), true);
   }
 
-  const shotListeners = new Set<(hunterId: string, x: number, y: number) => void>();
+  const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
   RPC.register("shot", async (payload, sender) => {
-    const x = Number(payload?.x);
-    const y = Number(payload?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    shotListeners.forEach((cb) => cb(sender.id, x, y));
+    const targetId = String(payload?.targetId ?? "");
+    if (!targetId) return;
+    shotListeners.forEach((cb) => cb(sender.id, targetId));
   });
 
   return {
@@ -124,8 +127,8 @@ export async function connectOnline(opts: {
         set: (k, v, rel) => p.setState(k, v, rel),
       };
     },
-    callShot: (x, y) => {
-      void RPC.call("shot", { x, y }, RPC.Mode.HOST);
+    callShot: (targetId) => {
+      void RPC.call("shot", { targetId }, RPC.Mode.HOST);
     },
     onShot: (cb) => {
       shotListeners.add(cb);
@@ -147,16 +150,14 @@ export function createPractice(nickname: string): Session {
   const store: Record<string, unknown> = {
     name: nickname,
     ready: true,
-    x: 420,
-    y: 520,
-    dir: 0,
+    x: 4.2,
+    z: 3.4,
+    yaw: 0,
     pose: "stand",
     fill: WHITE,
     blobs: [],
     role: "hider",
     alive: true,
-    vx: 0,
-    vy: 0,
   };
   let room = emptyRoom();
   const me: SessionPlayer = {
@@ -166,7 +167,7 @@ export function createPractice(nickname: string): Session {
       store[k] = v;
     },
   };
-  const shotListeners = new Set<(hunterId: string, x: number, y: number) => void>();
+  const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
   return {
     kind: "practice",
     myId: () => id,
@@ -177,7 +178,7 @@ export function createPractice(nickname: string): Session {
     },
     players: () => [me],
     me: () => me,
-    callShot: (x, y) => shotListeners.forEach((cb) => cb(id, x, y)),
+    callShot: (targetId) => shotListeners.forEach((cb) => cb(id, targetId)),
     onShot: (cb) => {
       shotListeners.add(cb);
       return () => shotListeners.delete(cb);

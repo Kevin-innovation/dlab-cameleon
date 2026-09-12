@@ -28,16 +28,24 @@ export type PaintBlob = {
   c: string;
 };
 
-export type Rect = {
+export type BoxDef = {
   x: number;
   y: number;
+  z: number;
   w: number;
   h: number;
+  d: number;
   color: string;
   pattern?: Pattern;
   colors?: string[];
   collide?: boolean;
-  label?: string;
+};
+
+export type Collider = {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
 };
 
 export type GameMap = {
@@ -46,12 +54,13 @@ export type GameMap = {
   blurb: string;
   difficulty: "쉬움" | "보통" | "어려움";
   w: number;
-  h: number;
-  bg: string;
+  d: number;
+  ceiling: number;
+  fog: string;
   floor: string;
-  layers: Rect[];
-  spawns: { x: number; y: number }[];
-  hunterSpawns: { x: number; y: number }[];
+  boxes: BoxDef[];
+  spawns: { x: number; z: number }[];
+  hunterSpawns: { x: number; z: number }[];
 };
 
 export type RoomState = {
@@ -76,15 +85,13 @@ export type PlayerSnap = {
   name: string;
   ready: boolean;
   x: number;
-  y: number;
-  dir: number;
+  z: number;
+  yaw: number;
   pose: Pose;
   fill: string;
   blobs: PaintBlob[];
   role: Role;
   alive: boolean;
-  vx: number;
-  vy: number;
 };
 
 export const POSES: { id: Pose; label: string; hint: string }[] = [
