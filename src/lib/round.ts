@@ -19,6 +19,7 @@ export function emptyRoom(): RoomState {
     feed: [],
     taunts: [],
     doors: {},
+    chat: [],
   };
 }
 

@@ -1,11 +1,13 @@
 # 카멜론
 
-메챠 카멜레온 룰을 브라우저로 옮긴 **Three.js 3D** IO 숨바꼭질입니다. 닉네임을 정하고 서버를 고른 뒤 방에 들어가면, 라운드마다 술래와 카멜레온이 무작위로 나뉩니다.
+메챠 카멜레온 룰을 브라우저로 옮긴 **Three.js 3D** IO 숨바꼭질입니다. 닉네임을 정하면 한국 서버 통합 룸에 바로 입장하고, 최대 8명이 한 공간에서 라운드마다 술래와 카멜레온으로 나뉩니다.
 
 - DB 없음 (방 상태는 메모리·실시간 세션에만 존재, 모두 나가면 사라집니다)
 - Vercel 배포용 Next.js 앱
 - 렌더: Three.js 3인칭 (WASD + 마우스 시점)
 - 실시간은 [Playroom Kit](https://joinplayroom.com/) 세션 (우리 서버/DB가 아님)
+- 한국 서버 통합 룸 1개 · 최대 8인
+- 접속자 목록과 최근 60개 방 채팅 제공
 
 ## 룰
 
@@ -24,7 +26,7 @@ npm run dev
 ```
 
 브라우저에서 http://localhost:3000  
-멀티플레이는 탭/기기 두 개에서 **같은 서버·같은 방**을 고르면 됩니다. 혼자 페인트 연습은 홈의 **혼자 연습**으로.
+멀티플레이는 탭/기기에서 홈의 **한국 서버 입장**을 누르면 같은 통합 룸으로 만납니다. 혼자 페인트 연습은 홈의 **AI와 플레이**로.
 
 ## Vercel 배포
 
@@ -37,9 +39,9 @@ npm run dev
 
 ## 구조
 
-- `src/components/GameApp.tsx` — 닉네임 / 서버 / 방
-- `src/components/GameView.tsx` — 대기실, 페인트, 라운드
+- `src/components/GameApp.tsx` — 닉네임 / 한국 서버 통합 룸 입장
+- `src/components/GameView.tsx` — 대기실, 접속자, 방 채팅, 페인트, 라운드
 - `src/lib/engine/world.ts` — Three.js 씬, 카메라, 레이캐스트
 - `src/lib/maps.ts` — 3D 저택 / 농장 / 하수도
 - `src/lib/round.ts` — 역할 배정, 태그, 승패
-- `src/lib/session.ts` — Playroom 세션 + 로컬 연습
+- `src/lib/session.ts` — Playroom 세션, 접속자 동기화, 호스트 채팅 RPC, 로컬 연습

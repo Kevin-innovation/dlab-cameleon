@@ -6,10 +6,11 @@ import {
   RPC,
   setState,
   getState,
+  getParticipants,
 } from "playroomkit";
 import { BOT_NAMES, MAX_PLAYERS, WHITE } from "./config";
 import { emptyRoom } from "./round";
-import type { PaintBlob, PlayerSnap, Pose, Role, RoomState } from "./types";
+import type { ChatMessage, PaintBlob, PlayerSnap, Pose, Role, RoomState } from "./types";
 
 export type SessionPlayer = {
   id: string;
@@ -29,6 +30,7 @@ export type Session = {
   onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
   callDoor: (id: string) => void;
   onDoor: (cb: (id: string) => void) => () => void;
+  sendChat: (text: string) => void;
   leave: () => void;
 };
 
@@ -55,6 +57,18 @@ export function snapsFrom(session: Session): PlayerSnap[] {
 }
 
 const joined = new Map<string, { id: string; get: SessionPlayer["get"]; set: SessionPlayer["set"] }>();
+
+function registerPlayer(player: {
+  id: string;
+  getState: (key: string) => unknown;
+  setState: (key: string, value: unknown, reliable?: boolean) => void;
+}) {
+  joined.set(player.id, {
+    id: player.id,
+    get: (k) => player.getState(k),
+    set: (k, v, rel) => player.setState(k, v, rel),
+  });
+}
 
 export async function connectOnline(opts: {
   roomCode: string;
@@ -83,20 +97,12 @@ export async function connectOnline(opts: {
   });
 
   onPlayerJoin((player) => {
-    joined.set(player.id, {
-      id: player.id,
-      get: (k) => player.getState(k),
-      set: (k, v, rel) => player.setState(k, v, rel),
-    });
+    registerPlayer(player);
     player.onQuit(() => joined.delete(player.id));
   });
 
   const me = myPlayer();
-  joined.set(me.id, {
-    id: me.id,
-    get: (k) => me.getState(k),
-    set: (k, v, rel) => me.setState(k, v, rel),
-  });
+  registerPlayer(me);
   me.setState("name", opts.nickname, true);
   me.setState("ready", false, true);
   me.setState("fill", WHITE, true);
@@ -123,6 +129,20 @@ export async function connectOnline(opts: {
     if (!id) return;
     doorListeners.forEach((cb) => cb(id));
   });
+  RPC.register("chat", async (payload, sender) => {
+    if (!isHost()) return;
+    const text = String(payload?.text ?? "").trim().slice(0, 120);
+    if (!text) return;
+    const message: ChatMessage = {
+      id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      senderId: sender.id,
+      senderName: String(sender.getState("name") ?? "손님").trim().slice(0, 12) || "손님",
+      text,
+      at: Date.now(),
+    };
+    const room = (getState("room") as RoomState) || emptyRoom();
+    setState("room", { ...room, chat: [...(room.chat ?? []), message].slice(-60) }, true);
+  });
 
   return {
     kind: "online",
@@ -130,7 +150,19 @@ export async function connectOnline(opts: {
     isHost: () => isHost(),
     getRoom: () => (getState("room") as RoomState) || emptyRoom(),
     setRoom: (room) => setState("room", room, true),
-    players: () => [...joined.values()],
+    players: () => {
+      try {
+        const participants = getParticipants();
+        const activeIds = new Set(Object.keys(participants));
+        for (const id of joined.keys()) {
+          if (!activeIds.has(id)) joined.delete(id);
+        }
+        for (const player of Object.values(participants)) registerPlayer(player);
+      } catch {
+        // Playroom can briefly have no participant snapshot during reconnect.
+      }
+      return [...joined.values()];
+    },
     me: () => {
       const p = myPlayer();
       return {
@@ -152,6 +184,9 @@ export async function connectOnline(opts: {
     onDoor: (cb) => {
       doorListeners.add(cb);
       return () => doorListeners.delete(cb);
+    },
+    sendChat: (text) => {
+      void RPC.call("chat", { text: text.slice(0, 120) }, RPC.Mode.HOST);
     },
     leave: () => {
       try {
@@ -216,6 +251,18 @@ export function createPractice(nickname: string): Session {
     onDoor: (cb) => {
       doorListeners.add(cb);
       return () => doorListeners.delete(cb);
+    },
+    sendChat: (text) => {
+      const clean = text.trim().slice(0, 120);
+      if (!clean) return;
+      const message: ChatMessage = {
+        id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        senderId: id,
+        senderName: nickname,
+        text: clean,
+        at: Date.now(),
+      };
+      room = { ...room, chat: [...(room.chat ?? []), message].slice(-60) };
     },
     leave: () => {
       window.location.assign(window.location.origin + "/");

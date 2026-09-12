@@ -37,6 +37,7 @@ const wall = (
 
 const books: Pattern = "books";
 const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67e22", "#1abc9c", "#34495e"];
+export const BOX_COLLIDE_OUTSET = 0.06;
 
 const mansion: GameMap = {
   id: "mansion",
@@ -633,8 +634,6 @@ function isSolidProp(b: BoxDef) {
   if (b.w < 0.32 || b.d < 0.32) return false;
   return b.h >= 0.45 && b.w >= 0.45 && b.d >= 0.45;
 }
-
-export const BOX_COLLIDE_OUTSET = 0.06;
 
 export function mapColliders(map: GameMap) {
   const pad = -BOX_COLLIDE_OUTSET;

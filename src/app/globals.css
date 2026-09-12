@@ -7,6 +7,8 @@
   --pink: #ff7aa2;
   --moss: #0b100d;
   --paper: #f4efe4;
+  --font-noto: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 
 @theme inline {

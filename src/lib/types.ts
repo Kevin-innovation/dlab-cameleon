@@ -102,6 +102,7 @@ export type RoomState = {
   feed: { id: string; by: string; name: string; byName: string; at: number }[];
   taunts: { x: number; y: number; at: number; id: string }[];
   doors: Record<string, boolean>;
+  chat: ChatMessage[];
   winner?: "hunters" | "hiders";
 };
 
@@ -119,6 +120,14 @@ export type PlayerSnap = {
   role: Role;
   alive: boolean;
   shootSeq: number;
+};
+
+export type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  at: number;
 };
 
 export const POSES: { id: Pose; label: string; hint: string }[] = [

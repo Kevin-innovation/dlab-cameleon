@@ -1,18 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
-import { APP_NAME, MAX_PLAYERS, NICK_KEY, ROOMS_PER_SERVER, SERVERS, makeRoomCode } from "@/lib/config";
+import { useState } from "react";
+import { APP_NAME, DEFAULT_ROOM_CODE, MAX_PLAYERS, NICK_KEY, SERVERS } from "@/lib/config";
 import { MAPS } from "@/lib/maps";
 import { connectOnline, createPractice, type Session } from "@/lib/session";
 import { GameView } from "./GameView";
 
 type Screen =
   | { t: "home" }
-  | { t: "servers" }
-  | { t: "rooms"; serverId: string }
-  | { t: "connecting"; serverId: string; room: number }
-  | { t: "play"; serverId: string; room: number }
+  | { t: "connecting" }
+  | { t: "play" }
   | { t: "practice" };
 
 export default function GameApp() {
@@ -22,7 +20,7 @@ export default function GameApp() {
   const [error, setError] = useState("");
   const [howto, setHowto] = useState(false);
 
-  const goServers = () => {
+  const joinGame = async () => {
     const name = nick.trim().slice(0, 12);
     if (name.length < 2) {
       setError("닉네임은 2~12자");
@@ -31,23 +29,18 @@ export default function GameApp() {
     sessionStorage.setItem(NICK_KEY, name);
     setNick(name);
     setError("");
-    setScreen({ t: "servers" });
-  };
-
-  const joinRoom = async (serverId: string, room: number) => {
-    setError("");
-    setScreen({ t: "connecting", serverId, room });
+    setScreen({ t: "connecting" });
     try {
       const s = await connectOnline({
-        roomCode: makeRoomCode(serverId, room),
-        nickname: nick,
+        roomCode: DEFAULT_ROOM_CODE,
+        nickname: name,
       });
       setSession(s);
-      setScreen({ t: "play", serverId, room });
+      setScreen({ t: "play" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "접속 실패";
-      setError(msg.includes("ROOM_LIMIT") || msg.includes("full") ? "방이 가득 찼습니다" : msg);
-      setScreen({ t: "rooms", serverId });
+      setError(msg.includes("ROOM_LIMIT") || msg.includes("full") ? `통합 룸이 가득 찼습니다 (최대 ${MAX_PLAYERS}인)` : msg);
+      setScreen({ t: "home" });
     }
   };
 
@@ -64,12 +57,11 @@ export default function GameApp() {
   };
 
   if ((screen.t === "play" || screen.t === "practice") && session) {
-    const server = SERVERS.find((s) => screen.t === "play" && s.id === screen.serverId);
     return (
       <GameView
         session={session}
-        serverName={screen.t === "practice" ? "AI 매치" : server?.name || "서버"}
-        roomLabel={screen.t === "practice" ? "호스트 + AI 7인" : `방 ${screen.room}`}
+        serverName={screen.t === "practice" ? "AI 매치" : SERVERS[0].name}
+        roomLabel={screen.t === "practice" ? "호스트 + AI 7인" : `통합 룸 · 최대 ${MAX_PLAYERS}인`}
       />
     );
   }
@@ -104,31 +96,15 @@ export default function GameApp() {
             nick={nick}
             setNick={setNick}
             error={error}
-            onPlay={goServers}
+            onPlay={() => void joinGame()}
             onPractice={startPractice}
-          />
-        )}
-        {screen.t === "servers" && (
-          <ServerPick
-            nick={nick}
-            onBack={() => setScreen({ t: "home" })}
-            onPick={(id) => setScreen({ t: "rooms", serverId: id })}
-          />
-        )}
-        {screen.t === "rooms" && (
-          <RoomPick
-            nick={nick}
-            serverId={screen.serverId}
-            error={error}
-            onBack={() => setScreen({ t: "servers" })}
-            onJoin={(room) => void joinRoom(screen.serverId, room)}
           />
         )}
         {screen.t === "connecting" && (
           <div className="flex flex-1 flex-col items-center justify-center">
             <Image src="/mascot.jpg" alt="" width={96} height={96} className="h-24 w-24 animate-pulse rounded-3xl object-cover" />
             <p className="mt-4 font-display text-2xl">방 입장 중...</p>
-            <p className="text-white/60">같은 서버·같은 방을 고른 사람과 만납니다</p>
+            <p className="text-white/60">한국 서버 통합 룸에 접속하고 있습니다</p>
           </div>
         )}
       </div>
@@ -161,8 +137,8 @@ function Home({
           배경이 되어 나와라
         </h1>
         <p className="mt-4 text-base text-white/75">
-          닉네임을 정하고 서버를 고른 뒤 방에 들어갑니다. 라운드마다 술래와 카멜레온이 무작위로
-          나뉩니다. 스포이드로 색을 찍고, 자세를 맞추고, 술래의 눈을 속이세요.
+          닉네임만 정하면 한국 서버 통합 룸에 바로 입장합니다. 최대 8명이 한 공간에서 만나 라운드마다
+          술래와 카멜레온으로 나뉩니다. 스포이드로 색을 찍고, 자세를 맞추고, 술래의 눈을 속이세요.
         </p>
         <form
           className="mt-8 flex w-full max-w-md flex-col gap-3"
@@ -181,7 +157,7 @@ function Home({
           />
           {error && <p className="text-sm text-pink">{error}</p>}
           <button type="submit" className="rounded-full bg-lime py-3 font-display text-xl text-black">
-            서버 선택
+            한국 서버 입장
           </button>
           <button
             type="button"
@@ -199,93 +175,6 @@ function Home({
         height={288}
         className="mx-auto h-56 w-56 rounded-[2.2rem] object-cover shadow-2xl ring-4 ring-lime/30 md:h-72 md:w-72"
       />
-    </main>
-  );
-}
-
-function ServerPick({
-  nick,
-  onBack,
-  onPick,
-}: {
-  nick: string;
-  onBack: () => void;
-  onPick: (id: string) => void;
-}) {
-  return (
-    <main className="flex flex-1 flex-col py-8">
-      <button type="button" onClick={onBack} className="self-start text-sm text-white/60">
-        ← 닉네임
-      </button>
-      <h1 className="mt-4 font-display text-4xl">서버 선택</h1>
-      <p className="mt-1 text-white/65">
-        안녕, <span className="text-lime">{nick}</span>. 같은 서버의 같은 방으로 모이세요.
-      </p>
-      <div className="mt-8 grid gap-3 md:grid-cols-2">
-        {SERVERS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => onPick(s.id)}
-            className="group rounded-3xl border border-white/10 bg-black/35 p-5 text-left transition hover:border-lime/50 hover:bg-black/50"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="font-display text-2xl">{s.name}</div>
-                <div className="text-sm text-white/60">
-                  {s.city} · {s.flavor}
-                </div>
-              </div>
-              <span className="rounded-full bg-lime/15 px-2 py-1 text-xs text-lime">{s.ping}</span>
-            </div>
-            <div className="mt-4 text-sm text-white/50">방 {ROOMS_PER_SERVER}개 · 방당 {MAX_PLAYERS}명</div>
-          </button>
-        ))}
-      </div>
-    </main>
-  );
-}
-
-function RoomPick({
-  nick,
-  serverId,
-  error,
-  onBack,
-  onJoin,
-}: {
-  nick: string;
-  serverId: string;
-  error: string;
-  onBack: () => void;
-  onJoin: (room: number) => void;
-}) {
-  const server = SERVERS.find((s) => s.id === serverId);
-  const rooms = useMemo(() => Array.from({ length: ROOMS_PER_SERVER }, (_, i) => i + 1), []);
-  return (
-    <main className="flex flex-1 flex-col py-8">
-      <button type="button" onClick={onBack} className="self-start text-sm text-white/60">
-        ← 서버
-      </button>
-      <h1 className="mt-4 font-display text-4xl">{server?.name} 방</h1>
-      <p className="mt-1 text-white/65">
-        {nick} · 친구와 같은 번호를 고르면 바로 만납니다. 방 인원은 입장 후 확인됩니다.
-      </p>
-      {error && <p className="mt-3 text-pink">{error}</p>}
-      <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-        {rooms.map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onJoin(n)}
-            className="rounded-3xl border border-white/10 bg-black/35 p-5 text-left hover:border-lime/60"
-          >
-            <div className="text-xs text-white/50">ROOM</div>
-            <div className="font-display text-3xl">{n}</div>
-            <div className="mt-2 text-sm text-lime">입장</div>
-            <div className="text-xs text-white/45">최대 {MAX_PLAYERS}인</div>
-          </button>
-        ))}
-      </div>
     </main>
   );
 }

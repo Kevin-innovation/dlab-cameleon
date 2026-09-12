@@ -66,9 +66,9 @@ export function resolveStuck(
       if (!solidAt(x, z, r, feetY, headY, b)) continue;
       const cx = clamp(x, b.minX, b.maxX);
       const cz = clamp(z, b.minZ, b.maxZ);
-      let dx = x - cx;
-      let dz = z - cz;
-      let len = Math.hypot(dx, dz);
+      const dx = x - cx;
+      const dz = z - cz;
+      const len = Math.hypot(dx, dz);
       if (len < 1e-5) {
         const inwardX = bounds.w * 0.5 - x;
         const inwardZ = bounds.d * 0.5 - z;

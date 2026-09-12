@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   MAX_BLOBS,
+  MAX_PLAYERS,
   SHOT_COOLDOWN,
   SYNC_HZ,
   TAUNT_COOLDOWN,
@@ -56,6 +57,7 @@ export function GameView({
   const [nowTick, setNowTick] = useState(0);
   const [atDoor, setAtDoor] = useState(false);
   const [tabOpen, setTabOpen] = useState(false);
+  const [socialOpen, setSocialOpen] = useState(() => session.getRoom().phase === "lobby");
   const paintOpenRef = useRef(false);
   const watchingRef = useRef(false);
   const helpRef = useRef(false);
@@ -66,7 +68,6 @@ export function GameView({
   useEffect(() => {
     paintOpenRef.current = paintOpen;
     if (paintOpen) document.exitPointerLock();
-    else canvasRef.current?.requestPointerLock();
   }, [paintOpen]);
   useEffect(() => {
     colorRef.current = color;
@@ -873,6 +874,14 @@ export function GameView({
         />
       )}
 
+      <RoomSocialPanel
+        session={session}
+        room={hud}
+        people={people}
+        open={socialOpen}
+        onToggle={() => setSocialOpen((value) => !value)}
+      />
+
       {help && (
         <div className="absolute inset-0 z-40 grid place-items-center bg-black/70 p-4" onClick={() => setHelp(false)}>
           <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
@@ -1079,6 +1088,135 @@ function Lobby({
       </div>
     </aside>
   );
+}
+
+function RoomSocialPanel({
+  session,
+  room,
+  people,
+  open,
+  onToggle,
+}: {
+  session: Session;
+  room: RoomState;
+  people: PlayerSnap[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const messages = (room.chat ?? []).slice(-24);
+
+  const send = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    session.sendChat(text);
+    setDraft("");
+  };
+
+  return (
+    <aside className="pointer-events-auto absolute right-3 top-[5.5rem] z-30 w-[min(calc(100vw-1.5rem),320px)]">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="room-social-panel"
+        onClick={onToggle}
+        className="ml-auto flex items-center gap-2 rounded-full border border-lime/30 bg-[#101a14]/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+      >
+        <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_rgba(198,255,74,0.8)]" aria-hidden="true" />
+        <span>접속자 {people.length}/{MAX_PLAYERS}</span>
+        <span className="text-white/45">·</span>
+        <span>{open ? "패널 닫기" : "채팅 열기"}</span>
+      </button>
+
+      {open && (
+        <section
+          id="room-social-panel"
+          aria-label="접속자 및 방 채팅"
+          className="mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#101a14]/95 shadow-2xl backdrop-blur-md"
+        >
+          <div className="border-b border-white/10 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg">통합 룸</h2>
+              <span className="text-xs text-lime">최대 {MAX_PLAYERS}인</span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-white/50">현재 접속 중인 플레이어</p>
+            <ul className="mt-2 grid grid-cols-2 gap-1.5" aria-label="접속자 목록">
+              {people.map((person) => {
+                const status = presenceStatus(room, person, session.myId());
+                return (
+                  <li
+                    key={person.id}
+                    className="flex min-w-0 items-center gap-1.5 rounded-lg bg-white/5 px-2 py-1.5 text-xs"
+                    title={`${person.name} · ${status}`}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-lime" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate">{person.name}</span>
+                    <span className="shrink-0 text-[10px] text-white/45">{status}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="px-3 pt-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold tracking-wide text-white/65">방 채팅</h3>
+              <span className="text-[10px] text-white/35">최근 {messages.length}개</span>
+            </div>
+            <div
+              className="mt-1.5 h-40 overflow-y-auto rounded-xl bg-black/25 p-2"
+              role="log"
+              aria-live="polite"
+              aria-label="방 채팅 메시지"
+            >
+              {messages.length === 0 ? (
+                <p className="grid h-full place-items-center text-xs text-white/35">첫 인사를 남겨보세요.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {messages.map((message) => (
+                    <li key={message.id} className="text-xs leading-snug">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-semibold text-lime">{message.senderName}</span>
+                        <time className="text-[10px] text-white/30" dateTime={new Date(message.at).toISOString()}>
+                          {new Date(message.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                        </time>
+                      </div>
+                      <p className="break-words text-white/80">{message.text}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <form className="mt-2 flex gap-1.5 pb-3" onSubmit={send}>
+              <label className="sr-only" htmlFor="room-chat-input">
+                채팅 메시지
+              </label>
+              <input
+                id="room-chat-input"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                maxLength={120}
+                placeholder="메시지를 입력하세요"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-xs outline-none focus:border-lime/50 focus:ring-1 focus:ring-lime/40"
+              />
+              <button type="submit" className="rounded-lg bg-lime px-3 py-2 text-xs font-semibold text-black">
+                전송
+              </button>
+            </form>
+          </div>
+        </section>
+      )}
+    </aside>
+  );
+}
+
+function presenceStatus(room: RoomState, person: PlayerSnap, myId: string) {
+  if (person.id === myId) return "나";
+  if (room.phase === "lobby") return person.ready ? "준비" : "대기";
+  if (room.phase === "result") return "결과";
+  if (room.mode === "normal" && room.caughtIds.includes(person.id)) return "탈락";
+  return "플레이 중";
 }
 
 function ScoreTab({

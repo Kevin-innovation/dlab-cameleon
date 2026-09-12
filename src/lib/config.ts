@@ -1,6 +1,8 @@
 export const APP_NAME = "카멜론";
-export const MAX_PLAYERS = 10;
-export const ROOMS_PER_SERVER = 8;
+export const MAX_PLAYERS = 8;
+export const ROOMS_PER_SERVER = 1;
+export const DEFAULT_SERVER_ID = "kr1";
+export const DEFAULT_ROOM_NUMBER = 1;
 export const PLAYER_SPEED = 5.6;
 export const RUN_SPEED = 9.4;
 export const SNEAK_SPEED = 3.2;
@@ -24,11 +26,7 @@ export const SCORE_SURVIVE = 150;
 export const SCORE_HUNT_WIN = 40;
 
 export const SERVERS = [
-  { id: "kr1", name: "한국 1", city: "서울", ping: "9ms", flavor: "제일 붐빔" },
-  { id: "kr2", name: "한국 2", city: "부산", ping: "14ms", flavor: "대기 짧음" },
-  { id: "jp1", name: "일본", city: "오사카", ping: "38ms", flavor: "원정 서버" },
-  { id: "as1", name: "아시아", city: "싱가포르", ping: "72ms", flavor: "국제전" },
-  { id: "us1", name: "미주", city: "LA", ping: "160ms", flavor: "심야 인원" },
+  { id: DEFAULT_SERVER_ID, name: "한국 서버", city: "서울", ping: "9ms", flavor: "통합 플레이 룸" },
 ] as const;
 
 export type ServerId = (typeof SERVERS)[number]["id"];
@@ -37,6 +35,8 @@ export function makeRoomCode(serverId: string, roomIndex: number) {
   const raw = `DLABCM${serverId}${roomIndex}`.toUpperCase();
   return raw.replace(/[^A-Z0-9]/g, "").slice(0, 16);
 }
+
+export const DEFAULT_ROOM_CODE = makeRoomCode(DEFAULT_SERVER_ID, DEFAULT_ROOM_NUMBER);
 
 export const NICK_KEY = "camelon-nick";
 
