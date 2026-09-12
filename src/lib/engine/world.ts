@@ -37,11 +37,15 @@ export class GameWorld {
   localX = 4;
   localZ = 4;
   sampleCanvases: { mesh: THREE.Mesh; canvas: HTMLCanvasElement }[] = [];
+  camBlockers: THREE.Object3D[] = [];
   private euler = new THREE.Euler(0, 0, 0, "YXZ");
   private forward = new THREE.Vector3();
   private right = new THREE.Vector3();
   private wish = new THREE.Vector3();
   private camPos = new THREE.Vector3();
+  private camEye = new THREE.Vector3();
+  private camDir = new THREE.Vector3();
+  private camRay = new THREE.Raycaster();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -59,7 +63,7 @@ export class GameWorld {
     this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, 1, 0.08, 120);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.12, 80);
     this.camera.rotation.order = "YXZ";
     this.scene.add(this.mapGroup);
     this.resize();
@@ -79,6 +83,7 @@ export class GameWorld {
     this.map = map;
     this.colliders = mapColliders(map);
     this.sampleCanvases = [];
+    this.camBlockers = [];
     while (this.mapGroup.children.length) {
       const ch = this.mapGroup.children[0];
       this.mapGroup.remove(ch);
@@ -113,6 +118,7 @@ export class GameWorld {
     floor.receiveShadow = true;
     floor.userData.color = map.floor;
     this.mapGroup.add(floor);
+    this.camBlockers.push(floor);
 
     const ceil = new THREE.Mesh(
       new THREE.PlaneGeometry(map.w, map.d),
@@ -121,6 +127,7 @@ export class GameWorld {
     ceil.rotation.x = Math.PI / 2;
     ceil.position.set(map.w / 2, map.ceiling, map.d / 2);
     this.mapGroup.add(ceil);
+    this.camBlockers.push(ceil);
 
     for (const b of map.boxes) {
       const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
@@ -142,6 +149,7 @@ export class GameWorld {
         mesh.userData.canvas = cnv;
         this.sampleCanvases.push({ mesh, canvas: cnv });
         this.mapGroup.add(mesh);
+        if (b.collide || b.h >= 0.28) this.camBlockers.push(mesh);
       } else {
         mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.78 });
         const mesh = new THREE.Mesh(geo, mat);
@@ -150,6 +158,7 @@ export class GameWorld {
         mesh.receiveShadow = true;
         mesh.userData.color = b.color;
         this.mapGroup.add(mesh);
+        if (b.collide || b.h >= 0.28) this.camBlockers.push(mesh);
       }
     }
   }
@@ -264,10 +273,24 @@ export class GameWorld {
     }
     this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     this.camera.fov = 70;
-    const dist = opts.paintOpen ? 2.6 : 4.2;
-    this.camPos.set(this.localX, 1.5, this.localZ).addScaledVector(this.forward, -dist);
-    this.camPos.y = Math.max(0.5, 1.5 - this.forward.y * dist * 0.15);
-    this.camera.position.copy(this.camPos);
+    const want = opts.paintOpen ? 2.4 : 4.0;
+    this.camEye.set(this.localX, 1.48, this.localZ);
+    this.camPos.copy(this.camEye).addScaledVector(this.forward, -want);
+    this.camPos.y = Math.max(0.55, this.camPos.y);
+    this.camDir.copy(this.camPos).sub(this.camEye);
+    const maxDist = this.camDir.length();
+    if (maxDist > 0.001) {
+      this.camDir.multiplyScalar(1 / maxDist);
+      this.camRay.set(this.camEye, this.camDir);
+      this.camRay.near = 0.05;
+      this.camRay.far = maxDist;
+      const hit = this.camRay.intersectObjects(this.camBlockers, false)[0];
+      const dist = hit ? Math.max(0.42, hit.distance - 0.22) : maxDist;
+      this.camera.position.copy(this.camEye).addScaledVector(this.camDir, dist);
+    } else {
+      this.camera.position.copy(this.camEye);
+    }
+    this.camera.position.y = Math.max(0.42, this.camera.position.y);
     this.camera.updateProjectionMatrix();
   }
 

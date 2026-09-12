@@ -366,9 +366,12 @@ export function GameView({
   const hunterHide = myRole === "hunter" && hud.phase === "hide";
   const timeLeft = remaining(hud, nowTick);
 
-  const startRound = () => {
+  const startRound = (force = false) => {
     if (!session.isHost()) return;
-    session.setRoom(beginRound(session.getRoom(), session.players().map((p) => p.id), Date.now()));
+    const players = snapsFrom(session);
+    if (players.length < 1) return;
+    if (!force && players.some((p) => !p.ready)) return;
+    session.setRoom(beginRound(session.getRoom(), players.map((p) => p.id), Date.now()));
   };
 
   return (
@@ -380,7 +383,7 @@ export function GameView({
           people={people}
           serverName={serverName}
           roomLabel={roomLabel}
-          onStart={startRound}
+          onStart={() => startRound(false)}
         />
       )}
 
@@ -453,7 +456,7 @@ export function GameView({
         )}
 
         {hud.phase === "result" && (
-          <ResultPanel room={hud} people={people} host={session.isHost()} onNext={startRound} />
+          <ResultPanel room={hud} people={people} host={session.isHost()} onNext={() => startRound(true)} />
         )}
 
         {!hunterHide && hud.phase !== "result" && (
@@ -617,13 +620,15 @@ function Lobby({
 }) {
   const host = session.isHost();
   const me = people.find((p) => p.id === session.myId());
+  const readyCount = people.filter((p) => p.ready).length;
+  const allReady = people.length >= 1 && readyCount === people.length;
   return (
     <aside className="z-20 flex h-full w-[min(100%,360px)] shrink-0 flex-col overflow-y-auto border-r border-white/10 bg-[#121c17] p-4">
       <p className="text-xs text-lime">
         {serverName} · {roomLabel}
       </p>
       <h2 className="font-display text-3xl">방 대기실</h2>
-      <p className="mt-1 text-sm text-white/65">오른쪽 3D 맵을 클릭한 뒤 WASD로 걸어보세요. 호스트가 시작하면 역할이 랜덤 배정됩니다.</p>
+      <p className="mt-1 text-sm text-white/65">오른쪽 맵에서 WASD로 걸어보세요. 전원 준비 완료 후에만 호스트가 시작할 수 있습니다.</p>
       <ul className="mt-4 space-y-2">
         {people.map((p) => (
           <li key={p.id} className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
@@ -717,15 +722,23 @@ function Lobby({
           </label>
         </div>
         {host ? (
-          <button
-            type="button"
-            onClick={onStart}
-            className="mt-4 w-full rounded-full bg-lime py-3 font-display text-lg text-black"
-          >
-            {people.length < 2 ? "연습 라운드 시작" : "라운드 시작"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onStart}
+              disabled={!allReady}
+              className="mt-4 w-full rounded-full bg-lime py-3 font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {people.length < 2 ? "연습 라운드 시작" : "라운드 시작"}
+            </button>
+            <p className="mt-2 text-center text-xs text-white/55">
+              {allReady ? "전원 준비됨" : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
+            </p>
+          </>
         ) : (
-          <p className="mt-4 text-center text-sm text-white/60">호스트 시작 대기</p>
+          <p className="mt-4 text-center text-sm text-white/60">
+            호스트 시작 대기 · 준비 {readyCount}/{people.length}
+          </p>
         )}
       </div>
     </aside>
