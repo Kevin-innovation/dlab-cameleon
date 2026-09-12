@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { PAINT_SPEED, PLAYER_SPEED, SNEAK_SPEED, WHITE } from "../config";
+import { LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, SNEAK_SPEED, WHITE } from "../config";
 import { getMap, mapColliders } from "../maps";
-import type { Collider, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
+import type { BodyPart, Collider, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
 import { moveWithSlide, poseRadius } from "./collision";
 import {
@@ -33,12 +33,15 @@ export class GameWorld {
   colliders: Collider[] = [];
   map!: GameMap;
   yaw = 0;
-  pitch = 0.18;
+  pitch = 0;
   localX = 4;
   localZ = 4;
   sampleCanvases: { mesh: THREE.Mesh; canvas: HTMLCanvasElement }[] = [];
-  private clockTarget = new THREE.Vector3();
-  private spherical = new THREE.Spherical();
+  private euler = new THREE.Euler(0, 0, 0, "YXZ");
+  private forward = new THREE.Vector3();
+  private right = new THREE.Vector3();
+  private wish = new THREE.Vector3();
+  private camPos = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -56,7 +59,8 @@ export class GameWorld {
     this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 120);
+    this.camera = new THREE.PerspectiveCamera(75, 1, 0.08, 120);
+    this.camera.rotation.order = "YXZ";
     this.scene.add(this.mapGroup);
     this.resize();
   }
@@ -151,8 +155,10 @@ export class GameWorld {
   }
 
   lookDelta(dx: number, dy: number) {
-    this.yaw -= dx * 0.0022;
-    this.pitch = Math.max(-0.9, Math.min(0.85, this.pitch - dy * 0.0022));
+    this.yaw -= dx * LOOK_SENS;
+    this.pitch -= dy * LOOK_SENS;
+    const lim = Math.PI / 2 - 0.04;
+    this.pitch = Math.max(-lim, Math.min(lim, this.pitch));
   }
 
   stepLocal(
@@ -161,26 +167,25 @@ export class GameWorld {
     canMove: boolean,
     pose: Pose,
   ) {
-    if (document.pointerLockElement === this.renderer.domElement) {
-      // yaw already updated via mousemove
-    }
     if (!canMove) return { x: this.localX, z: this.localZ, yaw: this.yaw };
 
-    let ix = 0;
-    let iz = 0;
+    this.euler.set(0, this.yaw, 0, "YXZ");
+    this.forward.set(0, 0, -1).applyEuler(this.euler);
+    this.right.set(1, 0, 0).applyEuler(this.euler);
+    this.forward.y = 0;
+    this.right.y = 0;
+    this.forward.normalize();
+    this.right.normalize();
+
+    this.wish.set(0, 0, 0);
     const k = input.keys;
-    if (k.has("w") || k.has("arrowup")) iz -= 1;
-    if (k.has("s") || k.has("arrowdown")) iz += 1;
-    if (k.has("a") || k.has("arrowleft")) ix -= 1;
-    if (k.has("d") || k.has("arrowright")) ix += 1;
-    const mag = Math.hypot(ix, iz);
-    if (mag > 0) {
-      ix /= mag;
-      iz /= mag;
-      const sin = Math.sin(this.yaw);
-      const cos = Math.cos(this.yaw);
-      const fx = ix * cos + iz * sin;
-      const fz = iz * cos - ix * sin;
+    if (k.has("w") || k.has("arrowup")) this.wish.add(this.forward);
+    if (k.has("s") || k.has("arrowdown")) this.wish.sub(this.forward);
+    if (k.has("d") || k.has("arrowright")) this.wish.add(this.right);
+    if (k.has("a") || k.has("arrowleft")) this.wish.sub(this.right);
+
+    if (this.wish.lengthSq() > 0) {
+      this.wish.normalize();
       let speed = PLAYER_SPEED;
       if (k.has("shift")) speed = SNEAK_SPEED;
       if (input.paintOpen) speed = PAINT_SPEED;
@@ -190,8 +195,8 @@ export class GameWorld {
       const moved = moveWithSlide(
         this.localX,
         this.localZ,
-        fx * speed * dt,
-        fz * speed * dt,
+        this.wish.x * speed * dt,
+        this.wish.z * speed * dt,
         r,
         this.colliders,
         { w: this.map.w, d: this.map.d },
@@ -208,7 +213,7 @@ export class GameWorld {
     if (yaw !== undefined) this.yaw = yaw;
   }
 
-  syncPlayers(snaps: PlayerSnap[], myId: string, room: RoomState) {
+  syncPlayers(snaps: PlayerSnap[], myId: string, room: RoomState, hideLocal = false) {
     const seen = new Set<string>();
     const self = snaps.find((p) => p.id === myId);
     for (const p of snaps) {
@@ -219,7 +224,7 @@ export class GameWorld {
         this.players.set(p.id, rig);
         this.scene.add(rig.group);
       }
-      const show = canSee(room, self, p);
+      const show = canSee(room, self, p) && !(hideLocal && p.id === myId);
       rig.group.visible = show;
       applyPaint(rig, p.fill || WHITE, p.blobs || []);
       applyPose(rig, p.pose);
@@ -235,8 +240,8 @@ export class GameWorld {
         rig.group.position.set(x, 0, z);
         rig.group.rotation.y = yaw;
       } else {
-        rig.group.position.x += (x - rig.group.position.x) * 0.25;
-        rig.group.position.z += (z - rig.group.position.z) * 0.25;
+        rig.group.position.x += (x - rig.group.position.x) * 0.28;
+        rig.group.position.z += (z - rig.group.position.z) * 0.28;
         rig.group.rotation.y = yaw;
       }
     }
@@ -249,19 +254,21 @@ export class GameWorld {
     }
   }
 
-  updateCamera(paintOpen: boolean, hunterHide: boolean) {
-    const target = this.clockTarget.set(this.localX, 1.25, this.localZ);
-    const dist = paintOpen ? 3.1 : 4.8;
-    this.spherical.set(dist, Math.PI / 2 - this.pitch, this.yaw);
-    const pos = new THREE.Vector3().setFromSpherical(this.spherical).add(target);
-    pos.y = Math.max(0.35, pos.y);
-    if (hunterHide) {
+  updateCamera(opts: { paintOpen: boolean; hunterHide: boolean }) {
+    this.euler.set(this.pitch, this.yaw, 0, "YXZ");
+    this.camera.quaternion.setFromEuler(this.euler);
+    if (opts.hunterHide) {
       this.camera.position.set(this.map.w / 2, 8, this.map.d / 2);
       this.camera.lookAt(this.map.w / 2, 0, this.map.d / 2);
       return;
     }
-    this.camera.position.lerp(pos, 0.18);
-    this.camera.lookAt(target);
+    this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    this.camera.fov = 70;
+    const dist = opts.paintOpen ? 2.6 : 4.2;
+    this.camPos.set(this.localX, 1.5, this.localZ).addScaledVector(this.forward, -dist);
+    this.camPos.y = Math.max(0.5, 1.5 - this.forward.y * dist * 0.15);
+    this.camera.position.copy(this.camPos);
+    this.camera.updateProjectionMatrix();
   }
 
   render() {
@@ -297,25 +304,58 @@ export class GameWorld {
     const rig = this.players.get(myId);
     if (!rig) return null;
     const hits = this.raycaster.intersectObject(rig.body, true);
-    const hit = hits.find((h) => h.uv);
+    const hit = hits.find((h) => h.uv && (h.object as THREE.Mesh).userData?.part);
     if (!hit?.uv) return null;
-    return uvPaint(rig, hit.uv.x, hit.uv.y, brush / 220, color);
+    const part = hit.object.userData.part as BodyPart;
+    return uvPaint(rig, hit.uv.x, hit.uv.y, brush / 220, color, part);
   }
 
-  aimPlayer(myId: string): { id: string; dist: number } | null {
-    this.pointer.set(0, 0);
-    this.raycaster.setFromCamera(this.pointer, this.camera);
+  aimPlayer(
+    myId: string,
+    clientX?: number,
+    clientY?: number,
+  ): { id: string; dist: number } | null {
     const meshes: THREE.Object3D[] = [];
     for (const [id, rig] of this.players) {
-      if (id === myId) continue;
+      if (id === myId || !rig.group.visible) continue;
       meshes.push(rig.body);
     }
-    const hits = this.raycaster.intersectObjects(meshes, true);
-    const hit = hits[0];
-    if (!hit) return null;
-    const id = hit.object.userData.playerId as string | undefined;
-    if (!id) return null;
-    return { id, dist: hit.distance };
+    const pick = (nx: number, ny: number) => {
+      this.pointer.set(nx, ny);
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const hit = this.raycaster.intersectObjects(meshes, true)[0];
+      if (!hit) return null;
+      const id = (hit.object.userData.playerId as string | undefined) ?? undefined;
+      if (!id || id === myId) return null;
+      return { id, dist: hit.distance };
+    };
+
+    if (clientX !== undefined && clientY !== undefined) {
+      this.setPointer(clientX, clientY);
+      const clicked = pick(this.pointer.x, this.pointer.y);
+      if (clicked) return clicked;
+    }
+    const centered = pick(0, 0);
+    if (centered) return centered;
+
+    this.camera.getWorldDirection(this.forward);
+    let best: { id: string; dist: number } | null = null;
+    let bestDot = 0.88;
+    for (const [id, rig] of this.players) {
+      if (id === myId || !rig.group.visible) continue;
+      const dx = rig.group.position.x - this.camera.position.x;
+      const dy = rig.group.position.y + 1.05 - this.camera.position.y;
+      const dz = rig.group.position.z - this.camera.position.z;
+      const dist = Math.hypot(dx, dy, dz);
+      if (dist < 0.35 || dist > 9.5) continue;
+      const inv = 1 / dist;
+      const dot = this.forward.x * dx * inv + this.forward.y * dy * inv + this.forward.z * dz * inv;
+      if (dot > bestDot) {
+        bestDot = dot;
+        best = { id, dist };
+      }
+    }
+    return best;
   }
 
   private setPointer(clientX: number, clientY: number) {

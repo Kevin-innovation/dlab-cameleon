@@ -21,11 +21,16 @@ export type Pattern =
   | "leaves"
   | "wallpaper";
 
+export type BodyPart = "head" | "torso" | "armL" | "armR" | "legL" | "legR";
+
+export const BODY_PARTS: BodyPart[] = ["head", "torso", "armL", "armR", "legL", "legR"];
+
 export type PaintBlob = {
   x: number;
   y: number;
   r: number;
   c: string;
+  part: BodyPart;
 };
 
 export type BoxDef = {

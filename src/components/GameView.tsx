@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MAX_BLOBS, SHOT_COOLDOWN, SYNC_HZ, TAUNT_COOLDOWN, FORCED_TAUNT, TAG_RANGE, WHITE } from "@/lib/config";
+import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
 import { getMap, MAPS } from "@/lib/maps";
 import {
@@ -41,6 +42,7 @@ export function GameView({
   const [help, setHelp] = useState(false);
   const [nowTick, setNowTick] = useState(0);
   const paintOpenRef = useRef(false);
+  const helpRef = useRef(false);
   const colorRef = useRef(color);
   const brushRef = useRef(brush);
   const toolRef = useRef(tool);
@@ -48,6 +50,7 @@ export function GameView({
   useEffect(() => {
     paintOpenRef.current = paintOpen;
     if (paintOpen) document.exitPointerLock();
+    else canvasRef.current?.requestPointerLock();
   }, [paintOpen]);
   useEffect(() => {
     colorRef.current = color;
@@ -58,6 +61,9 @@ export function GameView({
   useEffect(() => {
     toolRef.current = tool;
   }, [tool]);
+  useEffect(() => {
+    helpRef.current = help;
+  }, [help]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -87,12 +93,23 @@ export function GameView({
       return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
     };
 
+    const tryLock = () => {
+      if (paintOpenRef.current || helpRef.current) return;
+      if (document.pointerLockElement === canvas) return;
+      try {
+        canvas.requestPointerLock();
+      } catch {
+        /* ignore */
+      }
+    };
+
     const onKey = (e: KeyboardEvent, down: boolean) => {
       if (typing(e)) return;
       const k = e.key.toLowerCase();
       if (down) {
         if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) {
           e.preventDefault();
+          tryLock();
         }
         if (k === "f") setPaintOpen((v) => !v);
         if (k === "escape") setPaintOpen(false);
@@ -115,9 +132,21 @@ export function GameView({
     window.addEventListener("keyup", ku);
 
     const onMouseMove = (e: MouseEvent) => {
-      if (document.pointerLockElement === canvas) world.lookDelta(e.movementX, e.movementY);
+      if (paintOpenRef.current || helpRef.current) return;
+      const lockedNow = document.pointerLockElement === canvas;
+      if (lockedNow) {
+        world.lookDelta(e.movementX, e.movementY);
+        return;
+      }
+      const stage = canvas.parentElement;
+      const overGame =
+        e.target === canvas ||
+        (stage !== null && stage.contains(e.target as Node) && (e.target as HTMLElement).closest("button, input, select, aside") === null);
+      if (overGame) {
+        world.lookDelta(e.movementX, e.movementY);
+      }
     };
-    window.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mousemove", onMouseMove);
 
     const onLock = () => setLocked(document.pointerLockElement === canvas);
     document.addEventListener("pointerlockchange", onLock);
@@ -138,6 +167,8 @@ export function GameView({
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
+      const el = e.target as HTMLElement;
+      if (el.closest("button, input, select, textarea, aside, label")) return;
       const room = session.getRoom();
       const me = snapsFrom(session).find((p) => p.id === session.myId());
       if (!me) return;
@@ -164,20 +195,23 @@ export function GameView({
         return;
       }
 
+      tryLock();
+
       if (room.phase === "hunt" && isHunter(room, me.id)) {
         const t = Date.now();
         if (t - lastShot < SHOT_COOLDOWN) return;
         lastShot = t;
-        const aim = world.aimPlayer(me.id);
-        if (aim && aim.dist <= TAG_RANGE + 0.6 && hiderAlive(room, aim.id)) {
+        const lockedNow = document.pointerLockElement === canvas;
+        const aim = lockedNow
+          ? world.aimPlayer(me.id)
+          : world.aimPlayer(me.id, e.clientX, e.clientY);
+        if (aim && aim.dist <= TAG_RANGE + 1.2 && hiderAlive(room, aim.id)) {
           session.callShot(aim.id);
         }
-        return;
       }
-
-      if (canvas.requestPointerLock) canvas.requestPointerLock();
     };
-    canvas.addEventListener("pointerdown", onPointerDown);
+    const stage = canvas.parentElement;
+    stage?.addEventListener("pointerdown", onPointerDown);
 
     const unshot = session.onShot((hunterId, targetId) => {
       if (!session.isHost()) return;
@@ -223,7 +257,7 @@ export function GameView({
           session.me().set("role", role, true);
           session.me().set("alive", role !== "spectator", true);
           session.me().set("ready", false, true);
-          setPaintOpen(role === "hider");
+          setPaintOpen(false);
         }
       }
 
@@ -286,8 +320,11 @@ export function GameView({
       }
 
       const live = snapsFrom(session);
-      world.syncPlayers(live, session.myId(), room);
-      world.updateCamera(paintOpenRef.current, hunterWait);
+      world.syncPlayers(live, session.myId(), room, false);
+      world.updateCamera({
+        paintOpen: paintOpenRef.current,
+        hunterHide: hunterWait,
+      });
       world.render();
       raf = requestAnimationFrame(loop);
     };
@@ -304,10 +341,10 @@ export function GameView({
       clearInterval(hudIv);
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
-      window.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("resize", resize);
       document.removeEventListener("pointerlockchange", onLock);
-      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.parentElement?.removeEventListener("pointerdown", onPointerDown);
       ro.disconnect();
       unshot();
       world.dispose();
@@ -321,16 +358,7 @@ export function GameView({
     const ctx = c.getContext("2d");
     if (!ctx) return;
     const me = people.find((p) => p.id === session.myId());
-    const fill = me?.fill ?? WHITE;
-    const blobs = me?.blobs ?? [];
-    ctx.fillStyle = fill;
-    ctx.fillRect(0, 0, c.width, c.height);
-    for (const b of blobs) {
-      ctx.fillStyle = b.c;
-      ctx.beginPath();
-      ctx.arc(b.x * c.width, b.y * c.height, b.r * c.width, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    drawBodyPreview(ctx, me?.fill ?? WHITE, me?.blobs ?? []);
   }, [people, session, paintOpen]);
 
   const me = people.find((p) => p.id === session.myId());
@@ -357,7 +385,10 @@ export function GameView({
       )}
 
       <div className="relative min-w-0 flex-1">
-        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
+        <canvas
+          ref={canvasRef}
+          className={`absolute inset-0 h-full w-full touch-none ${paintOpen ? "cursor-crosshair" : locked ? "cursor-none" : "cursor-default"}`}
+        />
 
         <header className="pointer-events-none absolute left-0 right-0 top-0 z-10 flex items-start justify-between p-3">
           <div className="rounded-2xl bg-black/45 px-3 py-2 backdrop-blur-sm">
@@ -394,7 +425,7 @@ export function GameView({
 
         {!locked && !paintOpen && !hunterHide && hud.phase !== "result" && (
           <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-sm">
-            화면을 클릭하면 마우스 시점 · WASD 이동 · F 페인트
+            게임 화면에서 마우스 이동 = 시점 · 좌클릭 = 조준 태그
           </div>
         )}
 
@@ -427,11 +458,10 @@ export function GameView({
 
         {!hunterHide && hud.phase !== "result" && (
           <div className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
-            <div>WASD 이동 · 마우스 시점</div>
+            <div>마우스 이동 = 시점 · WASD 이동</div>
             <div>Shift 살금 · F 페인트 · R 자세</div>
-            <div>E 스포이드 · 클릭으로 환경 색 추출</div>
             {myRole === "hunter" && hud.phase === "hunt" && (
-              <div className="mt-1 text-pink">조준점 맞추고 클릭해서 태그</div>
+              <div className="mt-1 text-pink">십자선 또는 카멜레온을 직접 클릭해서 태그</div>
             )}
           </div>
         )}
@@ -533,7 +563,7 @@ export function GameView({
               </button>
             </div>
             <p className="mt-2 text-[11px] leading-snug text-white/55">
-              스포이드로 3D 벽을 찍고, 붓으로 내 캐릭터를 직접 클릭해 칠하세요. 자세로 실루엣을 맞춥니다.
+              스포이드로 벽을 찍고, 붓으로 머리·몸·팔·다리를 따로 클릭해 칠하세요.
             </p>
           </aside>
         )}
@@ -544,8 +574,8 @@ export function GameView({
           <div className="max-w-lg rounded-3xl bg-[#17241c] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-display text-2xl">3D 카멜론</h3>
             <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
-              <li>화면을 클릭하면 마우스로 둘러보고, WASD로 3D 맵을 걷습니다.</li>
-              <li>위장 시간에 자리를 고르고 F로 페인트를 연 뒤, 스포이드로 벽·가구 색을 찍고 몸을 칠합니다.</li>
+              <li>마우스를 움직이면 시점이 돌아가고, WASD로 그 방향으로 걷습니다. 좌클릭은 시점이 아니라 태그입니다.</li>
+              <li>위장 시간에 자리를 고르고 F로 페인트를 연 뒤, 스포이드로 벽 색을 찍고 팔·몸·머리를 따로 칠합니다.</li>
               <li>자세를 바꿔 소파·책장·파이프 실루엣에 맞추세요.</li>
               <li>술래는 조준점을 맞추고 클릭해서 태그합니다.</li>
             </ol>

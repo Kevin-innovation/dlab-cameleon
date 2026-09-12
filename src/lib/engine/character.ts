@@ -1,27 +1,35 @@
 import * as THREE from "three";
 import { WHITE } from "../config";
-import type { PaintBlob, Pose } from "../types";
+import { BODY_PARTS, type BodyPart, type PaintBlob, type Pose } from "../types";
+
+export type PartLayer = {
+  id: BodyPart;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  texture: THREE.CanvasTexture;
+  mesh: THREE.Mesh;
+};
 
 export type CharacterRig = {
   group: THREE.Group;
   body: THREE.Group;
   visor: THREE.Mesh;
   nameSprite: THREE.Sprite;
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-  texture: THREE.CanvasTexture;
+  parts: Record<BodyPart, PartLayer>;
   fill: string;
   blobs: PaintBlob[];
   pose: Pose;
   paintSig: string;
 };
 
-function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBlob[]) {
+function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBlob[], part: BodyPart) {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
   ctx.fillStyle = fill || WHITE;
   ctx.fillRect(0, 0, w, h);
   for (const b of blobs) {
+    if (b.part && b.part !== part) continue;
+    if (!b.part && part !== "torso") continue;
     ctx.fillStyle = b.c;
     ctx.beginPath();
     ctx.arc(b.x * w, b.y * h, b.r * w, 0, Math.PI * 2);
@@ -51,12 +59,12 @@ function makeNameSprite(text: string) {
   return spr;
 }
 
-export function createCharacter(name: string, playerId: string): CharacterRig {
+function makePart(id: BodyPart, geo: THREE.BufferGeometry, playerId: string): PartLayer {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext("2d")!;
-  paintCanvas(ctx, WHITE, []);
+  paintCanvas(ctx, WHITE, [], id);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
@@ -65,29 +73,33 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     roughness: 0.72,
     metalness: 0.04,
   });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.userData.playerId = playerId;
+  mesh.userData.part = id;
+  return { id, canvas, ctx, texture, mesh };
+}
 
+export function createCharacter(name: string, playerId: string): CharacterRig {
   const group = new THREE.Group();
   const body = new THREE.Group();
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.55, 6, 12), mat);
-  torso.position.y = 1.0;
-  torso.castShadow = true;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), mat);
-  head.position.y = 1.52;
-  head.castShadow = true;
-  const legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.42, 4, 8), mat);
-  legL.position.set(-0.11, 0.42, 0);
-  const legR = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.42, 4, 8), mat);
-  legR.position.set(0.11, 0.42, 0);
-  const armL = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.38, 4, 8), mat);
-  armL.position.set(-0.32, 1.12, 0);
-  const armR = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.38, 4, 8), mat);
-  armR.position.set(0.32, 1.12, 0);
-  for (const m of [torso, head, legL, legR, armL, armR]) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-    m.userData.playerId = playerId;
-    body.add(m);
-  }
+
+  const torso = makePart("torso", new THREE.CapsuleGeometry(0.22, 0.55, 6, 12), playerId);
+  torso.mesh.position.y = 1.0;
+  const head = makePart("head", new THREE.SphereGeometry(0.2, 16, 12), playerId);
+  head.mesh.position.y = 1.52;
+  const legL = makePart("legL", new THREE.CapsuleGeometry(0.09, 0.42, 4, 8), playerId);
+  legL.mesh.position.set(-0.11, 0.42, 0);
+  const legR = makePart("legR", new THREE.CapsuleGeometry(0.09, 0.42, 4, 8), playerId);
+  legR.mesh.position.set(0.11, 0.42, 0);
+  const armL = makePart("armL", new THREE.CapsuleGeometry(0.07, 0.38, 4, 8), playerId);
+  armL.mesh.position.set(-0.32, 1.12, 0);
+  const armR = makePart("armR", new THREE.CapsuleGeometry(0.07, 0.38, 4, 8), playerId);
+  armR.mesh.position.set(0.32, 1.12, 0);
+
+  const parts = { head, torso, armL, armR, legL, legR };
+  for (const p of Object.values(parts)) body.add(p.mesh);
 
   const visor = new THREE.Mesh(
     new THREE.ConeGeometry(0.16, 0.32, 8),
@@ -107,9 +119,7 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     body,
     visor,
     nameSprite,
-    canvas,
-    ctx,
-    texture,
+    parts,
     fill: WHITE,
     blobs: [],
     pose: "stand",
@@ -118,13 +128,17 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
 }
 
 export function applyPaint(rig: CharacterRig, fill: string, blobs: PaintBlob[]) {
-  const sig = `${fill}|${blobs.length}|${blobs[blobs.length - 1]?.c ?? ""}|${blobs[blobs.length - 1]?.x ?? 0}`;
-  if (rig.paintSig === sig && rig.fill === fill && rig.blobs.length === blobs.length) return;
+  const last = blobs[blobs.length - 1];
+  const sig = `${fill}|${blobs.length}|${last?.part ?? ""}|${last?.c ?? ""}|${last?.x ?? 0}`;
+  if (rig.paintSig === sig) return;
   rig.fill = fill;
   rig.blobs = blobs;
   rig.paintSig = sig;
-  paintCanvas(rig.ctx, fill, blobs);
-  rig.texture.needsUpdate = true;
+  for (const id of BODY_PARTS) {
+    const layer = rig.parts[id];
+    paintCanvas(layer.ctx, fill, blobs, id);
+    layer.texture.needsUpdate = true;
+  }
 }
 
 export function applyPose(rig: CharacterRig, pose: Pose) {
@@ -154,9 +168,46 @@ export function setNameVisible(rig: CharacterRig, on: boolean) {
   rig.nameSprite.visible = on;
 }
 
-export function uvPaint(rig: CharacterRig, u: number, v: number, r: number, color: string): PaintBlob {
-  const blob: PaintBlob = { x: u, y: 1 - v, r, c: color };
-  const next = [...rig.blobs, blob];
-  applyPaint(rig, rig.fill, next);
+export function uvPaint(
+  rig: CharacterRig,
+  u: number,
+  v: number,
+  r: number,
+  color: string,
+  part: BodyPart,
+): PaintBlob {
+  const blob: PaintBlob = { x: u, y: 1 - v, r, c: color, part };
+  applyPaint(rig, rig.fill, [...rig.blobs, blob]);
   return blob;
+}
+
+export function drawBodyPreview(
+  ctx: CanvasRenderingContext2D,
+  fill: string,
+  blobs: PaintBlob[],
+) {
+  const { width: W, height: H } = ctx.canvas;
+  ctx.clearRect(0, 0, W, H);
+  const boxes: Record<BodyPart, { x: number; y: number; w: number; h: number }> = {
+    head: { x: W * 0.38, y: H * 0.04, w: W * 0.24, h: H * 0.18 },
+    torso: { x: W * 0.32, y: H * 0.24, w: W * 0.36, h: H * 0.34 },
+    armL: { x: W * 0.08, y: H * 0.25, w: W * 0.2, h: H * 0.32 },
+    armR: { x: W * 0.72, y: H * 0.25, w: W * 0.2, h: H * 0.32 },
+    legL: { x: W * 0.32, y: H * 0.6, w: W * 0.16, h: H * 0.34 },
+    legR: { x: W * 0.52, y: H * 0.6, w: W * 0.16, h: H * 0.34 },
+  };
+  for (const id of BODY_PARTS) {
+    const box = boxes[id];
+    ctx.fillStyle = fill || WHITE;
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    ctx.strokeRect(box.x, box.y, box.w, box.h);
+    for (const b of blobs) {
+      if ((b.part || "torso") !== id) continue;
+      ctx.fillStyle = b.c;
+      ctx.beginPath();
+      ctx.arc(box.x + b.x * box.w, box.y + b.y * box.h, b.r * box.w, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
