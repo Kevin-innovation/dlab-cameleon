@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   MAX_BLOBS,
   MAX_PLAYERS,
@@ -101,6 +108,8 @@ export function GameView({
   const paintOpenRef = useRef(false);
   const viewActiveRef = useRef(false);
   const watchingRef = useRef(false);
+  const touchKeysRef = useRef(new Set<string>());
+  const touchLookRef = useRef({ pointerId: -1, x: 0, y: 0, dx: 0, dy: 0 });
   const helpRef = useRef(false);
   const colorRef = useRef(color);
   const brushRef = useRef(brush);
@@ -131,6 +140,7 @@ export function GameView({
     if (!canvas) return;
     const world = new GameWorld(canvas);
     worldRef.current = world;
+    const touchKeys = touchKeysRef.current;
     const startMap = getMap(session.getRoom().mapId);
     world.loadMap(startMap.id);
     const spawn0 = startMap.spawns[0];
@@ -253,6 +263,10 @@ export function GameView({
       setTabOpen(false);
       viewActiveRef.current = false;
       keys.clear();
+      touchKeys.clear();
+      touchLookRef.current.pointerId = -1;
+      touchLookRef.current.dx = 0;
+      touchLookRef.current.dy = 0;
     };
     window.addEventListener("blur", onBlur);
 
@@ -476,6 +490,14 @@ export function GameView({
       }
 
       if (session.kind === "practice") tickSoloBots(session, map, room, dt, Date.now());
+      const frameKeys = new Set(keys);
+      for (const key of touchKeysRef.current) frameKeys.add(key);
+      const look = touchLookRef.current;
+      if (!paintOpenRef.current && !helpRef.current && (look.dx !== 0 || look.dy !== 0)) {
+        world.lookDelta(look.dx, look.dy);
+        look.dx = 0;
+        look.dy = 0;
+      }
       world.syncDoors(room.doors ?? {});
       const hunterWait = !!(me && isHunter(room, me.id) && room.phase === "hide");
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
@@ -490,20 +512,20 @@ export function GameView({
         watchingRef.current = false;
         setWatching(false);
       }
-      if (watchingRef.current) world.stepSpectate(dt, keys);
+      if (watchingRef.current) world.stepSpectate(dt, frameKeys);
       const localMoving =
         !watchingRef.current &&
-        (keys.has("w") ||
-          keys.has("a") ||
-          keys.has("s") ||
-          keys.has("d") ||
-          keys.has("arrowup") ||
-          keys.has("arrowdown") ||
-          keys.has("arrowleft") ||
-          keys.has("arrowright"));
+        (frameKeys.has("w") ||
+          frameKeys.has("a") ||
+          frameKeys.has("s") ||
+          frameKeys.has("d") ||
+          frameKeys.has("arrowup") ||
+          frameKeys.has("arrowdown") ||
+          frameKeys.has("arrowleft") ||
+          frameKeys.has("arrowright"));
       const moved = world.stepLocal(
         dt,
-        { keys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
+        { keys: frameKeys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
         !hunterWait && room.phase !== "result" && !watchingRef.current,
         pose,
         ghost,
@@ -617,6 +639,10 @@ export function GameView({
       window.removeEventListener("pointermove", trackMouse);
       canvas.parentElement?.removeEventListener("contextmenu", onContext);
       ro.disconnect();
+      touchKeys.clear();
+      touchLookRef.current.pointerId = -1;
+      touchLookRef.current.dx = 0;
+      touchLookRef.current.dy = 0;
       unshot();
       undoor();
       world.dispose();
@@ -659,8 +685,78 @@ export function GameView({
     session.setRoom(beginRound(session.getRoom(), players.map((p) => p.id), Date.now()));
   };
 
+  const toggleWatching = () => {
+    const world = worldRef.current;
+    if (!world) return;
+    const room = session.getRoom();
+    const snap = snapsFrom(session).find((p) => p.id === session.myId());
+    const canWatch =
+      !!snap &&
+      (room.phase === "lobby" ||
+        ((room.phase === "hide" || room.phase === "hunt") && hiderAlive(room, snap.id)));
+    if (!canWatch) return;
+    const on = world.toggleWatch();
+    watchingRef.current = on;
+    setWatching(on);
+    if (on) {
+      setPaintOpen(false);
+      touchKeysRef.current.delete(" ");
+      touchKeysRef.current.delete("shift");
+      touchKeysRef.current.delete("control");
+    }
+  };
+
+  const touchPress = (key: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    touchKeysRef.current.add(key);
+  };
+
+  const touchRelease = (key: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    touchKeysRef.current.delete(key);
+  };
+
+  const touchKeyboardPress = (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    touchKeysRef.current.add(key);
+  };
+
+  const touchKeyboardRelease = (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    touchKeysRef.current.delete(key);
+  };
+
+  const touchLookStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    touchLookRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0 };
+  };
+
+  const touchLookMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (touchLookRef.current.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    touchLookRef.current.dx += event.clientX - touchLookRef.current.x;
+    touchLookRef.current.dy += event.clientY - touchLookRef.current.y;
+    touchLookRef.current.x = event.clientX;
+    touchLookRef.current.y = event.clientY;
+  };
+
+  const touchLookEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (touchLookRef.current.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    touchLookRef.current.pointerId = -1;
+  };
+
   return (
-    <main id="main-content" aria-label="카멜레온 게임" className="safe-screen relative flex h-dvh w-full flex-col overflow-hidden bg-[#0b100d] text-paper md:flex-row">
+    <main id="main-content" aria-label="카멜레온 게임" className="game-shell safe-screen relative flex h-dvh w-full flex-col overflow-hidden bg-[#0b100d] text-paper md:flex-row">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-lime focus:px-3 focus:py-2 focus:text-sm focus:text-black"
@@ -691,6 +787,16 @@ export function GameView({
           aria-keyshortcuts="W A S D Tab Escape"
           className={`absolute inset-0 h-full w-full touch-none ${paintOpen ? "cursor-crosshair" : locked ? "cursor-none" : "cursor-default"}`}
         />
+
+        {hud.phase !== "lobby" && (
+          <div className="mobile-portrait-guard pointer-events-auto absolute inset-0 z-[80] hidden flex-col items-center justify-center bg-[#0b100d]/[.97] px-6 text-center">
+            <div className="text-4xl" aria-hidden="true">↔</div>
+            <h2 className="text-wrap-balance mt-3 font-display text-3xl text-lime">휴대폰을 가로로 돌려주세요</h2>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/75">
+              카멜레온 게임은 가로 화면에서 터치 이동과 시야 조작을 사용할 수 있습니다.
+            </p>
+          </div>
+        )}
 
         <div aria-live="polite" aria-atomic="false" className="pointer-events-none absolute left-3 top-[4.5rem] z-30 flex w-[min(100%,300px)] flex-col gap-1.5">
           {(hud.feed ?? [])
@@ -854,7 +960,7 @@ export function GameView({
           </div>
         )}
 
-        <div className="absolute bottom-3 right-3 z-10 flex flex-col items-end gap-2">
+        <div className="game-action-controls absolute bottom-3 right-3 z-10 flex flex-col items-end gap-2">
           <button type="button" className="rounded-full bg-black/50 px-3 py-1 text-sm" onClick={() => setHelp(true)}>
             도움말
           </button>
@@ -889,6 +995,23 @@ export function GameView({
             </div>
           )}
         </div>
+
+        {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
+          <TouchControls
+            canWatch={myRole === "hider" || hud.phase === "lobby"}
+            watching={watching}
+            paintOpen={paintOpen}
+            onTogglePaint={() => setPaintOpen((v) => !v)}
+            onToggleWatch={toggleWatching}
+            onPress={touchPress}
+            onRelease={touchRelease}
+            onKeyboardPress={touchKeyboardPress}
+            onKeyboardRelease={touchKeyboardRelease}
+            onLookStart={touchLookStart}
+            onLookMove={touchLookMove}
+            onLookEnd={touchLookEnd}
+          />
+        )}
 
         {paintOpen && myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
           <aside
@@ -1012,6 +1135,110 @@ export function GameView({
         </AccessibleModal>
       )}
     </main>
+  );
+}
+
+function TouchControls({
+  canWatch,
+  watching,
+  paintOpen,
+  onTogglePaint,
+  onToggleWatch,
+  onPress,
+  onRelease,
+  onKeyboardPress,
+  onKeyboardRelease,
+  onLookStart,
+  onLookMove,
+  onLookEnd,
+}: {
+  canWatch: boolean;
+  watching: boolean;
+  paintOpen: boolean;
+  onTogglePaint: () => void;
+  onToggleWatch: () => void;
+  onPress: (key: string, event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onRelease: (key: string, event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onKeyboardPress: (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  onKeyboardRelease: (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  onLookStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onLookMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onLookEnd: (event: ReactPointerEvent<HTMLDivElement>) => void;
+}) {
+  const button = (key: string, label: string, className = "") => (
+    <button
+      type="button"
+      aria-label={label}
+      className={`mobile-touch-button pointer-events-auto select-none rounded-xl border border-white/15 bg-black/65 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm ${className}`}
+      onPointerDown={(event) => onPress(key, event)}
+      onPointerUp={(event) => onRelease(key, event)}
+      onPointerCancel={(event) => onRelease(key, event)}
+      onLostPointerCapture={(event) => onRelease(key, event)}
+      onKeyDown={(event) => onKeyboardPress(key, event)}
+      onKeyUp={(event) => onKeyboardRelease(key, event)}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="mobile-touch-controls pointer-events-none absolute inset-0 z-20 select-none" aria-label="터치 게임 조작">
+      <div className="pointer-events-auto absolute bottom-3 left-3 grid grid-cols-3 gap-1.5" aria-label="이동 조작">
+        <span />
+        {button("w", "앞으로")}
+        <span />
+        {button("a", "왼쪽")}
+        {button("s", "뒤로")}
+        {button("d", "오른쪽")}
+      </div>
+
+      <div
+        className="mobile-look-pad pointer-events-auto absolute bottom-3 right-3 flex h-32 w-44 items-center justify-center rounded-2xl border border-white/15 bg-black/25 text-xs text-white/60 backdrop-blur-sm"
+        data-touch-control="true"
+        onPointerDown={onLookStart}
+        onPointerMove={onLookMove}
+        onPointerUp={onLookEnd}
+        onPointerCancel={onLookEnd}
+        onLostPointerCapture={onLookEnd}
+        aria-label="시야 조작 영역. 드래그해서 시점을 회전합니다."
+        role="group"
+      >
+        시야 드래그
+      </div>
+
+      <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+        {button("shift", "달리기")}
+        {button(" ", "점프·벽 붙기")}
+        {canWatch && (
+          <button
+            type="button"
+            aria-pressed={watching}
+            className={`mobile-touch-button rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${watching ? "bg-lime text-black" : "bg-black/65 text-white"}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggleWatch();
+            }}
+          >
+            {watching ? "관전 종료" : "관전"}
+          </button>
+        )}
+        {!watching && (
+          <button
+            type="button"
+            aria-pressed={paintOpen}
+            className={`mobile-touch-button rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${paintOpen ? "bg-lime text-black" : "bg-black/65 text-white"}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onTogglePaint();
+            }}
+          >
+            페인트
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1261,7 +1488,7 @@ function RoomSocialPanel({
   };
 
   return (
-    <aside className="pointer-events-auto absolute bottom-24 left-3 right-3 top-auto z-30 max-h-[calc(100dvh-11rem)] w-auto overflow-y-auto overscroll-contain md:bottom-auto md:left-auto md:right-3 md:top-[5.5rem] md:w-[min(calc(100vw-1.5rem),320px)] md:max-h-none md:overflow-visible">
+    <aside className="room-social-shell pointer-events-auto absolute bottom-24 left-3 right-3 top-auto z-30 max-h-[calc(100dvh-11rem)] w-auto overflow-y-auto overscroll-contain md:bottom-auto md:left-auto md:right-3 md:top-[5.5rem] md:w-[min(calc(100vw-1.5rem),320px)] md:max-h-none md:overflow-visible">
       <button
         type="button"
         aria-expanded={open}

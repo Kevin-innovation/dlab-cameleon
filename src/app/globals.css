@@ -90,6 +90,54 @@ label:has(> select:focus-visible) {
   text-wrap: balance;
 }
 
+.mobile-touch-controls {
+  display: none;
+}
+
+@media (max-width: 767px) and (orientation: landscape) {
+  .game-shell {
+    flex-direction: row;
+  }
+
+  .game-shell > aside:not(.room-social-shell) {
+    width: min(38vw, 300px);
+    height: 100%;
+    max-height: none;
+    border-right-width: 1px;
+    border-bottom-width: 0;
+  }
+
+  .room-social-shell {
+    top: 3.5rem;
+    right: 0.75rem;
+    bottom: auto;
+    left: auto;
+    width: min(280px, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 4.25rem);
+    overflow-y: auto;
+  }
+
+  .game-shell #game-instructions {
+    display: none;
+  }
+
+  .game-action-controls {
+    top: 0.75rem;
+    right: 0.75rem;
+    bottom: auto;
+  }
+
+  .mobile-touch-controls {
+    display: block;
+  }
+}
+
+@media (max-width: 767px) and (orientation: portrait) {
+  .mobile-portrait-guard {
+    display: flex;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
