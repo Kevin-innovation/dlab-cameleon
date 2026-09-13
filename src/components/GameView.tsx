@@ -1010,30 +1010,39 @@ export function GameView({
           </div>
         )}
 
-        {hud.phase === "hunt" && myRole === "hunter" && me && hud.ammoEnabled && (
+        {hud.phase === "hunt" && myRole === "hunter" && me && (
           <>
-            <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center">
-              <div className="h-8 w-8 rounded-full border-2 border-white/80" />
-              <div className="absolute h-px w-10 bg-white/70" />
-              <div className="absolute h-10 w-px bg-white/70" />
-            </div>
-            <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-center">
-              <div className="text-[11px] tracking-wide text-white/65">탄약</div>
-              <div className="flex items-center justify-center gap-1">
-                {Array.from({ length: hud.ammoCount || 6 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className={`inline-block h-3 w-2 rounded-sm ${
-                      i < (hud.ammo?.[me.id] ?? 0) ? "bg-amber-300" : "bg-white/20"
-                    }`}
-                  />
-                ))}
-              </div>
-              <div className="font-display text-lg text-amber-200">
-                {hud.ammo?.[me.id] ?? 0}/{hud.ammoCount || 6}
-                {(hud.ammo?.[me.id] ?? 0) <= 0 ? " · 탄 없음" : ""}
+            <div
+              className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center"
+              aria-hidden="true"
+            >
+              <div className="relative h-10 w-10 rounded-full border-2 border-lime shadow-[0_0_10px_rgba(198,255,74,0.8)]">
+                <div className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime shadow-[0_0_6px_rgba(198,255,74,1)]" />
+                <div className="absolute -left-1.5 top-1/2 h-0.5 w-2 -translate-y-1/2 bg-lime" />
+                <div className="absolute -right-1.5 top-1/2 h-0.5 w-2 -translate-y-1/2 bg-lime" />
+                <div className="absolute left-1/2 -top-1.5 h-2 w-0.5 -translate-x-1/2 bg-lime" />
+                <div className="absolute left-1/2 -bottom-1.5 h-2 w-0.5 -translate-x-1/2 bg-lime" />
               </div>
             </div>
+            {hud.ammoEnabled && (
+              <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-center">
+                <div className="text-[11px] tracking-wide text-white/65">탄약</div>
+                <div className="flex items-center justify-center gap-1">
+                  {Array.from({ length: hud.ammoCount || 6 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`inline-block h-3 w-2 rounded-sm ${
+                        i < (hud.ammo?.[me.id] ?? 0) ? "bg-amber-300" : "bg-white/20"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="font-display text-lg text-amber-200">
+                  {hud.ammo?.[me.id] ?? 0}/{hud.ammoCount || 6}
+                  {(hud.ammo?.[me.id] ?? 0) <= 0 ? " · 탄 없음" : ""}
+                </div>
+              </div>
+            )}
           </>
         )}
 
