@@ -34,6 +34,10 @@ import { hunterVisibility } from "../camouflage";
 
 const LOCAL_PROP_MODELS: Partial<Record<PropKind, string>> = {
   sofa: "/models/lobby-sofa-cc0.glb",
+  armchair: "/models/lobby-armchair-cc0.glb",
+  coffeeTable: "/models/lobby-coffee-table-cc0.glb",
+  floorLamp: "/models/floor-lamp-cc0.glb",
+  plant: "/models/lobby-planter-cc0.glb",
 };
 
 export type WorldInput = {
