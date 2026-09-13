@@ -25,7 +25,7 @@ import {
 import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
 import { getMap, MAPS } from "@/lib/maps";
-import { requestMobileLandscape } from "@/lib/mobile";
+import { MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
 import {
   beginRound,
   hiderAlive,
@@ -159,7 +159,7 @@ export function GameView({
 
     const keys = new Set<string>();
     const touchJoystickKeys = touchJoystickKeysRef.current;
-    const mobilePortrait = window.matchMedia("(max-width: 767px) and (orientation: portrait)");
+    const mobilePortrait = window.matchMedia(MOBILE_PORTRAIT_QUERY);
     let last = performance.now();
     let lastSync = 0;
     let lastShot = 0;
@@ -1109,7 +1109,7 @@ export function GameView({
           )}
         </div>
 
-        {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && !socialVisible && !paintOpen && (
+        {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && !paintOpen && (
           <TouchControls
             canWatch={myRole === "hider" || hud.phase === "lobby"}
             canFire={myRole === "hunter" && hud.phase === "hunt"}

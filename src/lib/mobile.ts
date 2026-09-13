@@ -1,6 +1,10 @@
+export const MOBILE_DEVICE_QUERY = "(max-width: 767px), (pointer: coarse) and (hover: none)";
+export const MOBILE_PORTRAIT_QUERY =
+  "(max-width: 767px) and (orientation: portrait), (pointer: coarse) and (hover: none) and (orientation: portrait)";
+
 export async function requestMobileLandscape() {
   if (typeof window === "undefined") return false;
-  if (!window.matchMedia("(max-width: 767px)").matches) return true;
+  if (!window.matchMedia(MOBILE_DEVICE_QUERY).matches) return true;
 
   let fullscreen = Boolean(document.fullscreenElement);
   if (!fullscreen && document.documentElement.requestFullscreen) {
