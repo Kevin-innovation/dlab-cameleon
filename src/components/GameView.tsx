@@ -229,7 +229,7 @@ export function GameView({
         }
         if (k === "h" || k === "?") setHelp((v) => !v);
         if (k === "r") cyclePose(session, world, 1);
-        if (/^[1-7]$/.test(k)) {
+        if (/^[1-7]$/.test(k) && !(k === "5" && session.getRoom().phase === "lobby")) {
           const pose = POSES[Number(k) - 1]?.id;
           if (pose) applyPosePick(session, world, pose);
         }
@@ -263,7 +263,7 @@ export function GameView({
             toolRef.current = "brush";
           }
         }
-        if (k === "v") {
+        if (k === "v" || (k === "5" && session.getRoom().phase === "lobby")) {
           const room = session.getRoom();
           const snap = snapsFrom(session).find((p) => p.id === session.myId());
           const canWatch =
