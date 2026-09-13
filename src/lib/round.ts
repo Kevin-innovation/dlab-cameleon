@@ -149,7 +149,6 @@ export function processFire(
         ...next,
         caughtIds,
         scores,
-        ammo: { ...next.ammo, [hunterId]: left },
         lastTag: entry,
         feed: [...(next.feed ?? []), entry].slice(-10),
       };

@@ -1050,7 +1050,7 @@ export function GameView({
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
                 <div>술래 1인칭 · 우클릭 3인칭 · WASD · Shift 달리기 · Ctrl 숙이기</div>
-                <div className="mt-1 text-pink">좌클릭 발사 · 맞히면 탄 회복 · Tab 현황</div>
+                <div className="mt-1 text-pink">좌클릭 발사 · 탄 1발 소모 · Tab 현황</div>
               </>
             ) : (
               <>
@@ -1242,7 +1242,7 @@ export function GameView({
             <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
             <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
             <li>1~7로 자세를 고르고, F로 페인트를 엽니다. Space로 벽 색을 빨아 칠하고, T로 휘파람, V로 대기실·숨은 채 관전, E로 문을 엽니다. 열고 지나가면 닫힙니다.</li>
-            <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
+            <li>술래는 1인칭 총입니다. 우클릭으로 3인칭을 전환하며, 발사할 때마다 탄 1발이 줄어듭니다. 가까이 조준해 맞히면 상대를 태그합니다.</li>
             <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
             <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
           </ol>

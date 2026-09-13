@@ -121,7 +121,6 @@ export async function connectOnline(opts: {
   const doorListeners = new Set<(id: string) => void>();
   RPC.register("shot", async (payload, sender) => {
     const targetId = String(payload?.targetId ?? "");
-    if (!targetId) return;
     shotListeners.forEach((cb) => cb(sender.id, targetId));
   });
   RPC.register("door", async (payload) => {
