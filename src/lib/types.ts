@@ -45,6 +45,7 @@ export type BoxDef = {
   h: number;
   d: number;
   color: string;
+  shape?: "box" | "cylinder" | "sphere";
   pattern?: Pattern;
   texture?: string;
   colors?: string[];

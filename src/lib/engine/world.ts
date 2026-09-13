@@ -189,7 +189,12 @@ export class GameWorld {
     this.camBlockers.push(ceil);
 
     for (const b of map.boxes) {
-      const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
+      const geo =
+        b.shape === "cylinder"
+          ? new THREE.CylinderGeometry(Math.min(b.w, b.d) / 2, Math.min(b.w, b.d) / 2, b.h, 12)
+          : b.shape === "sphere"
+            ? new THREE.SphereGeometry(Math.min(b.w, b.h, b.d) / 2, 16, 10)
+            : new THREE.BoxGeometry(b.w, b.h, b.d);
       let mat: THREE.MeshStandardMaterial;
       if (b.texture) {
         const tex = new THREE.TextureLoader().load(b.texture);
