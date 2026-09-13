@@ -227,7 +227,7 @@ export function createPractice(nickname: string): Session {
   const bots = BOT_NAMES.map((n, i) => makeLocalPlayer(`bot-${i}`, `${n}·AI`, (i % 3) * 1.4, Math.floor(i / 3) * 1.6));
   const everyone = [me, ...bots];
   let room = emptyRoom();
-  room.mode = "infection";
+  room.mode = "normal";
   room.hunterCount = 1;
   room.hunterMode = "ai";
   room.hunterPlayerId = id;

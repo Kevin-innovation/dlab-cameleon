@@ -792,7 +792,7 @@ export class GameWorld {
       }),
     );
     ball.position.y = 1.05;
-    const spr = makeKillSprite(`${killer}  처치  ${victim}`);
+    const spr = makeKillSprite(`${killer}  발견  ${victim}`);
     spr.position.y = 2.15;
     g.add(ring, ball, spr);
     this.scene.add(g);
@@ -1089,7 +1089,7 @@ function canSee(room: RoomState, self: PlayerSnap | undefined, other: PlayerSnap
   if (other.id === self.id) return true;
   if (room.phase === "lobby" || room.phase === "reveal" || room.phase === "result") return true;
   if (isHunter(room, self.id) || !hiderAlive(room, self.id)) return true;
-  if (room.phase === "hide") return !isHunter(room, other.id);
+  if (room.phase === "prepare" || room.phase === "hide") return !isHunter(room, other.id);
   if (isHunter(room, other.id)) return true;
   if (room.mode === "normal" && room.caughtIds.includes(other.id)) return true;
   return false;

@@ -2,6 +2,7 @@ import {
   DEFAULT_AMMO,
   DEFAULT_HIDE,
   DEFAULT_HUNT,
+  DEFAULT_PREPARE,
   REVEAL_TIME,
   SCORE_HUNT_WIN,
   SCORE_SURVIVE,
@@ -13,7 +14,7 @@ import type { PlayerSnap, RoomState } from "./types";
 export function emptyRoom(): RoomState {
   return {
     phase: "lobby",
-    mode: "infection",
+    mode: "normal",
     mapId: "mansion",
     round: 0,
     phaseEndsAt: 0,
@@ -21,9 +22,11 @@ export function emptyRoom(): RoomState {
     hunterMode: "random",
     caughtIds: [],
     scores: {},
+    prepareTime: DEFAULT_PREPARE,
     hideTime: DEFAULT_HIDE,
     huntTime: DEFAULT_HUNT,
     hunterCount: 1,
+    ammoEnabled: false,
     ammoCount: DEFAULT_AMMO,
     ammo: {},
     feed: [],
@@ -66,12 +69,14 @@ export function beginRound(
   for (const id of ids) scores[id] ??= 0;
   const mag = prev.ammoCount || DEFAULT_AMMO;
   const ammo: Record<string, number> = {};
-  for (const id of hunterIds) ammo[id] = mag;
+  if (prev.ammoEnabled) {
+    for (const id of hunterIds) ammo[id] = mag;
+  }
   return {
     ...prev,
-    phase: "hide",
+    phase: "prepare",
     round: prev.round + 1,
-    phaseEndsAt: now + prev.hideTime * 1000,
+    phaseEndsAt: now + (prev.prepareTime || DEFAULT_PREPARE) * 1000,
     hunterIds,
     caughtIds: [],
     winner: undefined,
@@ -80,7 +85,7 @@ export function beginRound(
     taunts: [],
     doors: {},
     scores,
-    ammoCount: mag,
+    ammoCount: prev.ammoEnabled ? mag : prev.ammoCount || DEFAULT_AMMO,
     ammo,
   };
 }
@@ -104,6 +109,7 @@ export function hiderAlive(room: RoomState, id: string) {
 }
 
 export function huntersHaveAmmo(room: RoomState, players: PlayerSnap[]) {
+  if (!room.ammoEnabled) return true;
   return players.some((p) => isHunter(room, p.id) && (room.ammo[p.id] ?? 0) > 0);
 }
 
@@ -117,9 +123,9 @@ export function processFire(
   if (room.phase !== "hunt") return { room };
   if (!isHunter(room, hunterId)) return { room };
   const left = room.ammo[hunterId] ?? 0;
-  if (left <= 0) return { room, empty: true };
+  if (room.ammoEnabled && left <= 0) return { room, empty: true };
 
-  const ammo = { ...room.ammo, [hunterId]: left - 1 };
+  const ammo = room.ammoEnabled ? { ...room.ammo, [hunterId]: left - 1 } : room.ammo;
   let next: RoomState = { ...room, ammo };
   let tagged: PlayerSnap | undefined;
 
@@ -152,7 +158,7 @@ export function processFire(
         lastTag: entry,
         feed: [...(next.feed ?? []), entry].slice(-10),
       };
-      if (next.mode === "infection") {
+      if (next.mode === "infection" && next.ammoEnabled) {
         next.ammo = { ...next.ammo, [best.id]: next.ammoCount || DEFAULT_AMMO };
       }
     }
@@ -191,6 +197,9 @@ export function finishRound(
 }
 
 export function tickRoom(room: RoomState, players: PlayerSnap[], now: number): RoomState {
+  if (room.phase === "prepare" && now >= room.phaseEndsAt) {
+    return { ...room, phase: "hide", phaseEndsAt: now + room.hideTime * 1000 };
+  }
   if (room.phase === "hide" && now >= room.phaseEndsAt) {
     return { ...room, phase: "hunt", phaseEndsAt: now + room.huntTime * 1000 };
   }

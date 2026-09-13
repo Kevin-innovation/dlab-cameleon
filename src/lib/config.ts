@@ -18,6 +18,7 @@ export const TAUNT_COOLDOWN = 8000;
 export const FORCED_TAUNT = 22000;
 export const MAX_BLOBS = 140;
 export const SYNC_HZ = 14;
+export const DEFAULT_PREPARE = 8;
 export const DEFAULT_HIDE = 60;
 export const DEFAULT_HUNT = 180;
 export const REVEAL_TIME = 30;

@@ -425,8 +425,7 @@ export function GameView({
       if (room.phase === "hunt" && isHunter(room, me.id)) {
         const t = Date.now();
         if (t - lastShot < SHOT_COOLDOWN) return;
-        const rounds = room.ammoCount || 6;
-        const ammoLeft = room.ammo?.[me.id] ?? rounds;
+        const ammoLeft = room.ammoEnabled ? (room.ammo?.[me.id] ?? 0) : Infinity;
         if (ammoLeft <= 0) return;
         lastShot = t;
         world.playShot(me.id, true);
@@ -501,8 +500,7 @@ export function GameView({
         seenTouchFire = touchFireRef.current;
         if (!mobilePortraitRef.current && !paintOpenRef.current && !helpRef.current && !watchingRef.current && me && room.phase === "hunt" && isHunter(room, me.id)) {
           const shotAt = Date.now();
-          const rounds = room.ammoCount || 6;
-          const ammoLeft = room.ammo?.[me.id] ?? rounds;
+          const ammoLeft = room.ammoEnabled ? (room.ammo?.[me.id] ?? 0) : Infinity;
           if (shotAt - lastShot >= SHOT_COOLDOWN && ammoLeft > 0) {
             lastShot = shotAt;
             world.playShot(me.id, true);
@@ -553,7 +551,7 @@ export function GameView({
         look.dy = 0;
       }
       world.syncDoors(room.doors ?? {});
-      const hunterWait = !!(me && isHunter(room, me.id) && room.phase === "hide");
+      const hunterWait = !!(me && isHunter(room, me.id) && (room.phase === "prepare" || room.phase === "hide"));
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
       const ghost =
         !!me &&
@@ -719,20 +717,22 @@ export function GameView({
 
   const me = people.find((p) => p.id === session.myId());
   const myRole = me ? roleOf(hud, me.id) : "spectator";
-  const hunterHide = myRole === "hunter" && hud.phase === "hide";
+  const hunterHide = myRole === "hunter" && (hud.phase === "prepare" || hud.phase === "hide");
   const timeLeft = remaining(hud, nowTick);
   const phaseAnnouncement =
     hud.phase === "lobby"
       ? "대기실"
-      : hud.phase === "hide"
-        ? "위장 시간"
-        : hud.phase === "hunt"
-          ? "수색 중"
-          : hud.phase === "reveal"
-            ? "검증 라운드"
-            : hud.winner === "hiders"
-              ? "카멜레온 승리"
-              : "술래 승리";
+      : hud.phase === "prepare"
+        ? "역할 확인"
+        : hud.phase === "hide"
+          ? "위장 시간"
+          : hud.phase === "hunt"
+            ? "수색 중"
+            : hud.phase === "reveal"
+              ? "검증 라운드"
+              : hud.winner === "hiders"
+                ? "카멜레온 승리"
+                : "술래 승리";
 
   const startRound = (force = false) => {
     if (!session.isHost()) return;
@@ -855,7 +855,7 @@ export function GameView({
       </a>
       <h1 className="sr-only">카멜레온 게임</h1>
       <p id="game-accessibility-help" className="sr-only">
-        게임 화면에 포커스를 둔 뒤 WASD로 이동하고 마우스로 시점을 조작합니다. 1부터 7까지의 숫자 키로 자세를 고르고, T로 도발, V로 관전, Tab으로 현황을 확인하고 Escape로 열린 패널을 닫습니다.
+        게임 화면에 포커스를 둔 뒤 WASD로 이동하고 마우스로 시점을 조작합니다. 화면의 자세 버튼과 페인트 도구를 사용하고, Tab으로 현황을 확인하고 Escape로 열린 패널을 닫습니다.
       </p>
       {hud.phase === "lobby" && (
         <Lobby
@@ -908,7 +908,7 @@ export function GameView({
                 key={`${f.at}-${f.id}`}
                 className="flex items-center gap-2 rounded-lg border-l-4 border-pink bg-black/70 px-2.5 py-1.5 text-[13px] leading-snug backdrop-blur-sm"
               >
-                <span className="font-display text-[11px] tracking-wide text-pink">처치</span>
+                <span className="font-display text-[11px] tracking-wide text-pink">발견</span>
                 <span className="font-display text-white">{f.byName}</span>
                 <span className="text-white/60">→</span>
                 <span className="font-display text-lime">{f.name}</span>
@@ -924,13 +924,14 @@ export function GameView({
             </div>
             <div className="font-display text-lg leading-none">
               {hud.phase === "lobby" && "대기실 — WASD·조이스틱으로 이동"}
+              {hud.phase === "prepare" && "역할 확인 · 곧 위장 시작"}
               {hud.phase === "hide" && "위장 시간"}
               {hud.phase === "hunt" && "수색 중"}
               {hud.phase === "reveal" && "검증 라운드"}
               {hud.phase === "result" && (hud.winner === "hiders" ? "카멜레온 승리" : "술래 승리")}
             </div>
           </div>
-          {(hud.phase === "hide" || hud.phase === "hunt" || hud.phase === "reveal") && (
+          {(hud.phase === "prepare" || hud.phase === "hide" || hud.phase === "hunt" || hud.phase === "reveal") && (
             <div className="rounded-2xl bg-black/50 px-4 py-2 text-center backdrop-blur-sm">
               <div className="text-[11px] text-white/60">남은 시간</div>
               <div className="font-display text-3xl leading-none text-lime tabular-nums">{timeLeft}</div>
@@ -963,7 +964,7 @@ export function GameView({
           </div>
         )}
 
-        {hud.phase === "hunt" && myRole === "hunter" && me && (
+        {hud.phase === "hunt" && myRole === "hunter" && me && hud.ammoEnabled && (
           <>
             <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center">
               <div className="h-8 w-8 rounded-full border-2 border-white/80" />
@@ -993,7 +994,7 @@ export function GameView({
         {hunterHide && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0b100d] text-center">
             <p className="text-sm text-lime">술래는 아직 입장할 수 없습니다</p>
-            <h2 className="text-wrap-balance mt-2 font-display text-5xl">위장 중…</h2>
+            <h2 className="text-wrap-balance mt-2 font-display text-5xl">{hud.phase === "prepare" ? "역할 확인 중…" : "위장 중…"}</h2>
             <p className="mt-3 text-white/70">카멜레온들이 3D 맵에서 몸을 칠하고 있습니다</p>
             <div className="mt-8 font-display text-7xl text-lime">{timeLeft}</div>
           </div>
@@ -1001,7 +1002,7 @@ export function GameView({
 
         {hud.lastTag && nowTick - hud.lastTag.at < 2200 && hud.phase === "hunt" && (
           <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-2xl bg-pink px-6 py-2 text-center text-black shadow-lg" role="status" aria-live="polite">
-            <div className="text-[11px] font-semibold tracking-[0.2em]">처치</div>
+            <div className="text-[11px] font-semibold tracking-[0.2em]">발견</div>
             <div className="font-display text-2xl leading-none">
               {hud.lastTag.byName} → {hud.lastTag.name}
             </div>
@@ -1050,12 +1051,12 @@ export function GameView({
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
                 <div>술래 1인칭 · 우클릭 3인칭 · WASD · Shift 달리기 · Ctrl 숙이기</div>
-                <div className="mt-1 text-pink">좌클릭 발사 · 탄 1발 소모 · Tab 현황</div>
+                <div className="mt-1 text-pink">좌클릭 발견 · {hud.ammoEnabled ? "탄 1발 소모 · " : "탄약 제한 없음 · "}Tab 현황</div>
               </>
             ) : (
               <>
                 <div>WASD 걷기 · Shift 달리기 · Space 점프/벽오르기 · Ctrl 내려가기</div>
-                <div>1~7 자세 · F 페인트 · T 도발 · V 관전 · E 문 · Tab 현황</div>
+                <div>화면 버튼으로 자세·페인트 · T 도발 · V 관전 · E 문 · Tab 현황</div>
               </>
             )}
           </div>
@@ -1241,10 +1242,10 @@ export function GameView({
           <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
             <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
             <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
-            <li>1~7로 자세를 고르고, F로 페인트를 엽니다. Space로 벽 색을 빨아 칠하고, T로 휘파람, V로 대기실·숨은 채 관전, E로 문을 엽니다. 열고 지나가면 닫힙니다.</li>
-            <li>술래는 1인칭 총입니다. 우클릭으로 3인칭을 전환하며, 발사할 때마다 탄 1발이 줄어듭니다. 가까이 조준해 맞히면 상대를 태그합니다.</li>
-            <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
-            <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
+            <li>화면의 자세 버튼으로 몸의 형태를 고르고, F로 페인트를 엽니다. Space로 벽 색을 빨아 칠하고, T로 휘파람, V로 관전, E로 문을 엽니다. 열고 지나가면 닫힙니다.</li>
+            <li>술래는 1인칭으로 맵을 수색합니다. 우클릭으로 3인칭을 전환하고, 가까이 조준해 맞히면 상대를 발견합니다. 탄약 제한은 방 옵션입니다.</li>
+            <li>기본 숨바꼭질에서는 발견된 Hider가 관전 상태가 됩니다. 감염은 별도 커스텀 모드입니다.</li>
+            <li>Tab을 누르면 참여자·생존자·탈락자와 점수가 나옵니다. 발견 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
           </ol>
           <button
             type="button"
@@ -1575,8 +1576,8 @@ function Lobby({
               value={room.mode}
               onChange={(e) => session.setRoom({ ...room, mode: e.target.value as RoomState["mode"] })}
             >
-              <option value="infection">감염 (기본)</option>
-              <option value="normal">노말</option>
+              <option value="normal">기본 숨바꼭질</option>
+              <option value="infection">감염 (커스텀)</option>
             </select>
           </label>
           {session.kind === "practice" && (
@@ -1618,6 +1619,21 @@ function Lobby({
             />
           </label>
           <label className="rounded-xl bg-white/8 p-2">
+            역할 확인(초)
+            <input
+              type="number"
+              name="prepareTime"
+              autoComplete="off"
+              inputMode="numeric"
+              min={3}
+              max={20}
+              disabled={!host}
+              className="mt-1 w-full bg-transparent"
+              value={room.prepareTime || 8}
+              onChange={(e) => session.setRoom({ ...room, prepareTime: Math.max(3, Math.min(20, Number(e.target.value) || 8)) })}
+            />
+          </label>
+          <label className="rounded-xl bg-white/8 p-2">
             위장(초)
             <input
               type="number"
@@ -1647,8 +1663,22 @@ function Lobby({
               onChange={(e) => session.setRoom({ ...room, huntTime: Number(e.target.value) || 150 })}
             />
           </label>
+          <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
+            <span>
+              <input
+                type="checkbox"
+                name="ammoEnabled"
+                className="mr-2 accent-lime"
+                disabled={!host}
+                checked={Boolean(room.ammoEnabled)}
+                onChange={(e) => session.setRoom({ ...room, ammoEnabled: e.target.checked })}
+              />
+              탄약 제한 사용
+            </span>
+            <span className="text-[11px] text-white/55">기본 모드는 제한 없음</span>
+          </label>
           <label className="col-span-2 rounded-xl bg-white/8 p-2">
-            술래 탄 수 (난사 방지)
+            술래 탄 수 (옵션)
             <input
               type="number"
               name="ammoCount"
@@ -1656,7 +1686,7 @@ function Lobby({
               inputMode="numeric"
               min={3}
               max={12}
-              disabled={!host}
+              disabled={!host || !room.ammoEnabled}
               className="mt-1 w-full bg-transparent"
               value={room.ammoCount || 6}
               onChange={(e) =>
@@ -1680,7 +1710,7 @@ function Lobby({
               {allReady ? "전원 준비됨" : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
             </p>
             <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 처치 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
+              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
             </p>
           </>
         ) : (
@@ -1689,7 +1719,7 @@ function Lobby({
               호스트 시작 대기 · 준비 {readyCount}/{people.length}
             </p>
             <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 처치 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
+              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
             </p>
           </>
         )}
@@ -1888,7 +1918,7 @@ function ScoreTab({
           </section>
         </div>
         <p className="mt-4 text-center text-xs text-white/65">
-          점수 기준 · 처치 +{SCORE_TAG} · 카멜레온 생존 승리 +{SCORE_SURVIVE} · 술래 팀 승리 +{SCORE_HUNT_WIN}
+          점수 기준 · 발견 +{SCORE_TAG} · 카멜레온 생존 승리 +{SCORE_SURVIVE} · 술래 팀 승리 +{SCORE_HUNT_WIN}
         </p>
       </div>
     </section>
@@ -1915,7 +1945,7 @@ function ResultPanel({
         <p className="text-lime">라운드 {room.round}</p>
         <h2 id="result-title" className="text-wrap-balance font-display text-4xl">{room.winner === "hiders" ? "카멜레온 승!" : "술래 승!"}</h2>
         <p className="mt-2 text-xs text-white/65">
-          처치 +{SCORE_TAG} · 생존 승리 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN}
+          발견 +{SCORE_TAG} · 생존 승리 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN}
         </p>
         <ul className="mt-4 space-y-1 text-left">
           {ranked.map((p, i) => (

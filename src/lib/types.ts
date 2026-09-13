@@ -1,6 +1,6 @@
 export type Pose = "stand" | "crouch" | "sit" | "lie" | "stretch" | "ball" | "stick";
 
-export type Phase = "lobby" | "hide" | "hunt" | "reveal" | "result";
+export type Phase = "lobby" | "prepare" | "hide" | "hunt" | "reveal" | "result";
 
 export type Mode = "normal" | "infection";
 
@@ -98,9 +98,11 @@ export type RoomState = {
   hunterPlayerId?: string;
   caughtIds: string[];
   scores: Record<string, number>;
+  prepareTime: number;
   hideTime: number;
   huntTime: number;
   hunterCount: number;
+  ammoEnabled: boolean;
   ammoCount: number;
   ammo: Record<string, number>;
   lastTag?: { id: string; by: string; name: string; byName: string; at: number };
