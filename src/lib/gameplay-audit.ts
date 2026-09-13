@@ -1,5 +1,6 @@
 import { mapColliders } from "./maps";
-import type { BoxDef, GameMap, RoomState } from "./types";
+import { circleHitsBox } from "./engine/collision";
+import type { BoxDef, Collider, GameMap, RoomState } from "./types";
 
 export type GameplayAuditIssue = {
   severity: "error" | "warning";
@@ -46,19 +47,13 @@ function finiteBox(box: BoxDef) {
 }
 
 function containsPoint(
-  box: { minX: number; maxX: number; minZ: number; maxZ: number; minY: number; maxY: number },
+  box: Collider,
   x: number,
   z: number,
   radius: number,
 ) {
   const overlapsPlayerHeight = box.minY < 1.8 && box.maxY > 0;
-  return (
-    overlapsPlayerHeight &&
-    x >= box.minX - radius &&
-    x <= box.maxX + radius &&
-    z >= box.minZ - radius &&
-    z <= box.maxZ + radius
-  );
+  return overlapsPlayerHeight && circleHitsBox(x, z, radius, box);
 }
 
 function isPrimaryCover(box: BoxDef) {
@@ -119,15 +114,6 @@ export function auditMap(map: GameMap): MapGameplayAudit {
   }
   if (propCount < 12) {
     issues.push(issue("warning", "SEMANTIC_PROPS_TOO_FEW", "실제 가구·소품 기반의 의미 있는 장애물이 부족합니다."));
-  }
-  if (rotatedColliderCount > 0) {
-    issues.push(
-      issue(
-        "warning",
-        "ROTATED_COLLIDER_APPROXIMATION",
-        "회전된 충돌 오브젝트가 있어 현재 축 정렬 충돌과 시각 모델이 어긋날 수 있습니다.",
-      ),
-    );
   }
   if (elevatedObjectCount > 0) {
     issues.push(

@@ -701,7 +701,7 @@ export class GameWorld {
       this.cling = {
         axis: "x",
         sign,
-        plane: clingVisualFace(box, "x", sign),
+        plane: hit.x - sign * BOX_COLLIDE_OUTSET,
         minA: box.minZ + 0.04,
         maxA: box.maxZ - 0.04,
         maxY: box.maxY,
@@ -713,7 +713,7 @@ export class GameWorld {
       this.cling = {
         axis: "z",
         sign,
-        plane: clingVisualFace(box, "z", sign),
+        plane: hit.z - sign * BOX_COLLIDE_OUTSET,
         minA: box.minX + 0.04,
         maxA: box.maxX - 0.04,
         maxY: box.maxY,
@@ -912,8 +912,16 @@ export class GameWorld {
     this.vy = 0;
     this.yaw = Math.atan2(nx, nz);
     const m = edgeMargin(r);
-    this.localX = Math.max(m, Math.min(this.map.w - m, this.localX));
-    this.localZ = Math.max(m, Math.min(this.map.d - m, this.localZ));
+    // Do not re-apply the room boundary clamp on the axis that is attached to
+    // the rendered surface. That clamp was the source of the visible gap when
+    // a player looked at a wall from the side.
+    if (cling.axis === "x") {
+      this.localZ = Math.max(m, Math.min(this.map.d - m, this.localZ));
+      this.localX = cling.plane + cling.sign * pad;
+    } else {
+      this.localX = Math.max(m, Math.min(this.map.w - m, this.localX));
+      this.localZ = cling.plane + cling.sign * pad;
+    }
   }
 
   syncPlayers(
@@ -1374,13 +1382,6 @@ function clingPad() {
   // The stick pose is scaled to 0.08 on its local depth axis (0.22 * 0.08).
   // Keep the body surface on the wall face instead of leaving a visible gap.
   return 0.018;
-}
-
-function clingVisualFace(box: Collider, axis: "x" | "z", sign: number) {
-  const face = axis === "x" ? (sign > 0 ? box.maxX : box.minX) : sign > 0 ? box.maxZ : box.minZ;
-  // Normal-movement colliders extend beyond the rendered mesh by this amount.
-  // Clinging must use the actual mesh face so the flattened body touches it.
-  return face - sign * BOX_COLLIDE_OUTSET;
 }
 
 function makeDoor(def: DoorDef) {

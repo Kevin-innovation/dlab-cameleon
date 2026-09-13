@@ -1,15 +1,100 @@
 import type { Collider } from "../types";
 
 export function circleHitsBox(x: number, z: number, r: number, b: Collider) {
-  const nx = Math.max(b.minX, Math.min(x, b.maxX));
-  const nz = Math.max(b.minZ, Math.min(z, b.maxZ));
-  const dx = x - nx;
-  const dz = z - nz;
+  const p = localPoint(x, z, b);
+  const nx = Math.max(-p.halfW, Math.min(p.x, p.halfW));
+  const nz = Math.max(-p.halfD, Math.min(p.z, p.halfD));
+  const dx = p.x - nx;
+  const dz = p.z - nz;
   return dx * dx + dz * dz < r * r;
 }
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
+}
+
+type SurfacePoint = {
+  x: number;
+  z: number;
+  nx: number;
+  nz: number;
+  dist: number;
+  inside: boolean;
+};
+
+function localPoint(x: number, z: number, b: Collider) {
+  const cx = b.centerX ?? (b.minX + b.maxX) / 2;
+  const cz = b.centerZ ?? (b.minZ + b.maxZ) / 2;
+  const rotation = b.rotation ?? 0;
+  const c = Math.cos(rotation);
+  const s = Math.sin(rotation);
+  return {
+    x: (x - cx) * c + (z - cz) * s,
+    z: -(x - cx) * s + (z - cz) * c,
+    cx,
+    cz,
+    c,
+    s,
+    halfW: b.halfW ?? (b.maxX - b.minX) / 2,
+    halfD: b.halfD ?? (b.maxZ - b.minZ) / 2,
+  };
+}
+
+function worldPoint(x: number, z: number, p: ReturnType<typeof localPoint>) {
+  return {
+    x: p.cx + x * p.c - z * p.s,
+    z: p.cz + x * p.s + z * p.c,
+  };
+}
+
+function closestSurface(x: number, z: number, b: Collider): SurfacePoint {
+  const p = localPoint(x, z, b);
+  const inside = Math.abs(p.x) <= p.halfW && Math.abs(p.z) <= p.halfD;
+  let qx = clamp(p.x, -p.halfW, p.halfW);
+  let qz = clamp(p.z, -p.halfD, p.halfD);
+  let nx = p.x - qx;
+  let nz = p.z - qz;
+
+  if (inside) {
+    const left = p.x + p.halfW;
+    const right = p.halfW - p.x;
+    const back = p.z + p.halfD;
+    const front = p.halfD - p.z;
+    const nearest = Math.min(left, right, back, front);
+    if (nearest === left) {
+      qx = -p.halfW;
+      nx = -1;
+      nz = 0;
+    } else if (nearest === right) {
+      qx = p.halfW;
+      nx = 1;
+      nz = 0;
+    } else if (nearest === back) {
+      qz = -p.halfD;
+      nx = 0;
+      nz = -1;
+    } else {
+      qz = p.halfD;
+      nx = 0;
+      nz = 1;
+    }
+  }
+
+  const dist = inside ? Math.hypot(p.x - qx, p.z - qz) : Math.hypot(nx, nz);
+  if (!inside && dist > 1e-6) {
+    nx /= dist;
+    nz /= dist;
+  }
+  const world = worldPoint(qx, qz, p);
+  const normal = worldPoint(nx, nz, { ...p, cx: 0, cz: 0 });
+  return {
+    x: world.x,
+    z: world.z,
+    nx: normal.x,
+    nz: normal.z,
+    dist,
+    inside,
+  };
 }
 
 export function poseHeight(pose: string) {
@@ -28,7 +113,10 @@ function solidAt(x: number, z: number, r: number, feetY: number, headY: number, 
 }
 
 export function edgeMargin(r: number) {
-  return Math.max(r + 0.55, 0.88);
+  // The perimeter wall mesh is 0.4 units thick. Keep the player's collision
+  // circle just outside its rendered face instead of adding an arbitrary
+  // inner-room gap that becomes obvious from a side angle.
+  return Math.max(r + 0.4, 0.64);
 }
 
 export function blocked(
@@ -64,19 +152,16 @@ export function resolveStuck(
   for (let iter = 0; iter < 10; iter++) {
     for (const b of boxes) {
       if (!solidAt(x, z, r, feetY, headY, b)) continue;
-      const cx = clamp(x, b.minX, b.maxX);
-      const cz = clamp(z, b.minZ, b.maxZ);
-      const dx = x - cx;
-      const dz = z - cz;
-      const len = Math.hypot(dx, dz);
+      const surface = closestSurface(x, z, b);
+      const len = Math.hypot(surface.nx, surface.nz);
       if (len < 1e-5) {
         const inwardX = bounds.w * 0.5 - x;
         const inwardZ = bounds.d * 0.5 - z;
         if (Math.abs(inwardX) >= Math.abs(inwardZ)) x += Math.sign(inwardX || 1) * pad;
         else z += Math.sign(inwardZ || 1) * pad;
       } else {
-        x = cx + (dx / len) * pad;
-        z = cz + (dz / len) * pad;
+        x = surface.x + surface.nx * pad;
+        z = surface.z + surface.nz * pad;
       }
     }
     x = clamp(x, m, bounds.w - m);
@@ -174,17 +259,9 @@ export function nearestSurface(
 ): { x: number; z: number; nx: number; nz: number; dist: number; box: Collider } | null {
   let best: { x: number; z: number; nx: number; nz: number; dist: number; box: Collider } | null = null;
   for (const b of boxes) {
-    const inside = x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
-    if (inside) continue;
-    const cx = clamp(x, b.minX, b.maxX);
-    const cz = clamp(z, b.minZ, b.maxZ);
-    const dx = x - cx;
-    const dz = z - cz;
-    const dist = Math.hypot(dx, dz);
-    if (dist > maxDist || dist < 1e-6) continue;
-    const nx = dx / dist;
-    const nz = dz / dist;
-    if (!best || dist < best.dist) best = { x: cx, z: cz, nx, nz, dist, box: b };
+    const surface = closestSurface(x, z, b);
+    if (surface.inside || surface.dist > maxDist || surface.dist < 1e-6) continue;
+    if (!best || surface.dist < best.dist) best = { ...surface, box: b };
   }
   return best;
 }

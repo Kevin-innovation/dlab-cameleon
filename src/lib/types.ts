@@ -81,6 +81,12 @@ export type Collider = {
   maxZ: number;
   minY: number;
   maxY: number;
+  /** Optional oriented-rectangle data. Legacy colliders remain axis-aligned. */
+  centerX?: number;
+  centerZ?: number;
+  halfW?: number;
+  halfD?: number;
+  rotation?: number;
 };
 
 export type DoorDef = {

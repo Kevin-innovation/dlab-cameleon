@@ -519,13 +519,25 @@ export function mapColliders(map: GameMap) {
       const d = profile?.d ?? b.d;
       const h = profile?.h ?? b.h;
       const y = profile?.y ?? b.y;
+      const rotation = b.rotation ?? 0;
+      const halfW = w / 2 - pad;
+      const halfD = d / 2 - pad;
+      const c = Math.abs(Math.cos(rotation));
+      const s = Math.abs(Math.sin(rotation));
+      const extentX = c * halfW + s * halfD;
+      const extentZ = s * halfW + c * halfD;
       return {
-        minX: b.x - w / 2 + pad,
-        maxX: b.x + w / 2 - pad,
-        minZ: b.z - d / 2 + pad,
-        maxZ: b.z + d / 2 - pad,
+        minX: b.x - extentX,
+        maxX: b.x + extentX,
+        minZ: b.z - extentZ,
+        maxZ: b.z + extentZ,
         minY: y - h / 2,
         maxY: y + h / 2,
+        centerX: b.x,
+        centerZ: b.z,
+        halfW,
+        halfD,
+        rotation,
       };
     })
     .filter((b) => b.maxX - b.minX > 0.2 && b.maxZ - b.minZ > 0.2);

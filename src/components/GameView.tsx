@@ -27,6 +27,7 @@ import { GameWorld } from "@/lib/engine/world";
 import { camouflageMeter, tagRangeForCamouflage } from "@/lib/camouflage";
 import { getMap, MAPS } from "@/lib/maps";
 import { joystickInput, MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
+import { GameInputState } from "@/lib/input";
 import {
   beginRound,
   canStartRound,
@@ -129,9 +130,7 @@ export function GameView({
   const viewActiveRef = useRef(false);
   const watchingRef = useRef(false);
   const mobilePortraitRef = useRef(false);
-  const touchKeysRef = useRef(new Set<string>());
-  const touchJoystickKeysRef = useRef(new Set<string>());
-  const touchLookRef = useRef({ pointerId: -1, x: 0, y: 0, dx: 0, dy: 0 });
+  const inputRef = useRef(new GameInputState());
   const touchFireRef = useRef(0);
   const helpRef = useRef(false);
   const colorRef = useRef(color);
@@ -175,7 +174,7 @@ export function GameView({
       return;
     }
     worldRef.current = world;
-    const touchKeys = touchKeysRef.current;
+    const input = inputRef.current;
     const startMap = getMap(session.getRoom().mapId);
     try {
       world.loadMap(startMap.id);
@@ -197,8 +196,7 @@ export function GameView({
     session.me().set("x", spawn0.x, true);
     session.me().set("z", spawn0.z, true);
 
-    const keys = new Set<string>();
-    const touchJoystickKeys = touchJoystickKeysRef.current;
+    const keys = input.keyboardKeys;
     const mobilePortrait = window.matchMedia(MOBILE_PORTRAIT_QUERY);
     let last = performance.now();
     let lastSync = 0;
@@ -222,12 +220,7 @@ export function GameView({
       if (!mobilePortrait.matches) return;
       exitPointerLockSafely();
       viewActiveRef.current = false;
-      keys.clear();
-      touchKeys.clear();
-      touchJoystickKeys.clear();
-      touchLookRef.current.pointerId = -1;
-      touchLookRef.current.dx = 0;
-      touchLookRef.current.dy = 0;
+      input.clearAll();
       world.exitWatch();
       watchingRef.current = false;
       setWatching(false);
@@ -267,10 +260,13 @@ export function GameView({
         }
         if (k === "f") setPaintOpen((v) => !v);
         if (k === "escape") {
+          e.preventDefault();
+          exitPointerLockSafely();
           setPaintOpen(false);
           setHelp(false);
           viewActiveRef.current = false;
-          keys.clear();
+          input.clearAll();
+          return;
         }
         if (k === "h" || k === "?") setHelp((v) => !v);
         if (k === "r") cyclePose(session, world, 1);
@@ -319,10 +315,10 @@ export function GameView({
             setWatching(on);
             if (on) {
               setPaintOpen(false);
-              keys.delete(" ");
-              keys.delete("space");
-              keys.delete("shift");
-              keys.delete("control");
+              input.touchKeys.delete(" ");
+              input.touchKeys.delete("space");
+              input.touchKeys.delete("shift");
+              input.touchKeys.delete("control");
             }
           }
         }
@@ -338,12 +334,7 @@ export function GameView({
     const onBlur = () => {
       setTabOpen(false);
       viewActiveRef.current = false;
-      keys.clear();
-      touchKeys.clear();
-      touchJoystickKeys.clear();
-      touchLookRef.current.pointerId = -1;
-      touchLookRef.current.dx = 0;
-      touchLookRef.current.dy = 0;
+      input.clearAll();
     };
     window.addEventListener("blur", onBlur);
     const onVisibilityChange = () => {
@@ -353,25 +344,25 @@ export function GameView({
 
     const onMouseMove = (e: MouseEvent) => {
       if (mobilePortraitRef.current || paintOpenRef.current || helpRef.current) return;
+      if (!viewActiveRef.current) return;
       const lockedNow = document.pointerLockElement === canvas;
-      if (!lockedNow && !viewActiveRef.current) return;
       if (!lockedNow && e.target !== canvas) return;
       world.lookDelta(e.movementX, e.movementY);
     };
     document.addEventListener("mousemove", onMouseMove);
 
     const onTouchLookMove = (e: PointerEvent) => {
-      if (touchLookRef.current.pointerId !== e.pointerId) return;
+      if (input.touchLook.pointerId !== e.pointerId) return;
       e.preventDefault();
-      touchLookRef.current.dx += e.clientX - touchLookRef.current.x;
-      touchLookRef.current.dy += e.clientY - touchLookRef.current.y;
-      touchLookRef.current.x = e.clientX;
-      touchLookRef.current.y = e.clientY;
+      input.touchLook.dx += e.clientX - input.touchLook.x;
+      input.touchLook.dy += e.clientY - input.touchLook.y;
+      input.touchLook.x = e.clientX;
+      input.touchLook.y = e.clientY;
     };
     const onTouchLookEnd = (e: PointerEvent) => {
-      if (touchLookRef.current.pointerId !== e.pointerId) return;
+      if (input.touchLook.pointerId !== e.pointerId) return;
       e.preventDefault();
-      touchLookRef.current.pointerId = -1;
+      input.touchLook.pointerId = -1;
     };
     window.addEventListener("pointermove", onTouchLookMove, { passive: false });
     window.addEventListener("pointerup", onTouchLookEnd, { passive: false });
@@ -387,7 +378,7 @@ export function GameView({
       } else if (hadPointerLock) {
         hadPointerLock = false;
         viewActiveRef.current = false;
-        keys.clear();
+        input.clearKeyboard();
       }
     };
     document.addEventListener("pointerlockchange", onLock);
@@ -638,9 +629,9 @@ export function GameView({
       if (session.kind === "practice") tickSoloBots(session, map, room, dt, Date.now());
       const frameKeys = mobilePortraitRef.current ? new Set<string>() : new Set(keys);
       if (!mobilePortraitRef.current) {
-        for (const key of touchKeysRef.current) frameKeys.add(key);
+        for (const key of input.touchKeys) frameKeys.add(key);
       }
-      const look = touchLookRef.current;
+      const look = input.touchLook;
       if (!mobilePortraitRef.current && !paintOpenRef.current && !helpRef.current && (look.dx !== 0 || look.dy !== 0)) {
         world.lookDelta(look.dx, look.dy);
         look.dx = 0;
@@ -799,11 +790,7 @@ export function GameView({
       canvas.removeEventListener("webglcontextlost", onContextLost);
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
       ro.disconnect();
-      touchKeys.clear();
-      touchJoystickKeys.clear();
-      touchLookRef.current.pointerId = -1;
-      touchLookRef.current.dx = 0;
-      touchLookRef.current.dy = 0;
+      input.clearAll();
       unshot();
       undoor();
       world.dispose();
@@ -874,10 +861,11 @@ export function GameView({
     setWatching(on);
     if (on) {
       setPaintOpen(false);
-      touchKeysRef.current.delete(" ");
       clearTouchJoystick();
-      touchKeysRef.current.delete("shift");
-      touchKeysRef.current.delete("control");
+      inputRef.current.touchKeys.delete(" ");
+      inputRef.current.touchKeys.delete("space");
+      inputRef.current.touchKeys.delete("shift");
+      inputRef.current.touchKeys.delete("control");
     }
   };
 
@@ -889,39 +877,33 @@ export function GameView({
     } catch {
       // Pointer capture is optional on older mobile browsers.
     }
-    touchKeysRef.current.add(key);
+    inputRef.current.touchKeys.add(key);
   };
 
   const touchRelease = (key: string, event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    touchKeysRef.current.delete(key);
+    inputRef.current.touchKeys.delete(key);
   };
 
   const touchKeyboardPress = (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    touchKeysRef.current.add(key);
+    inputRef.current.touchKeys.add(key);
   };
 
   const touchKeyboardRelease = (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    touchKeysRef.current.delete(key);
+    inputRef.current.touchKeys.delete(key);
   };
 
   const setTouchJoystickKeys = (keys: string[]) => {
-    for (const key of touchJoystickKeysRef.current) touchKeysRef.current.delete(key);
-    touchJoystickKeysRef.current.clear();
-    for (const key of keys) {
-      touchJoystickKeysRef.current.add(key);
-      touchKeysRef.current.add(key);
-    }
+    inputRef.current.setJoystick(keys);
   };
 
   const clearTouchJoystick = () => {
-    for (const key of touchJoystickKeysRef.current) touchKeysRef.current.delete(key);
-    touchJoystickKeysRef.current.clear();
+    inputRef.current.clearJoystick();
   };
 
   const triggerTouchFire = () => {
@@ -936,14 +918,20 @@ export function GameView({
     } catch {
       // Pointer capture is optional on older mobile browsers; window listeners keep the drag alive.
     }
-    touchLookRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0 };
+    Object.assign(inputRef.current.touchLook, {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      dx: 0,
+      dy: 0,
+    });
   };
 
   const touchLookEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (touchLookRef.current.pointerId !== event.pointerId) return;
+    if (inputRef.current.touchLook.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    touchLookRef.current.pointerId = -1;
+    inputRef.current.touchLook.pointerId = -1;
   };
 
   const touchLookKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -956,8 +944,8 @@ export function GameView({
     if (!delta) return;
     event.preventDefault();
     event.stopPropagation();
-    touchLookRef.current.dx += delta[0];
-    touchLookRef.current.dy += delta[1];
+    inputRef.current.touchLook.dx += delta[0];
+    inputRef.current.touchLook.dy += delta[1];
   };
 
   return (
