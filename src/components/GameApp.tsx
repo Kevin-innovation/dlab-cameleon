@@ -15,8 +15,51 @@ type Screen =
   | { t: "play" }
   | { t: "practice" };
 
+function readStoredNickname() {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.sessionStorage.getItem(NICK_KEY) ?? window.localStorage.getItem(NICK_KEY) ?? "";
+  } catch {
+    try {
+      return window.localStorage.getItem(NICK_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  }
+}
+
+function storeNickname(name: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(NICK_KEY, name);
+  } catch {
+    // iOS private browsing and embedded browsers can deny session storage.
+  }
+  try {
+    window.localStorage.setItem(NICK_KEY, name);
+  } catch {
+    // Nickname persistence is optional and must not block a room join.
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("CONNECT_TIMEOUT")), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (reason) => {
+        window.clearTimeout(timer);
+        reject(reason);
+      },
+    );
+  });
+}
+
 export default function GameApp() {
-  const [nick, setNick] = useState(() => sessionStorage.getItem(NICK_KEY) ?? "");
+  const [nick, setNick] = useState(readStoredNickname);
   const [screen, setScreen] = useState<Screen>({ t: "home" });
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState("");
@@ -28,23 +71,34 @@ export default function GameApp() {
       setError("닉네임은 2~12자로 입력해 주세요.");
       return;
     }
-    sessionStorage.setItem(NICK_KEY, name);
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setError("인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
+      return;
+    }
+    storeNickname(name);
     setNick(name);
     setError("");
     setScreen({ t: "connecting" });
-    void requestMobileLandscape();
+    void requestMobileLandscape().catch(() => false);
     try {
-      const s = await connectOnline({
-        roomCode: DEFAULT_ROOM_CODE,
-        nickname: name,
-      });
+      const s = await withTimeout(
+        connectOnline({
+          roomCode: DEFAULT_ROOM_CODE,
+          nickname: name,
+        }),
+        15000,
+      );
       setSession(s);
       setScreen({ t: "play" });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "접속 실패";
+      const msg = e instanceof Error ? e.message : String(e);
       setError(
         msg.includes("ROOM_LIMIT") || msg.includes("full")
           ? `통합 룸이 가득 찼습니다 (최대 ${MAX_PLAYERS}인). 잠시 후 다시 시도해 주세요.`
+          : msg === "CONNECT_TIMEOUT"
+            ? "서버 응답이 늦습니다. 네트워크를 확인하고 다시 입장해 주세요."
+            : /SecurityError|QuotaExceeded|storage/i.test(msg)
+              ? "브라우저 저장소 접근이 제한되어 있습니다. Safari 설정을 확인한 뒤 다시 시도해 주세요."
           : "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
       );
       setScreen({ t: "home" });
@@ -58,9 +112,9 @@ export default function GameApp() {
       return;
     }
     setError("");
-    sessionStorage.setItem(NICK_KEY, name);
+    storeNickname(name);
     setNick(name);
-    void requestMobileLandscape();
+    void requestMobileLandscape().catch(() => false);
     setSession(createPractice(name));
     setScreen({ t: "practice" });
   };

@@ -87,6 +87,15 @@ function normalizeKey(e: KeyboardEvent) {
   return KEY_BY_CODE[e.code] ?? e.key.toLowerCase();
 }
 
+function exitPointerLockSafely() {
+  if (typeof document.exitPointerLock !== "function") return;
+  try {
+    document.exitPointerLock();
+  } catch {
+    // Pointer lock is unavailable or restricted on some iPhone Safari versions.
+  }
+}
+
 export function GameView({
   session,
   serverName,
@@ -113,6 +122,7 @@ export function GameView({
   const [atDoor, setAtDoor] = useState(false);
   const [tabOpen, setTabOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
+  const [graphicsError, setGraphicsError] = useState("");
   const socialVisible = socialOpen;
   const paintOpenRef = useRef(false);
   const viewActiveRef = useRef(false);
@@ -136,7 +146,7 @@ export function GameView({
 
   useEffect(() => {
     paintOpenRef.current = paintOpen;
-    if (paintOpen) document.exitPointerLock();
+    if (paintOpen) exitPointerLockSafely();
   }, [paintOpen]);
   useEffect(() => {
     colorRef.current = color;
@@ -156,11 +166,31 @@ export function GameView({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const world = new GameWorld(canvas);
+    let world: GameWorld;
+    try {
+      world = new GameWorld(canvas);
+    } catch {
+      queueMicrotask(() => setGraphicsError("이 기기에서 3D 그래픽을 시작하지 못했습니다."));
+      return;
+    }
     worldRef.current = world;
     const touchKeys = touchKeysRef.current;
     const startMap = getMap(session.getRoom().mapId);
-    world.loadMap(startMap.id);
+    try {
+      world.loadMap(startMap.id);
+    } catch {
+      world.dispose();
+      worldRef.current = null;
+      queueMicrotask(() => setGraphicsError("이 기기의 그래픽 메모리가 부족해 게임을 시작하지 못했습니다."));
+      return;
+    }
+    const onContextLost = (event: Event) => {
+      event.preventDefault();
+      setGraphicsError("3D 그래픽 연결이 끊겼습니다. Safari 탭을 닫고 다시 열어 주세요.");
+    };
+    const onContextRestored = () => setGraphicsError("");
+    canvas.addEventListener("webglcontextlost", onContextLost, { passive: false });
+    canvas.addEventListener("webglcontextrestored", onContextRestored);
     const spawn0 = startMap.spawns[0];
     world.setLocal(spawn0.x, spawn0.z, 0);
     session.me().set("x", spawn0.x, true);
@@ -189,7 +219,7 @@ export function GameView({
     const syncMobileOrientation = () => {
       mobilePortraitRef.current = mobilePortrait.matches;
       if (!mobilePortrait.matches) return;
-      document.exitPointerLock();
+      exitPointerLockSafely();
       viewActiveRef.current = false;
       keys.clear();
       touchKeys.clear();
@@ -763,6 +793,8 @@ export function GameView({
         mobilePortrait.removeListener(syncMobileOrientation);
       }
       window.removeEventListener("orientationchange", syncMobileOrientation);
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
       ro.disconnect();
       touchKeys.clear();
       touchJoystickKeys.clear();
@@ -955,6 +987,16 @@ export function GameView({
           aria-keyshortcuts="W A S D 1 2 3 4 5 6 7 T V Tab Escape"
           className={`absolute inset-0 h-full w-full touch-none ${paintOpen ? "cursor-crosshair" : locked ? "cursor-none" : "cursor-default"}`}
         />
+
+        {graphicsError && (
+          <div className="pointer-events-auto absolute inset-0 z-[90] flex items-center justify-center bg-[#0b100d]/95 px-6 text-center" role="alert">
+            <div className="max-w-sm">
+              <div className="text-4xl" aria-hidden="true">⚠</div>
+              <h2 className="mt-3 font-display text-2xl text-lime">게임 그래픽을 준비하지 못했어요</h2>
+              <p className="mt-2 text-sm leading-relaxed text-white/75">{graphicsError}</p>
+            </div>
+          </div>
+        )}
 
         {hud.phase !== "lobby" && (
           <div

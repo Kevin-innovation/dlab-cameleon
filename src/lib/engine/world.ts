@@ -123,9 +123,12 @@ export class GameWorld {
       alpha: false,
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(this.isMobile ? 1.25 : 2, window.devicePixelRatio || 1));
+    // iPhones often report a 2–3x device pixel ratio. Rendering the full
+    // framebuffer at that density makes the WebGL tab far more likely to be
+    // evicted when the map, furniture, and player paint textures are loaded.
+    this.renderer.setPixelRatio(Math.min(this.isMobile ? 1 : 2, window.devicePixelRatio || 1));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = !this.isMobile;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -179,7 +182,7 @@ export class GameWorld {
     const hemi = new THREE.HemisphereLight("#f2efe6", "#3d2a1c", 1.05);
     const sun = new THREE.DirectionalLight("#fff4e0", 1.35);
     sun.position.set(8, 14, 6);
-    sun.castShadow = true;
+    sun.castShadow = !this.isMobile;
     const shadowMapSize = this.isMobile ? 512 : 1024;
     sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     sun.shadow.camera.near = 1;
@@ -190,7 +193,10 @@ export class GameWorld {
     sun.shadow.camera.bottom = -18;
     this.mapGroup.add(hemi, sun);
 
-    const floorTex = canvasTexture(makePatternCanvas("wood", map.floor, [map.floor, "#b08950"], 11, 512));
+    const floorTex = canvasTexture(
+      makePatternCanvas("wood", map.floor, [map.floor, "#b08950"], 11, this.isMobile ? 256 : 512),
+      this.isMobile ? 1 : 8,
+    );
     floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
     floorTex.repeat.set(map.w / 4, map.d / 4);
     const floor = new THREE.Mesh(
@@ -249,8 +255,9 @@ export class GameWorld {
           b.color,
           b.colors,
           (b.x * 100 + b.z * 17) | 0,
+          this.isMobile ? 128 : 256,
         );
-        const tex = canvasTexture(cnv);
+        const tex = canvasTexture(cnv, this.isMobile ? 1 : 8);
         mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
@@ -1408,10 +1415,10 @@ function makeKillSprite(text: string) {
   return spr;
 }
 
-function canvasTexture(canvas: HTMLCanvasElement) {
+function canvasTexture(canvas: HTMLCanvasElement, anisotropy = 8) {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = anisotropy;
   tex.needsUpdate = true;
   return tex;
 }
