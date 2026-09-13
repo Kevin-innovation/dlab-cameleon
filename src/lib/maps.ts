@@ -376,6 +376,13 @@ function landmarkProps(map: GameMap): BoxDef[] {
   }
   if (map.id === "sewer") {
     return [
+      // 남쪽 정비 구역: 원형 드럼과 가구를 섞어 시야·이동 속도를 동시에 바꾼다.
+      B(7.5, 24, 3.8, 1.35, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.56, d: 1.2 } }),
+      B(12, 26, 1.6, 1.4, "#5b6b58", { h: 0.95, collide: true, prop: "armchair" }),
+      B(14.5, 25.5, 2.4, 1.3, "#6d4420", { h: 0.72, collide: true, prop: "coffeeTable", collider: { w: 2.2, d: 1.12 }, pattern: "wood" }),
+      B(24, 23, 3.6, 1.3, "#6a3d4b", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.16 } }),
+      B(29, 25, 1.6, 1.4, "#5b6b58", { h: 0.95, collide: true, prop: "armchair" }),
+      B(35, 18, 2.6, 0.7, "#6d4420", { h: 2.15, collide: true, prop: "bookshelf", collider: { w: 2.4, d: 0.62 }, pattern: "wood" }),
       B(3.5, 25.5, 1.35, 1.35, "#922b21", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
       B(5.1, 25.8, 1.25, 1.25, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
       B(38.2, 26, 1.35, 1.35, "#b03a2e", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
@@ -387,6 +394,13 @@ function landmarkProps(map: GameMap): BoxDef[] {
   }
   if (map.id === "backrooms") {
     return [
+      // 사무실 클러스터: 책상 사이에 앉거나 붙을 수 있는 작은 커버를 배치한다.
+      B(15, 7, 1.4, 0.9, "#8c7742", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
+      B(26, 7, 1.4, 0.9, "#8c7742", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
+      B(4, 12, 1.3, 1.3, "#53734c", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#53734c", "#354e30"] }),
+      B(35, 10, 1.1, 1.1, "#d6c57c", { h: 2.9, collide: true, prop: "floorLamp", shape: "cylinder" }),
+      B(4, 18, 2.4, 0.65, "#6d5c3a", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 2.2, d: 0.58 }, pattern: "wood" }),
+      B(17, 22, 1.6, 1.4, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
       B(24, 22, 3.6, 1.25, "#8c7742", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 } }),
       B(24.2, 24, 2.2, 1.4, "#6d5c3a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 2.02, d: 1.2 }, pattern: "wood" }),
       B(29, 22, 1.8, 1.5, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
@@ -399,6 +413,16 @@ function landmarkProps(map: GameMap): BoxDef[] {
   }
   if (map.id === "farm") {
     return [
+      // 서쪽 휴게 구역: 큰 소파·안락의자·테이블의 3단 커버 조합.
+      B(7, 21, 4.4, 1.45, "#7b3f2a", { h: 1.0, collide: true, prop: "sofa", collider: { w: 4.12, d: 1.3 }, texture: "/textures/velvet-ruby-v1.png" }),
+      B(12.5, 22, 1.6, 1.4, "#a56832", { h: 0.95, collide: true, prop: "armchair" }),
+      B(10, 24, 2.5, 1.3, "#6d4420", { h: 0.72, collide: true, prop: "coffeeTable", collider: { w: 2.28, d: 1.12 }, pattern: "wood" }),
+      // 북쪽 관리실: 낮은 소파와 책장으로 빠른 길과 우회 길을 만든다.
+      B(22, 4.5, 3.8, 1.25, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.56, d: 1.12 } }),
+      B(27, 5, 1.6, 1.4, "#a56832", { h: 0.95, collide: true, prop: "armchair" }),
+      B(33, 25, 2.2, 0.8, "#6d4420", { h: 2.1, collide: true, prop: "bookshelf", collider: { w: 2.05, d: 0.7 }, pattern: "wood" }),
+      B(24, 28, 1.3, 1.3, "#2c6e4a", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"] }),
+      B(31, 28, 1.1, 1.1, "#d9c9a5", { h: 2.9, collide: true, prop: "floorLamp", shape: "cylinder" }),
       B(44, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
       B(36, 28, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
       B(14, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
@@ -446,9 +470,48 @@ function clearSpawns(map: GameMap): GameMap {
   };
 }
 
-export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) =>
-  clearSpawns(stageLayout(m)),
-);
+function fitMapToEightPlayerArena(map: GameMap, width: number, depth: number): GameMap {
+  const sx = width / map.w;
+  const sz = depth / map.d;
+  const scaleBox = (box: BoxDef): BoxDef => ({
+    ...box,
+    x: box.x * sx,
+    z: box.z * sz,
+    w: box.w * sx,
+    d: box.d * sz,
+    collider: box.collider
+      ? { ...box.collider, w: box.collider.w * sx, d: box.collider.d * sz }
+      : undefined,
+  });
+  const scaleDoor = (door: DoorDef): DoorDef => ({
+    ...door,
+    x: door.x * sx,
+    z: door.z * sz,
+    w: door.w * (door.along === "x" ? sx : sz),
+    d: door.d * (door.along === "x" ? sz : sx),
+  });
+  return {
+    ...map,
+    w: width,
+    d: depth,
+    boxes: map.boxes.map(scaleBox),
+    doors: map.doors.map(scaleDoor),
+    spawns: map.spawns.map((point) => ({ x: point.x * sx, z: point.z * sz })),
+    hunterSpawns: map.hunterSpawns.map((point) => ({ x: point.x * sx, z: point.z * sz })),
+  };
+}
+
+const arenaSizes: Record<string, { width: number; depth: number }> = {
+  mansion: { width: 42, depth: 32 },
+  farm: { width: 42, depth: 32 },
+  sewer: { width: 42, depth: 32 },
+  backrooms: { width: 40, depth: 30 },
+};
+
+export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) => {
+  const size = arenaSizes[m.id];
+  return clearSpawns(size ? fitMapToEightPlayerArena(stageLayout(m), size.width, size.depth) : stageLayout(m));
+});
 
 function rotY(x: number, z: number, ang: number) {
   const c = Math.cos(ang);
