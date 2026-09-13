@@ -1,4 +1,4 @@
-import { circleHitsBox, resolveStuck } from "./engine/collision";
+import { resolveStuck } from "./engine/collision";
 import type { BoxDef, Collider, DoorDef, GameMap, Pattern } from "./types";
 
 function B(
@@ -81,9 +81,9 @@ const mansion: GameMap = {
     B(10, 11, 0.2, 8, "#6b3a2a", { h: 2.9, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
     B(20, 9, 9, 0.2, "#1f4d6e", { h: 2.5, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
     B(33, 12, 0.2, 7, "#6a8f6a", { h: 2.7, collide: true, pattern: "leaves" }),
-    B(5, 8, 2.6, 1.1, "#a32638", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.42, d: 0.98 }, texture: "/textures/velvet-ruby-v1.png" }),
+    B(5, 8, 3.6, 1.25, "#a32638", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 }, texture: "/textures/velvet-ruby-v1.png" }),
     B(26, 14, 2.4, 0.5, "#5c2e12", { h: 2.35, pattern: books, colors: bookColors }),
-    B(2.4, 3.2, 3.4, 1.1, "#a32638", { h: 0.95, collide: true, prop: "sofa", texture: "/textures/velvet-ruby-v1.png", rotation: Math.PI / 2 }),
+    B(2.4, 3.2, 3.6, 1.25, "#a32638", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 }, texture: "/textures/velvet-ruby-v1.png", rotation: Math.PI / 2 }),
     B(7, 3.4, 2.8, 0.5, "#5c2e12", { h: 2.5, pattern: books, colors: bookColors }),
     B(18, 3.5, 1.4, 1.4, "#2c6e4a", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"], shape: "sphere" }),
     B(22, 3.2, 3.2, 2.0, "#9b2a2a", { h: 0.08, pattern: "dots", colors: ["#9b2a2a", "#c0392b"] }),
@@ -279,114 +279,6 @@ const backrooms: GameMap = {
   ],
 };
 
-function mulberry(seed: number) {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6d2b79f5;
-    let x = Math.imul(t ^ (t >>> 15), 1 | t);
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function nearSpawn(map: GameMap, x: number, z: number, dist: number) {
-  const pts = [...map.spawns, ...map.hunterSpawns];
-  return pts.some((p) => Math.hypot(p.x - x, p.z - z) < dist);
-}
-
-function nook(x: number, z: number, color: string, pattern: Pattern, colors?: string[], h = 2.5): BoxDef[] {
-  return [
-    B(x, z, 2.4, 0.24, color, { h, collide: true, pattern, colors }),
-    B(x, z, 0.24, 2.2, color, { h, collide: true, pattern, colors }),
-  ];
-}
-
-function alcove(x: number, z: number, color: string, pattern: Pattern, colors?: string[]): BoxDef[] {
-  return [
-    B(x, z, 2.6, 0.24, color, { h: 2.4, collide: true, pattern, colors }),
-    B(x, z, 0.24, 1.7, color, { h: 2.4, collide: true, pattern, colors }),
-    B(x + 2.36, z, 0.24, 1.7, color, { h: 2.4, collide: true, pattern, colors }),
-  ];
-}
-
-function cluster(theme: string, x: number, z: number, kind: number, rnd: () => number): BoxDef[] {
-  const j = () => (rnd() - 0.5) * 1.1;
-  if (theme === "backrooms") {
-    if (kind === 0) return [B(x, z, 1.5, 0.7, "#6d5c3a", { h: 0.9, collide: true, prop: "chair", pattern: "wood" })];
-    if (kind === 1) return [B(x, z, 0.55, 0.55, "#222", { h: 1.05, collide: true, shape: "cylinder" })];
-    if (kind === 2) return nook(x, z, "#e2d36a", "wallpaper", ["#e2d36a", "#c9b84a"], 2.4);
-    if (kind === 3)
-      return [
-        B(x, z, 0.9, 0.9, "#5a4a32", { h: 0.8, collide: true, pattern: "wood" }),
-        B(x + 0.1, z + 0.1, 0.9, 0.9, "#5a4a32", { h: 0.8, y: 0.8, collide: true, pattern: "wood" }),
-      ];
-    return [B(x, z, 1.3, 0.9, "#3a3a3a", { h: 1.15, collide: true })];
-  }
-  if (theme === "farm") {
-    if (kind === 0) return [B(x, z, 1.8, 1.3, "#e39b2d", { h: 1.05, collide: true, shape: "cylinder", pattern: "hay" })];
-    if (kind === 1)
-      return [
-        B(x, z, 1.2, 1.2, "#c47a3a", { h: 1.15, collide: true, pattern: "wood" }),
-        B(x + 1.35, z + j(), 1.1, 1.1, "#d35400", { h: 0.95, collide: true, shape: "sphere" }),
-        B(x + 0.2, z + 1.3, 1.0, 1.0, "#e67e22", { h: 0.7, collide: true, shape: "sphere" }),
-      ];
-    if (kind === 2) return nook(x, z, "#8b5a2b", "wood", ["#8b5a2b", "#6d4420"], 2.4);
-    if (kind === 3) return [B(x, z, 0.85, 0.85, "#8b5a2b", { h: 2.8, collide: true, pattern: "wood", shape: "cylinder" })];
-    if (kind === 4)
-      return [
-        B(x, z, 2.2, 1.5, "#7b5428", { h: 1.1, collide: true, pattern: "hay" }),
-        B(x + 1.6, z + 0.4, 1.3, 1.2, "#6fbf57", { h: 1.3, collide: true, pattern: "leaves" }),
-      ];
-    if (kind === 5) return alcove(x, z, "#d3533a", "wood", ["#d3533a", "#b43c28"]);
-    if (kind === 6)
-      return [B(x, z, 2.8, 0.22, "#f0c43a", { h: 2.3, collide: true, pattern: "dots", colors: ["#f0c43a", "#e0a820"] })];
-    return [
-      B(x, z, 1.5, 1.1, "#c0392b", { h: 1.05, collide: true, pattern: "wood" }),
-      B(x + 1.6, z + j(), 1.1, 1.4, "#e39b2d", { h: 0.9, collide: true, pattern: "hay" }),
-    ];
-  }
-  if (theme === "sewer") {
-    if (kind === 0) return [B(x, z, 1.15, 1.15, "#b03a2e", { h: 1.25, collide: true })];
-    if (kind === 1)
-      return [
-        B(x, z, 1.2, 1.2, "#922b21", { h: 1.2, collide: true, prop: "barrel", shape: "cylinder" }),
-        B(x + 1.3, z + j(), 1.15, 1.15, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
-        B(x + 0.4, z + 1.4, 1.1, 1.1, "#b03a2e", { h: 0.85, collide: true, prop: "barrel", shape: "cylinder" }),
-      ];
-    if (kind === 2) return [B(x, z, 0.9, 0.9, "#c47a3a", { h: 3.2, collide: true, pattern: "pipes" })];
-    if (kind === 3)
-      return [B(x, z, 2.2, 1.6, "#2c3e50", { h: 1.7, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] })];
-    if (kind === 4) return nook(x, z, "#1b2420", "bricks", ["#1b2420", "#2a3830"], 2.6);
-    if (kind === 5) return alcove(x, z, "#8e44ad", "graffiti", ["#8e44ad", "#f1c40f"]);
-    if (kind === 6)
-      return [B(x, z, 0.22, 2.8, "#c47a3a", { h: 2.5, collide: true, pattern: "pipes" })];
-    return [B(x, z, 1.8, 1.3, "#f1c40f", { h: 1.1, collide: true, pattern: "stripes", colors: ["#f1c40f", "#111"] })];
-  }
-  if (kind === 0) return [B(x, z, 2.6, 1.05, "#a32638", { h: 0.95, collide: true, prop: "sofa", texture: "/textures/velvet-ruby-v1.png" })];
-  if (kind === 1)
-    return [B(x, z, 2.4, 0.55, "#5c2e12", { h: 2.35, collide: true, prop: "bookshelf", pattern: books, colors: bookColors })];
-  if (kind === 2)
-    return [
-      B(x, z, 1.15, 1.15, "#8b5a2b", { h: 1.1, collide: true, pattern: "wood" }),
-      B(x + 0.15, z + 0.15, 0.95, 0.95, "#6d4c2a", { h: 0.7, y: 1.1, collide: true, pattern: "wood" }),
-    ];
-  if (kind === 3) return [B(x, z, 0.9, 0.9, "#d9c9a5", { h: 3.3, collide: true, pattern: "bricks" })];
-  if (kind === 4)
-    return [
-      B(x, z, 1.2, 1.2, "#2c6e4a", { h: 1.45, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"], shape: "sphere" }),
-      B(x + 1.5, z + j(), 1.1, 1.1, "#6d4c2a", { h: 0.95, collide: true, pattern: "wood", shape: "cylinder" }),
-    ];
-  if (kind === 5) return nook(x, z, "#6b3a2a", "wallpaper", ["#6b3a2a", "#8a5040"], 2.6);
-  if (kind === 6) return alcove(x, z, "#1f4d6e", "wallpaper", ["#1f4d6e", "#2e6a8f"]);
-  if (kind === 7)
-    return [
-      B(x, z, 1.8, 1.5, "#c45c26", { h: 0.9, collide: true, prop: "armchair" }),
-      B(x + 1.7, z + 0.2, 0.9, 0.9, "#f4f0e6", { h: 1.35, collide: true }),
-      B(x - 0.2, z + 1.5, 2.2, 0.7, "#d9c4a0", { h: 0.45, collide: true, pattern: "wood" }),
-    ];
-  return [B(x, z, 2.2, 0.22, "#6a8f6a", { h: 2.4, collide: true, pattern: "leaves" })];
-}
-
 function wallTheme(id: string): { color: string; pattern: Pattern; colors: string[] } {
   if (id === "farm") return { color: "#6d4420", pattern: "wood", colors: ["#6d4420", "#8b5a2b"] };
   if (id === "sewer") return { color: "#1b2420", pattern: "bricks", colors: ["#1b2420", "#2a3830"] };
@@ -445,66 +337,26 @@ function wallWithDoor(
   return { walls, door };
 }
 
-function partitionMap(map: GameMap): GameMap {
+function stageLayout(map: GameMap): GameMap {
   const theme = wallTheme(map.id);
-  const h = Math.max(3.6, map.ceiling - 0.08);
-  const thick = 0.4;
-  const pad = 1.4;
-  let xs: number[];
-  let zs: number[];
-  if (map.id === "farm") {
-    xs = [0.33, 0.54, 0.75].map((t) => t * map.w);
-    zs = [0.38, 0.64].map((t) => t * map.d);
-  } else if (map.id === "sewer") {
-    xs = [0.28, 0.48, 0.68, 0.84].map((t) => t * map.w);
-    zs = [0.32, 0.52, 0.72].map((t) => t * map.d);
-  } else if (map.id === "backrooms") {
-    xs = [0.32, 0.54, 0.76].map((t) => t * map.w);
-    zs = [0.36, 0.62].map((t) => t * map.d);
-  } else {
-    xs = [0.3, 0.52, 0.74].map((t) => t * map.w);
-    zs = [0.34, 0.56, 0.76].map((t) => t * map.d);
-  }
-  const xLines = [pad, ...xs.filter((x) => x > pad + 2 && x < map.w - pad - 2), map.w - pad];
-  const zLines = [pad, ...zs.filter((z) => z > pad + 2 && z < map.d - pad - 2), map.d - pad];
+  const h = Math.min(map.ceiling - 0.24, 2.45);
+  const thick = 0.36;
+  const runs: { along: "x" | "z"; plane: number; a0: number; a1: number }[] =
+    map.id === "mansion"
+      ? [{ along: "x", plane: 18, a0: 9, a1: 39 }]
+      : map.id === "farm"
+        ? [{ along: "x", plane: 20, a0: 10, a1: 42 }]
+        : map.id === "sewer"
+          ? [{ along: "z", plane: 29, a0: 8, a1: 26 }]
+          : [{ along: "x", plane: 15, a0: 7, a1: 33 }];
   const walls: BoxDef[] = [];
-  const doors: DoorDef[] = [];
-  for (const x of xs) {
-    if (x <= pad || x >= map.w - pad) continue;
-    for (let i = 0; i < zLines.length - 1; i++) {
-      const part = wallWithDoor(map.id, "z", x, zLines[i], zLines[i + 1], thick, h, theme);
-      walls.push(...part.walls);
-      doors.push(part.door);
-    }
-  }
-  for (const z of zs) {
-    if (z <= pad || z >= map.d - pad) continue;
-    for (let i = 0; i < xLines.length - 1; i++) {
-      const part = wallWithDoor(map.id, "x", z, xLines[i], xLines[i + 1], thick, h, theme);
-      walls.push(...part.walls);
-      doors.push(part.door);
-    }
+  const doors: DoorDef[] = [...(map.doors ?? [])];
+  for (const run of runs) {
+    const part = wallWithDoor(map.id, run.along, run.plane, run.a0, run.a1, thick, h, theme);
+    walls.push(...part.walls);
+    doors.push(part.door);
   }
   return { ...map, boxes: [...map.boxes, ...walls], doors };
-}
-
-function clutterMap(map: GameMap): GameMap {
-  const rnd = mulberry(map.id.split("").reduce((a, c) => a + c.charCodeAt(0) * 17, 11));
-  const cols = mapColliders(map);
-  const extras: BoxDef[] = [];
-  const step = 7;
-  for (let gx = 8; gx < map.w - 8; gx += step) {
-    for (let gz = 8; gz < map.d - 8; gz += step) {
-      const x = gx + (rnd() - 0.5) * 4.2;
-      const z = gz + (rnd() - 0.5) * 4.2;
-      if (nearSpawn(map, x, z, 6.5)) continue;
-      if (map.doors.some((d) => Math.hypot(d.x - x, d.z - z) < 2.6)) continue;
-      if (cols.some((c) => circleHitsBox(x + 1, z + 1, 1.35, c))) continue;
-      if (rnd() < 0.12) continue;
-      extras.push(...cluster(map.id, x, z, Math.floor(rnd() * 9), rnd));
-    }
-  }
-  return { ...map, boxes: [...map.boxes, ...extras] };
 }
 
 function clearSpawns(map: GameMap): GameMap {
@@ -518,74 +370,8 @@ function clearSpawns(map: GameMap): GameMap {
   };
 }
 
-function expandMap(map: GameMap, s: number): GameMap {
-  return {
-    ...map,
-    w: map.w * s,
-    d: map.d * s,
-    spawns: map.spawns.map((p) => ({ x: p.x * s, z: p.z * s })),
-    hunterSpawns: map.hunterSpawns.map((p) => ({ x: p.x * s, z: p.z * s })),
-    boxes: map.boxes.map((b) => {
-      const floor = b.h <= 0.1;
-      const outer = b.w >= map.w * 0.25 || b.d >= map.d * 0.25;
-      const thin = b.w <= 0.55 || b.d <= 0.55;
-      let w = b.w;
-      let d = b.d;
-      if (floor) {
-        w *= s;
-        d *= s;
-      } else if (outer) {
-        if (b.w >= b.d) w *= s;
-        else d *= s;
-      } else if (thin) {
-        if (b.d <= 0.55) w *= s;
-        if (b.w <= 0.55) d *= s;
-      }
-      return { ...b, x: b.x * s, z: b.z * s, w, d };
-    }),
-  };
-}
-
-function sealPerimeter(map: GameMap): GameMap {
-  const t = 0.5;
-  const h = Math.max(map.ceiling - 0.04, 3.5);
-  const theme = wallTheme(map.id);
-  const hx = map.hunterSpawns[0]?.x ?? map.w * 0.5;
-  const gap = 1.9;
-  const doorX = Math.max(t + gap, Math.min(map.w - t - gap, hx));
-  const northZ = map.d - t;
-  const walls: BoxDef[] = [
-    B(0, 0, map.w, t, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }),
-    B(0, 0, t, map.d, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }),
-    B(map.w - t, 0, t, map.d, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }),
-    B(0, northZ, Math.max(t, doorX - gap / 2), t, theme.color, {
-      h,
-      collide: true,
-      pattern: theme.pattern,
-      colors: theme.colors,
-    }),
-    B(doorX + gap / 2, northZ, Math.max(t, map.w - (doorX + gap / 2)), t, theme.color, {
-      h,
-      collide: true,
-      pattern: theme.pattern,
-      colors: theme.colors,
-    }),
-  ];
-  const door: DoorDef = {
-    id: `${map.id}-gate`,
-    x: doorX,
-    z: northZ + t / 2,
-    w: gap - 0.12,
-    h: Math.min(2.3, h - 0.2),
-    d: t + 0.06,
-    along: "x",
-    color: "#5c3a22",
-  };
-  return { ...map, boxes: [...map.boxes, ...walls], doors: [...(map.doors ?? []), door] };
-}
-
 export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) =>
-  clearSpawns(clutterMap(partitionMap(sealPerimeter(expandMap(m, 1.35))))),
+  clearSpawns(stageLayout(m)),
 );
 
 function rotY(x: number, z: number, ang: number) {
