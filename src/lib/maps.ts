@@ -38,8 +38,10 @@ const wall = (
   d: number,
   color = "#4a3428",
   h = 3.8,
+  pattern: Pattern = "bricks",
+  colors: string[] = [color, "#3a281e"],
 ): BoxDef =>
-  B(x, z, w, d, color, { h, y: 0, collide: true, pattern: "bricks", colors: [color, "#3a281e"] });
+  B(x, z, w, d, color, { h, y: 0, collide: true, pattern, colors });
 
 const books: Pattern = "books";
 const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67e22", "#1abc9c", "#34495e"];
@@ -100,14 +102,14 @@ const mansion: GameMap = {
     B(40, 26, 1.6, 1.8, "#eef6f4", { h: 1.6, pattern: "tiles" }),
     B(43, 26, 1.6, 1.8, "#9ec5c1", { h: 0.55, pattern: "tiles" }),
     B(4, 28, 2.4, 2.4, "#2f4f3a", { h: 1.3, collide: true, prop: "plant", pattern: "leaves", shape: "sphere" }),
-    B(15, 8, 1.8, 0.08, "#d4b483", { h: 1.3, y: 1.1, collide: true, prop: "painting", pattern: "stripes", colors: ["#d4b483", "#6b3a2a"] }),
-    B(34, 7, 1.6, 0.08, "#2e6a8f", { h: 1.2, y: 1.2, collide: true, prop: "painting", pattern: "dots", colors: ["#2e6a8f", "#f3f1ea"] }),
+    B(12, 0.42, 1.8, 0.08, "#d4b483", { h: 1.3, y: 1.1, collide: true, prop: "painting", pattern: "stripes", colors: ["#d4b483", "#6b3a2a"] }),
+    B(30, 0.42, 1.6, 0.08, "#2e6a8f", { h: 1.2, y: 1.2, collide: true, prop: "painting", pattern: "dots", colors: ["#2e6a8f", "#f3f1ea"] }),
     B(9, 15, 0.9, 0.9, "#c9a66b", { h: 1.1, collide: true, pattern: "wood" }),
-    wall(0, 0, 48, 0.4),
-    wall(0, 35.6, 20, 0.4),
-    wall(28, 35.6, 20, 0.4),
-    wall(0, 0, 0.4, 36),
-    wall(47.6, 0, 0.4, 36),
+    wall(0, 0, 48, 0.4, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
+    wall(0, 35.6, 20, 0.4, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
+    wall(28, 35.6, 20, 0.4, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
+    wall(0, 0, 0.4, 36, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
+    wall(47.6, 0, 0.4, 36, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
   ],
 };
 
@@ -164,11 +166,11 @@ const farm: GameMap = {
     B(16, 15, 1.1, 1.1, "#d35400", { h: 0.7, collide: true }),
     B(22, 16, 2.0, 1.1, "#f4f0e4", { h: 1.6, collide: true, pattern: "dots", colors: ["#f4f0e4", "#111"] }),
     B(44, 12, 1.4, 0.9, "#c0392b", { h: 2.1, collide: true, pattern: "wood" }),
-    wall(0, 0, 52, 0.4, "#5a3a22", 5.5),
-    wall(0, 37.6, 22, 0.4, "#5a3a22", 5.5),
-    wall(30, 37.6, 22, 0.4, "#5a3a22", 5.5),
-    wall(0, 0, 0.4, 38, "#5a3a22", 5.5),
-    wall(51.6, 0, 0.4, 38, "#5a3a22", 5.5),
+    wall(0, 0, 52, 0.4, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
+    wall(0, 37.6, 22, 0.4, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
+    wall(30, 37.6, 22, 0.4, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
+    wall(0, 0, 0.4, 38, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
+    wall(51.6, 0, 0.4, 38, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
   ],
 };
 
@@ -224,11 +226,11 @@ const sewer: GameMap = {
     B(30, 24, 1.3, 1.3, "#b03a2e", { h: 1.2 }),
     B(34, 24, 1.3, 1.3, "#922b21", { h: 1.2 }),
     B(38, 22, 1.4, 4, "#c47a3a", { h: 0.6, y: 2.6, pattern: "pipes" }),
-    wall(0, 0, 46, 0.4, "#1b2420", 4.2),
-    wall(0, 33.6, 18, 0.4, "#1b2420", 4.2),
-    wall(28, 33.6, 18, 0.4, "#1b2420", 4.2),
-    wall(0, 0, 0.4, 34, "#1b2420", 4.2),
-    wall(45.6, 0, 0.4, 34, "#1b2420", 4.2),
+    wall(0, 0, 46, 0.4, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
+    wall(0, 33.6, 18, 0.4, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
+    wall(28, 33.6, 18, 0.4, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
+    wall(0, 0, 0.4, 34, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
+    wall(45.6, 0, 0.4, 34, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
     B(18, 18, 1.1, 0.7, "#2c3e50", { h: 1.8, collide: true }),
     B(28, 20, 1.4, 0.8, "#c0392b", { h: 1.7, collide: true, pattern: "dots", colors: ["#c0392b", "#111"] }),
   ],
@@ -271,11 +273,11 @@ const backrooms: GameMap = {
     B(30, 14, 1.8, 1.1, "#3d3d3d", { h: 1.15, collide: true }),
     B(5, 20, 1.3, 1.0, "#2f2f2f", { h: 1.3, collide: true, pattern: "bricks", colors: ["#2f2f2f", "#111"] }),
     B(22, 18, 2.2, 0.16, "#e74c3c", { h: 1.4, y: 0.9, collide: true, pattern: "stripes", colors: ["#e74c3c", "#f1c40f"] }),
-    wall(0, 0, 40, 0.4, "#c9b84a", 3.5),
-    wall(0, 29.6, 16, 0.4, "#c9b84a", 3.5),
-    wall(24, 29.6, 16, 0.4, "#c9b84a", 3.5),
-    wall(0, 0, 0.4, 30, "#c9b84a", 3.5),
-    wall(39.6, 0, 0.4, 30, "#c9b84a", 3.5),
+    wall(0, 0, 40, 0.4, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
+    wall(0, 29.6, 16, 0.4, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
+    wall(24, 29.6, 16, 0.4, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
+    wall(0, 0, 0.4, 30, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
+    wall(39.6, 0, 0.4, 30, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
   ],
 };
 
@@ -337,6 +339,53 @@ function wallWithDoor(
   return { walls, door };
 }
 
+function touchesPerimeter(map: GameMap, box: BoxDef) {
+  const left = box.x - box.w / 2;
+  const right = box.x + box.w / 2;
+  const front = box.z - box.d / 2;
+  const back = box.z + box.d / 2;
+  return left <= 0.7 || right >= map.w - 0.7 || front <= 0.7 || back >= map.d - 0.7;
+}
+
+function isDisconnectedWallPanel(map: GameMap, box: BoxDef) {
+  const isThin = Math.min(box.w, box.d) <= 0.3;
+  return isThin && box.h >= 1.6 && !touchesPerimeter(map, box);
+}
+
+function placeOnStage(map: GameMap, box: BoxDef) {
+  const bottom = box.y - box.h / 2;
+  const isOverheadPipe = box.pattern === "pipes" && bottom > 1.4;
+  const isWallMountedPainting = box.prop === "painting";
+  if (isOverheadPipe) return { ...box, y: map.ceiling - box.h / 2 - 0.06 };
+  if (bottom <= 0.08 || isWallMountedPainting) return box;
+  return { ...box, y: box.h / 2 };
+}
+
+function landmarkProps(map: GameMap): BoxDef[] {
+  if (map.id === "sewer") {
+    return [
+      B(3.5, 25.5, 1.35, 1.35, "#922b21", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
+      B(5.1, 25.8, 1.25, 1.25, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
+      B(38.2, 26, 1.35, 1.35, "#b03a2e", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
+    ];
+  }
+  if (map.id === "backrooms") {
+    return [
+      B(24, 22, 3.6, 1.25, "#8c7742", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 } }),
+      B(24.2, 24, 2.2, 1.4, "#6d5c3a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 2.02, d: 1.2 }, pattern: "wood" }),
+      B(29, 22, 1.8, 1.5, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
+      B(31.3, 22, 1.1, 1.1, "#d6c57c", { h: 3.2, collide: true, prop: "floorLamp", shape: "cylinder" }),
+    ];
+  }
+  if (map.id === "farm") {
+    return [
+      B(44, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
+      B(36, 28, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
+    ];
+  }
+  return [];
+}
+
 function stageLayout(map: GameMap): GameMap {
   const theme = wallTheme(map.id);
   const h = Math.min(map.ceiling - 0.24, 2.45);
@@ -349,6 +398,7 @@ function stageLayout(map: GameMap): GameMap {
         : map.id === "sewer"
           ? [{ along: "z", plane: 29, a0: 8, a1: 26 }]
           : [{ along: "x", plane: 15, a0: 7, a1: 33 }];
+  const baseBoxes = map.boxes.filter((box) => !isDisconnectedWallPanel(map, box)).map((box) => placeOnStage(map, box));
   const walls: BoxDef[] = [];
   const doors: DoorDef[] = [...(map.doors ?? [])];
   for (const run of runs) {
@@ -356,7 +406,7 @@ function stageLayout(map: GameMap): GameMap {
     walls.push(...part.walls);
     doors.push(part.door);
   }
-  return { ...map, boxes: [...map.boxes, ...walls], doors };
+  return { ...map, boxes: [...baseBoxes, ...landmarkProps(map), ...walls], doors };
 }
 
 function clearSpawns(map: GameMap): GameMap {

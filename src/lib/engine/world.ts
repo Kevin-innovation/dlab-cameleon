@@ -231,18 +231,31 @@ export class GameWorld {
         }
         continue;
       }
-      const geo =
-        b.shape === "cylinder"
+      const isPipe = b.pattern === "pipes";
+      const geo = isPipe
+        ? new THREE.CylinderGeometry(
+            Math.min(b.h, b.w, b.d) * 0.46,
+            Math.min(b.h, b.w, b.d) * 0.46,
+            Math.max(b.w, b.d),
+            16,
+          )
+        : b.shape === "cylinder"
           ? new THREE.CylinderGeometry(Math.min(b.w, b.d) / 2, Math.min(b.w, b.d) / 2, b.h, 12)
           : b.shape === "sphere"
             ? new THREE.SphereGeometry(Math.min(b.w, b.h, b.d) / 2, 16, 10)
             : new THREE.BoxGeometry(b.w, b.h, b.d);
+      const orientPipe = (mesh: THREE.Mesh) => {
+        if (!isPipe) return;
+        if (b.w >= b.d) mesh.rotation.z = Math.PI / 2;
+        else mesh.rotation.x = Math.PI / 2;
+      };
       let mat: THREE.MeshStandardMaterial;
       if (b.texture) {
         const tex = this.loadImageTexture(b.texture, Math.max(1, b.w / 3), Math.max(1, b.h / 3));
         mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
+        orientPipe(mesh);
         mesh.castShadow = !this.isMobile;
         mesh.receiveShadow = true;
         mesh.userData.color = b.color;
@@ -261,6 +274,7 @@ export class GameWorld {
         mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
+        orientPipe(mesh);
         mesh.castShadow = !this.isMobile;
         mesh.receiveShadow = true;
         mesh.userData.color = b.color;
@@ -272,6 +286,7 @@ export class GameWorld {
         mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.78 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
+        orientPipe(mesh);
         mesh.castShadow = !this.isMobile;
         mesh.receiveShadow = true;
         mesh.userData.color = b.color;
