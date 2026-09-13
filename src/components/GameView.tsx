@@ -194,7 +194,12 @@ export function GameView({
       setWatching(false);
     };
     syncMobileOrientation();
-    mobilePortrait.addEventListener("change", syncMobileOrientation);
+    if (typeof mobilePortrait.addEventListener === "function") {
+      mobilePortrait.addEventListener("change", syncMobileOrientation);
+    } else {
+      mobilePortrait.addListener(syncMobileOrientation);
+    }
+    window.addEventListener("orientationchange", syncMobileOrientation);
 
     const tryLock = () => {
       if (paintOpenRef.current || helpRef.current) return;
@@ -305,6 +310,10 @@ export function GameView({
       touchLookRef.current.dy = 0;
     };
     window.addEventListener("blur", onBlur);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") onBlur();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     const onMouseMove = (e: MouseEvent) => {
       if (mobilePortraitRef.current || paintOpenRef.current || helpRef.current) return;
@@ -513,7 +522,10 @@ export function GameView({
       session.setRoom({ ...room, doors });
     });
 
-    const resize = () => world.resize();
+    const resize = () => {
+      syncMobileOrientation();
+      world.resize();
+    };
     window.addEventListener("resize", resize);
     const ro = new ResizeObserver(resize);
     ro.observe(canvas.parentElement ?? canvas);
@@ -727,6 +739,7 @@ export function GameView({
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
       window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       document.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("pointermove", onTouchLookMove);
       window.removeEventListener("pointerup", onTouchLookEnd);
@@ -739,7 +752,12 @@ export function GameView({
       window.removeEventListener("pointercancel", onPointerUpPaint);
       window.removeEventListener("pointermove", trackMouse);
       canvas.parentElement?.removeEventListener("contextmenu", onContext);
-      mobilePortrait.removeEventListener("change", syncMobileOrientation);
+      if (typeof mobilePortrait.removeEventListener === "function") {
+        mobilePortrait.removeEventListener("change", syncMobileOrientation);
+      } else {
+        mobilePortrait.removeListener(syncMobileOrientation);
+      }
+      window.removeEventListener("orientationchange", syncMobileOrientation);
       ro.disconnect();
       touchKeys.clear();
       touchJoystickKeys.clear();
