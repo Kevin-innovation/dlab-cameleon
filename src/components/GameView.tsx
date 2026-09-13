@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -125,6 +126,13 @@ export function GameView({
   const colorRef = useRef(color);
   const brushRef = useRef(brush);
   const toolRef = useRef(tool);
+
+  const toggleNearbyDoor = useCallback(() => {
+    const world = worldRef.current;
+    if (!world || paintOpenRef.current || helpRef.current || watchingRef.current) return;
+    const id = world.nearDoor();
+    if (id) session.callDoor(id);
+  }, [session]);
 
   useEffect(() => {
     paintOpenRef.current = paintOpen;
@@ -252,10 +260,7 @@ export function GameView({
         if (k === "t") tryTaunt();
         if (k === "e") {
           if (paintOpenRef.current) setTool("dropper");
-          else {
-            const id = world.nearDoor();
-            if (id) session.callDoor(id);
-          }
+          else toggleNearbyDoor();
         }
         if (k === "b") setTool("brush");
         if (paintOpenRef.current && (k === " " || k === "space")) {
@@ -770,7 +775,7 @@ export function GameView({
       viewActiveRef.current = false;
       worldRef.current = null;
     };
-  }, [session]);
+  }, [session, toggleNearbyDoor]);
 
   useEffect(() => {
     const c = previewRef.current;
@@ -1093,7 +1098,7 @@ export function GameView({
 
         {atDoor && !paintOpen && (
           <div className="pointer-events-none absolute left-1/2 bottom-28 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-sm">
-            <span className="font-display text-lime">E</span> 문 열기/닫기
+            <span className="font-display text-lime">E / 문 버튼</span> 문 열기/닫기
           </div>
         )}
 
@@ -1196,11 +1201,13 @@ export function GameView({
           <TouchControls
             canWatch={myRole === "hider" || myRole === "spectator" || hud.phase === "lobby"}
             canFire={myRole === "hunter" && hud.phase === "hunt"}
+            canOpenDoor={atDoor && !watching}
             canPaint={myRole !== "hunter"}
             watching={watching}
             paintOpen={paintOpen}
             onTogglePaint={() => setPaintOpen((v) => !v)}
             onToggleWatch={toggleWatching}
+            onOpenDoor={toggleNearbyDoor}
             onFire={triggerTouchFire}
             onJoystickChange={setTouchJoystickKeys}
             onJoystickEnd={clearTouchJoystick}
@@ -1391,11 +1398,13 @@ export function GameView({
 function TouchControls({
   canWatch,
   canFire,
+  canOpenDoor,
   canPaint,
   watching,
   paintOpen,
   onTogglePaint,
   onToggleWatch,
+  onOpenDoor,
   onPress,
   onRelease,
   onKeyboardPress,
@@ -1409,11 +1418,13 @@ function TouchControls({
 }: {
   canWatch: boolean;
   canFire: boolean;
+  canOpenDoor: boolean;
   canPaint: boolean;
   watching: boolean;
   paintOpen: boolean;
   onTogglePaint: () => void;
   onToggleWatch: () => void;
+  onOpenDoor: () => void;
   onPress: (key: string, event: ReactPointerEvent<HTMLButtonElement>) => void;
   onRelease: (key: string, event: ReactPointerEvent<HTMLButtonElement>) => void;
   onKeyboardPress: (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
@@ -1581,6 +1592,21 @@ function TouchControls({
       <div className="mobile-touch-actions pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
         {button("shift", "달리기")}
         {button(" ", "점프·벽 붙기")}
+        {canOpenDoor && (
+          <button
+            type="button"
+            data-touch-control="true"
+            aria-label="근처 문 열기 또는 닫기"
+            className="mobile-touch-button min-h-11 rounded-xl border border-lime/40 bg-black/65 px-3 py-2 text-xs font-semibold text-lime shadow-lg backdrop-blur-sm"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onOpenDoor();
+            }}
+          >
+            문 열기/닫기
+          </button>
+        )}
         {canFire && (
           <button
             type="button"
