@@ -269,7 +269,8 @@ export function GameView({
           const canWatch =
             !!snap &&
             (room.phase === "lobby" ||
-              ((room.phase === "hide" || room.phase === "hunt") && hiderAlive(room, snap.id)));
+              ((room.phase === "hide" || room.phase === "hunt") &&
+                (hiderAlive(room, snap.id) || roleOf(room, snap.id) === "spectator")));
           if (canWatch) {
             const on = world.toggleWatch();
             watchingRef.current = on;
@@ -477,6 +478,7 @@ export function GameView({
         hunterId,
         targetId,
         Date.now(),
+        !targetId || world.hasLineOfSight(hunterId, targetId),
       );
       session.setRoom(result.room);
     });
@@ -580,11 +582,6 @@ export function GameView({
         room.mode === "normal" &&
         room.caughtIds.includes(me.id) &&
         !isHunter(room, me.id);
-      if (ghost && watchingRef.current) {
-        world.exitWatch();
-        watchingRef.current = false;
-        setWatching(false);
-      }
       if (watchingRef.current && !mobilePortraitRef.current) world.stepSpectate(dt, frameKeys);
       const localMoving =
         !mobilePortraitRef.current &&
@@ -779,7 +776,8 @@ export function GameView({
     const canWatch =
       !!snap &&
       (room.phase === "lobby" ||
-        ((room.phase === "hide" || room.phase === "hunt") && hiderAlive(room, snap.id)));
+        ((room.phase === "hide" || room.phase === "hunt") &&
+          (hiderAlive(room, snap.id) || roleOf(room, snap.id) === "spectator")));
     if (!canWatch) return;
     const on = world.toggleWatch();
     watchingRef.current = on;
@@ -1051,7 +1049,7 @@ export function GameView({
           </div>
         )}
 
-        {watching && (myRole === "hider" || hud.phase === "lobby") && (
+        {watching && (myRole === "hider" || myRole === "spectator" || hud.phase === "lobby") && (
           <div className="pointer-events-none absolute left-1/2 top-44 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
             <div className="font-display text-xl text-lime">{hud.phase === "lobby" ? "대기실 관전" : "숨은 채 관전"}</div>
             <p className="text-sm text-white/75">
@@ -1141,7 +1139,7 @@ export function GameView({
 
         {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && !paintOpen && (
           <TouchControls
-            canWatch={myRole === "hider" || hud.phase === "lobby"}
+            canWatch={myRole === "hider" || myRole === "spectator" || hud.phase === "lobby"}
             canFire={myRole === "hunter" && hud.phase === "hunt"}
             canPaint={myRole !== "hunter"}
             watching={watching}

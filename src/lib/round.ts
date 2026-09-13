@@ -119,6 +119,7 @@ export function processFire(
   hunterId: string,
   targetId: string,
   now: number,
+  lineOfSight = true,
 ): { room: RoomState; tagged?: PlayerSnap; empty?: boolean } {
   if (room.phase !== "hunt") return { room };
   if (!isHunter(room, hunterId)) return { room };
@@ -136,6 +137,7 @@ export function processFire(
       hunter &&
       best &&
       hiderAlive(next, best.id) &&
+      lineOfSight &&
       Math.hypot(best.x - hunter.x, best.z - hunter.z) <= tagRangeForCamouflage(best.camoScore)
     ) {
       const caughtIds = next.caughtIds.includes(best.id)

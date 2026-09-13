@@ -968,6 +968,7 @@ export class GameWorld {
       if (!hit) return null;
       const id = (hit.object.userData.playerId as string | undefined) ?? undefined;
       if (!id || id === myId) return null;
+      if (!this.hasLineOfSight(myId, id)) return null;
       return { id, dist: hit.distance };
     };
 
@@ -985,6 +986,7 @@ export class GameWorld {
     for (const [id, rig] of this.players) {
       if (id === myId || !rig.group.visible) continue;
       if ((this.playerVisibility.get(id) ?? 1) < 0.42) continue;
+      if (!this.hasLineOfSight(myId, id)) continue;
       const dx = rig.group.position.x - this.camera.position.x;
       const dy = rig.group.position.y + 1.05 - this.camera.position.y;
       const dz = rig.group.position.z - this.camera.position.z;
@@ -998,6 +1000,33 @@ export class GameWorld {
       }
     }
     return best;
+  }
+
+  hasLineOfSight(hunterId: string, targetId: string) {
+    const hunter = this.players.get(hunterId);
+    const target = this.players.get(targetId);
+    if (!hunter || !target) return false;
+    const origin = new THREE.Vector3(
+      hunter.group.position.x,
+      hunter.group.position.y + 1.35,
+      hunter.group.position.z,
+    );
+    const targetPoint = new THREE.Vector3(
+      target.group.position.x,
+      target.group.position.y + 1.05,
+      target.group.position.z,
+    );
+    const delta = targetPoint.sub(origin);
+    const distance = delta.length();
+    if (distance < 0.01) return true;
+    delta.normalize();
+    this.raycaster.set(origin, delta);
+    this.raycaster.near = 0.05;
+    this.raycaster.far = Math.max(0.05, distance - 0.16);
+    const blocker = this.raycaster
+      .intersectObjects(this.camBlockers, false)
+      .find((hit) => hit.distance < distance - 0.16);
+    return !blocker;
   }
 
   private setPointer(clientX: number, clientY: number) {

@@ -4,7 +4,7 @@ import { moveWithSlide, poseRadius } from "./engine/collision";
 import { doorColliders, mapColliders } from "./maps";
 import { hiderAlive, isHunter, roleOf } from "./round";
 import type { Session } from "./session";
-import type { GameMap, PaintBlob, Pose, RoomState } from "./types";
+import type { Collider, GameMap, PaintBlob, Pose, RoomState } from "./types";
 
 type HideSpot = { x: number; z: number; pose: Pose; fill: string };
 
@@ -39,6 +39,30 @@ function mul(id: string) {
 function colliders(map: GameMap, room: RoomState) {
   const doors = (map.doors ?? []).flatMap((d) => doorColliders(d, !!room.doors?.[d.id]));
   return [...mapColliders(map), ...doors];
+}
+
+function clearSight(ax: number, az: number, bx: number, bz: number, boxes: Collider[]) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const distance = Math.hypot(dx, dz);
+  const steps = Math.max(1, Math.ceil(distance / 0.18));
+  for (let i = 1; i < steps; i++) {
+    const x = ax + (dx * i) / steps;
+    const z = az + (dz * i) / steps;
+    if (
+      boxes.some(
+        (box) =>
+          box.maxY >= 1.15 &&
+          x >= box.minX - 0.03 &&
+          x <= box.maxX + 0.03 &&
+          z >= box.minZ - 0.03 &&
+          z <= box.maxZ + 0.03,
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function hideSpot(map: GameMap, i: number, round: number): HideSpot {
@@ -175,10 +199,11 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
     let yaw = Number(p.get("yaw") ?? 0);
 
     if (hunter && room.phase === "hunt") {
-      const hiders = snaps.filter((s) => s.alive && s.id !== p.id);
+      const hiders = snaps.filter((s) => s.alive && !s.hunter && s.id !== p.id);
       let best = hiders[0];
       let bestScore = -1;
       for (const h of hiders) {
+        if (!clearSight(x, z, h.x, h.z, cols)) continue;
         const dist = Math.hypot(h.x - x, h.z - z);
         const see = hunterVisibility(h.camoScore, dist);
         const score = see * (18 - Math.min(18, dist));
@@ -228,7 +253,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         const inv = 1 / Math.max(0.001, dist);
         const dot = fx * (best.x - x) * inv + fz * (best.z - z) * inv;
         const visibility = hunterVisibility(best.camoScore, dist, "stand", true);
-        const canSee = visibility > 0.46 && dot > 0.62;
+        const canSee = visibility > 0.46 && dot > 0.62 && clearSight(x, z, best.x, best.z, cols);
         if (canSee && dist <= TAG_RANGE + 0.6) {
           br.shootAt = now + SHOT_COOLDOWN + 180;
           p.set("shootSeq", Number(p.get("shootSeq") ?? 0) + 1);
