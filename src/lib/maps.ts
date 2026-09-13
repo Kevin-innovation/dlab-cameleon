@@ -23,6 +23,7 @@ function B(
     prop: extra.prop,
     rotation: extra.rotation,
     modelUrl: extra.modelUrl,
+    collider: extra.collider,
     pattern: extra.pattern,
     texture: extra.texture,
     colors: extra.colors,
@@ -80,7 +81,7 @@ const mansion: GameMap = {
     B(10, 11, 0.2, 8, "#6b3a2a", { h: 2.9, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
     B(20, 9, 9, 0.2, "#1f4d6e", { h: 2.5, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
     B(33, 12, 0.2, 7, "#6a8f6a", { h: 2.7, collide: true, pattern: "leaves" }),
-    B(5, 8, 2.6, 1.1, "#a32638", { h: 0.95, collide: true, prop: "sofa", texture: "/textures/velvet-ruby-v1.png" }),
+    B(5, 8, 2.6, 1.1, "#a32638", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.42, d: 0.98 }, texture: "/textures/velvet-ruby-v1.png" }),
     B(26, 14, 2.4, 0.5, "#5c2e12", { h: 2.35, pattern: books, colors: bookColors }),
     B(2.4, 3.2, 3.4, 1.1, "#a32638", { h: 0.95, collide: true, prop: "sofa", texture: "/textures/velvet-ruby-v1.png", rotation: Math.PI / 2 }),
     B(7, 3.4, 2.8, 0.5, "#5c2e12", { h: 2.5, pattern: books, colors: bookColors }),
@@ -90,8 +91,8 @@ const mansion: GameMap = {
     B(38, 3.6, 2.2, 1.6, "#e8d5a3", { h: 1.4, y: 0.9, pattern: "stripes", colors: ["#e8d5a3", "#c9a66b"] }),
     B(23.4, 16, 1.1, 1.1, "#d9c9a5", { h: 3.4, collide: true, prop: "floorLamp", pattern: "bricks", shape: "cylinder" }),
     B(6, 18, 3.6, 2.2, "#d9c4a0", { h: 0.06, texture: "/textures/rug-persian-v1.png" }),
-    B(8, 20, 1.6, 1.4, "#8b4513", { h: 0.7, collide: true, prop: "coffeeTable", pattern: "wood" }),
-    B(14, 22, 2.2, 1.2, "#7a3426", { h: 0.95, collide: true, prop: "armchair", texture: "/textures/velvet-ruby-v1.png" }),
+    B(8, 20, 1.6, 1.4, "#8b4513", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 1.42, d: 1.18 }, pattern: "wood" }),
+    B(14, 22, 2.2, 1.2, "#7a3426", { h: 0.95, collide: true, prop: "armchair", collider: { w: 1.72, d: 1.06 }, texture: "/textures/velvet-ruby-v1.png" }),
     B(32, 18, 4.0, 3.2, "#d8cfc0", { h: 0.05, pattern: "tiles", colors: ["#efe8dc", "#d2c4b0"] }),
     B(33, 20, 1.6, 0.8, "#c45c26", { h: 0.9, collide: true, prop: "chair" }),
     B(36, 20, 1.6, 0.8, "#c45c26", { h: 0.9, collide: true, prop: "chair" }),
@@ -650,13 +651,20 @@ export function mapColliders(map: GameMap) {
   const pad = -BOX_COLLIDE_OUTSET;
   return map.boxes
     .filter(isSolidProp)
-    .map((b) => ({
-      minX: b.x - b.w / 2 + pad,
-      maxX: b.x + b.w / 2 - pad,
-      minZ: b.z - b.d / 2 + pad,
-      maxZ: b.z + b.d / 2 - pad,
-      minY: b.y - b.h / 2,
-      maxY: b.y + b.h / 2,
-    }))
+    .map((b) => {
+      const profile = b.collider;
+      const w = profile?.w ?? b.w;
+      const d = profile?.d ?? b.d;
+      const h = profile?.h ?? b.h;
+      const y = profile?.y ?? b.y;
+      return {
+        minX: b.x - w / 2 + pad,
+        maxX: b.x + w / 2 - pad,
+        minZ: b.z - d / 2 + pad,
+        maxZ: b.z + d / 2 - pad,
+        minY: y - h / 2,
+        maxY: y + h / 2,
+      };
+    })
     .filter((b) => b.maxX - b.minX > 0.2 && b.maxZ - b.minZ > 0.2);
 }

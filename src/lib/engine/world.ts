@@ -106,20 +106,24 @@ export class GameWorld {
   private fpKick = 0;
   private viewBob = 0;
   private reducedMotion = false;
+  private isMobile = false;
   private textureLoader = new THREE.TextureLoader();
   private imageTextures = new Map<string, THREE.Texture>();
   private modelLoader = new GLTFLoader();
   private modelTemplates = new Map<string, Promise<THREE.Group>>();
+  private mapLoadSeq = 0;
+  private modelStats = { pending: 0, loaded: 0, failed: 0 };
 
   constructor(canvas: HTMLCanvasElement) {
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.isMobile = window.matchMedia("(max-width: 767px), (pointer: coarse) and (hover: none)").matches;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: !this.isMobile,
       alpha: false,
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    this.renderer.setPixelRatio(Math.min(this.isMobile ? 1.25 : 2, window.devicePixelRatio || 1));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -149,9 +153,15 @@ export class GameWorld {
     this.renderer.setSize(w, h, false);
   }
 
+  assetStatus() {
+    return { ...this.modelStats };
+  }
+
   loadMap(id: string) {
     const map = getMap(id);
+    const loadSeq = ++this.mapLoadSeq;
     this.map = map;
+    this.modelStats = { pending: 0, loaded: 0, failed: 0 };
     this.sampleCanvases = [];
     this.camBlockers = [];
     while (this.mapGroup.children.length) {
@@ -170,7 +180,8 @@ export class GameWorld {
     const sun = new THREE.DirectionalLight("#fff4e0", 1.35);
     sun.position.set(8, 14, 6);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    const shadowMapSize = this.isMobile ? 512 : 1024;
+    sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 40;
     sun.shadow.camera.left = -18;
@@ -208,7 +219,10 @@ export class GameWorld {
         this.mapGroup.add(prop);
         if (b.collide || b.h >= 0.28) this.addMeshBlockers(prop);
         const modelUrl = b.modelUrl ?? LOCAL_PROP_MODELS[b.prop];
-        if (modelUrl) void this.loadPropModel(b, prop, modelUrl);
+        if (modelUrl) {
+          this.modelStats.pending += 1;
+          void this.loadPropModel(b, prop, modelUrl, loadSeq);
+        }
         continue;
       }
       const geo =
@@ -223,7 +237,7 @@ export class GameWorld {
         mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
-        mesh.castShadow = true;
+        mesh.castShadow = !this.isMobile;
         mesh.receiveShadow = true;
         mesh.userData.color = b.color;
         mesh.userData.texture = b.texture;
@@ -240,7 +254,7 @@ export class GameWorld {
         mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
-        mesh.castShadow = true;
+        mesh.castShadow = !this.isMobile;
         mesh.receiveShadow = true;
         mesh.userData.color = b.color;
         mesh.userData.canvas = cnv;
@@ -251,7 +265,7 @@ export class GameWorld {
         mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.78 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
-        mesh.castShadow = true;
+        mesh.castShadow = !this.isMobile;
         mesh.receiveShadow = true;
         mesh.userData.color = b.color;
         this.mapGroup.add(mesh);
@@ -313,7 +327,7 @@ export class GameWorld {
     const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0) => {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(x, y, z);
-      mesh.castShadow = true;
+      mesh.castShadow = !this.isMobile;
       mesh.receiveShadow = true;
       mesh.userData.color = def.color;
       mesh.userData.prop = def.prop;
@@ -466,9 +480,10 @@ export class GameWorld {
     return promise;
   }
 
-  private async loadPropModel(def: BoxDef, fallback: THREE.Group, url: string) {
+  private async loadPropModel(def: BoxDef, fallback: THREE.Group, url: string, loadSeq: number) {
     try {
       const template = await this.getModelTemplate(url);
+      if (loadSeq !== this.mapLoadSeq) return;
       const model = cloneStaticModel(template);
       model.rotation.y = def.rotation ?? 0;
       model.updateMatrixWorld(true);
@@ -491,7 +506,7 @@ export class GameWorld {
       model.traverse((child) => {
         const mesh = child as THREE.Mesh;
         if (!mesh.isMesh) return;
-        mesh.castShadow = true;
+        mesh.castShadow = !this.isMobile;
         mesh.receiveShadow = true;
         const firstMaterial = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         const materialColor = firstMaterial && "color" in firstMaterial
@@ -504,6 +519,7 @@ export class GameWorld {
       const parent = fallback.parent;
       if (!parent) {
         disposeObject(model);
+        this.modelStats.pending = Math.max(0, this.modelStats.pending - 1);
         return;
       }
       parent.add(model);
@@ -511,8 +527,14 @@ export class GameWorld {
       if (def.collide || def.h >= 0.28) this.addMeshBlockers(model);
       parent.remove(fallback);
       disposeObject(fallback);
+      this.modelStats.pending = Math.max(0, this.modelStats.pending - 1);
+      this.modelStats.loaded += 1;
     } catch {
       // The procedural prop remains visible when an optional model cannot load.
+      if (loadSeq === this.mapLoadSeq) {
+        this.modelStats.pending = Math.max(0, this.modelStats.pending - 1);
+        this.modelStats.failed += 1;
+      }
     }
   }
 

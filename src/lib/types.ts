@@ -36,6 +36,13 @@ export type PropKind =
   | "barrel"
   | "bookshelf";
 
+export type ColliderProfile = {
+  w: number;
+  d: number;
+  y?: number;
+  h?: number;
+};
+
 export const BODY_PARTS: BodyPart[] = ["head", "torso", "armL", "armR", "legL", "legR"];
 
 export type PaintBlob = {
@@ -60,6 +67,7 @@ export type BoxDef = {
   prop?: PropKind;
   rotation?: number;
   modelUrl?: string;
+  collider?: ColliderProfile;
   pattern?: Pattern;
   texture?: string;
   colors?: string[];

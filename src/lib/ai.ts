@@ -87,14 +87,16 @@ function hideSpot(map: GameMap, i: number, round: number): HideSpot {
     color: "#6b4a32",
   };
   const p = props[Math.floor(rnd() * Math.max(1, props.length))] ?? fallback;
+  const obstacleW = p.collider?.w ?? p.w;
+  const obstacleD = p.collider?.d ?? p.d;
   const side = rnd();
   const pad = 0.55 + rnd() * 0.35;
   let x = p.x;
   let z = p.z;
-  if (side < 0.25) x = p.x + p.w / 2 + pad;
-  else if (side < 0.5) x = p.x - p.w / 2 - pad;
-  else if (side < 0.75) z = p.z + p.d / 2 + pad;
-  else z = p.z - p.d / 2 - pad;
+  if (side < 0.25) x = p.x + obstacleW / 2 + pad;
+  else if (side < 0.5) x = p.x - obstacleW / 2 - pad;
+  else if (side < 0.75) z = p.z + obstacleD / 2 + pad;
+  else z = p.z - obstacleD / 2 - pad;
   x = Math.max(2, Math.min(map.w - 2, x));
   z = Math.max(2, Math.min(map.d - 2, z));
   const poses: Pose[] = ["stick", "crouch", "sit", "lie", "stretch", "stick"];
