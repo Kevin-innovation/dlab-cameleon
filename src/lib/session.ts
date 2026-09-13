@@ -9,7 +9,7 @@ import {
   getParticipants,
 } from "playroomkit";
 import { BOT_NAMES, MAX_PLAYERS, WHITE } from "./config";
-import { emptyRoom } from "./round";
+import { emptyRoom, patchRoom, sanitizeRoom, type RoomConfigPatch } from "./round";
 import type { ChatMessage, PaintBlob, PlayerSnap, Pose, Role, RoomState } from "./types";
 
 export type SessionPlayer = {
@@ -24,9 +24,10 @@ export type Session = {
   isHost: () => boolean;
   getRoom: () => RoomState;
   setRoom: (room: RoomState) => void;
+  patchRoom: (patch: RoomConfigPatch) => void;
   players: () => SessionPlayer[];
   me: () => SessionPlayer;
-  callShot: (targetId: string, hunterId?: string) => void;
+  callShot: (targetId: string, hunterId?: string, shotSeq?: number) => void;
   onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
   callDoor: (id: string) => void;
   onDoor: (cb: (id: string) => void) => () => void;
@@ -125,8 +126,14 @@ export async function connectOnline(opts: {
 
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
   const doorListeners = new Set<(id: string) => void>();
+  const lastShotSeq = new Map<string, number>();
   RPC.register("shot", async (payload, sender) => {
     const targetId = String(payload?.targetId ?? "");
+    const sequence = Number(payload?.sequence ?? 0);
+    if (!Number.isSafeInteger(sequence) || sequence < 1) return;
+    const previous = lastShotSeq.get(sender.id) ?? 0;
+    if (isHost() && sequence <= previous) return;
+    lastShotSeq.set(sender.id, sequence);
     shotListeners.forEach((cb) => cb(sender.id, targetId));
   });
   RPC.register("door", async (payload) => {
@@ -145,8 +152,8 @@ export async function connectOnline(opts: {
       text,
       at: Date.now(),
     };
-    const room = (getState("room") as RoomState) || emptyRoom();
-    setState("room", { ...room, chat: [...(room.chat ?? []), message].slice(-60) }, true);
+    const room = sanitizeRoom((getState("room") as RoomState) || emptyRoom());
+    setState("room", sanitizeRoom({ ...room, chat: [...(room.chat ?? []), message].slice(-60) }), true);
   });
 
   return {
@@ -154,7 +161,15 @@ export async function connectOnline(opts: {
     myId: () => myPlayer().id,
     isHost: () => isHost(),
     getRoom: () => (getState("room") as RoomState) || emptyRoom(),
-    setRoom: (room) => setState("room", room, true),
+    setRoom: (room) => {
+      if (!isHost()) return;
+      setState("room", sanitizeRoom(room), true);
+    },
+    patchRoom: (roomPatch) => {
+      if (!isHost()) return;
+      const room = sanitizeRoom((getState("room") as RoomState) || emptyRoom());
+      setState("room", patchRoom(room, roomPatch), true);
+    },
     players: () => {
       try {
         const participants = getParticipants();
@@ -176,8 +191,9 @@ export async function connectOnline(opts: {
         set: (k, v, rel) => p.setState(k, v, rel),
       };
     },
-    callShot: (targetId) => {
-      void RPC.call("shot", { targetId }, RPC.Mode.HOST);
+    callShot: (targetId, _hunterId, shotSeq) => {
+      if (typeof shotSeq !== "number" || !Number.isSafeInteger(shotSeq) || shotSeq < 1) return;
+      void RPC.call("shot", { targetId, sequence: shotSeq }, RPC.Mode.HOST);
     },
     onShot: (cb) => {
       shotListeners.add(cb);
@@ -241,17 +257,29 @@ export function createPractice(nickname: string): Session {
   room.hunterPlayerId = id;
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
   const doorListeners = new Set<(doorId: string) => void>();
+  const lastShotSeq = new Map<string, number>();
   return {
     kind: "practice",
     myId: () => id,
     isHost: () => true,
     getRoom: () => room,
     setRoom: (r) => {
-      room = r;
+      room = sanitizeRoom(r);
+    },
+    patchRoom: (roomPatch) => {
+      room = patchRoom(room, roomPatch);
     },
     players: () => everyone,
     me: () => me,
-    callShot: (targetId, hunterId) => shotListeners.forEach((cb) => cb(hunterId ?? id, targetId)),
+    callShot: (targetId, hunterId, shotSeq) => {
+      if (shotSeq !== undefined) {
+        const sourceId = hunterId ?? id;
+        const previous = lastShotSeq.get(sourceId) ?? 0;
+        if (!Number.isSafeInteger(shotSeq) || shotSeq <= previous) return;
+        lastShotSeq.set(sourceId, shotSeq);
+      }
+      shotListeners.forEach((cb) => cb(hunterId ?? id, targetId));
+    },
     onShot: (cb) => {
       shotListeners.add(cb);
       return () => shotListeners.delete(cb);

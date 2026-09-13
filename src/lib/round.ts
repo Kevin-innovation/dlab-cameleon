@@ -36,6 +36,88 @@ export function emptyRoom(): RoomState {
   };
 }
 
+export type RoomConfigPatch = Partial<
+  Pick<
+    RoomState,
+    | "mapId"
+    | "mode"
+    | "hunterMode"
+    | "hunterPlayerId"
+    | "hunterCount"
+    | "prepareTime"
+    | "hideTime"
+    | "huntTime"
+    | "ammoEnabled"
+    | "ammoCount"
+  >
+>;
+
+const PHASES: RoomState["phase"][] = ["lobby", "prepare", "hide", "hunt", "reveal", "result"];
+const MODES: RoomState["mode"][] = ["normal", "infection"];
+const HUNTER_MODES: RoomState["hunterMode"][] = ["random", "human", "ai"];
+
+function bounded(value: unknown, fallback: number, min: number, max: number) {
+  const n = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function safeIds(value: unknown, max: number) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is string => typeof id === "string" && id.length > 0).slice(0, max))];
+}
+
+export function sanitizeRoom(input: RoomState): RoomState {
+  const defaults = emptyRoom();
+  const source = input || defaults;
+  const phase = PHASES.includes(source.phase) ? source.phase : defaults.phase;
+  const mode = MODES.includes(source.mode) ? source.mode : defaults.mode;
+  const hunterMode = HUNTER_MODES.includes(source.hunterMode) ? source.hunterMode : defaults.hunterMode;
+  const chat = Array.isArray(source.chat)
+    ? source.chat
+        .filter(
+          (message) =>
+            message &&
+            typeof message.id === "string" &&
+            typeof message.senderId === "string" &&
+            typeof message.senderName === "string" &&
+            typeof message.text === "string" &&
+            Number.isFinite(message.at),
+        )
+        .slice(-60)
+    : [];
+  return {
+    ...defaults,
+    ...source,
+    phase,
+    mode,
+    hunterMode,
+    mapId: typeof source.mapId === "string" && source.mapId.length > 0 ? source.mapId.slice(0, 32) : defaults.mapId,
+    round: Math.floor(bounded(source.round, defaults.round, 0, 999999)),
+    phaseEndsAt: bounded(source.phaseEndsAt, defaults.phaseEndsAt, 0, Number.MAX_SAFE_INTEGER),
+    hunterIds: safeIds(source.hunterIds, 3),
+    hunterPlayerId: typeof source.hunterPlayerId === "string" ? source.hunterPlayerId.slice(0, 80) : undefined,
+    caughtIds: safeIds(source.caughtIds, 8),
+    scores: source.scores && typeof source.scores === "object" ? source.scores : {},
+    prepareTime: Math.floor(bounded(source.prepareTime, defaults.prepareTime, 3, 20)),
+    hideTime: Math.floor(bounded(source.hideTime, defaults.hideTime, 30, 180)),
+    huntTime: Math.floor(bounded(source.huntTime, defaults.huntTime, 60, 300)),
+    hunterCount: Math.floor(bounded(source.hunterCount, defaults.hunterCount, 1, 3)),
+    ammoEnabled: Boolean(source.ammoEnabled),
+    ammoCount: Math.floor(bounded(source.ammoCount, defaults.ammoCount, 3, 12)),
+    ammo: source.ammo && typeof source.ammo === "object" ? source.ammo : {},
+    feed: Array.isArray(source.feed) ? source.feed.slice(-10) : [],
+    taunts: Array.isArray(source.taunts) ? source.taunts.slice(-12) : [],
+    doors: source.doors && typeof source.doors === "object" ? source.doors : {},
+    chat,
+    winner: source.winner === "hunters" || source.winner === "hiders" ? source.winner : undefined,
+  };
+}
+
+export function patchRoom(prev: RoomState, patch: RoomConfigPatch) {
+  if (prev.phase !== "lobby") return prev;
+  return sanitizeRoom({ ...prev, ...patch });
+}
+
 function shuffle<T>(arr: T[]) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {

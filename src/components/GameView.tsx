@@ -504,7 +504,8 @@ export function GameView({
         if (ammoLeft <= 0) return;
         lastShot = t;
         world.playShot(me.id, true);
-        session.me().set("shootSeq", Number(session.me().get("shootSeq") ?? 0) + 1, true);
+        const shootSeq = Number(session.me().get("shootSeq") ?? 0) + 1;
+        session.me().set("shootSeq", shootSeq, true);
         const lockedNow = document.pointerLockElement === canvas;
         const aim = lockedNow
           ? world.aimPlayer(me.id)
@@ -517,7 +518,7 @@ export function GameView({
           hiderAlive(room, aim.id)
             ? aim.id
             : "";
-        session.callShot(hit);
+        session.callShot(hit, undefined, shootSeq);
       }
     };
     const onPointerMovePaint = (e: PointerEvent) => {
@@ -589,7 +590,8 @@ export function GameView({
           if (shotAt - lastShot >= SHOT_COOLDOWN && ammoLeft > 0) {
             lastShot = shotAt;
             world.playShot(me.id, true);
-            session.me().set("shootSeq", Number(session.me().get("shootSeq") ?? 0) + 1, true);
+            const shootSeq = Number(session.me().get("shootSeq") ?? 0) + 1;
+            session.me().set("shootSeq", shootSeq, true);
             const aim = world.aimPlayer(me.id);
             const target = aim ? players.find((p) => p.id === aim.id) : undefined;
             const hit =
@@ -599,7 +601,7 @@ export function GameView({
               hiderAlive(room, aim.id)
                 ? aim.id
                 : "";
-            session.callShot(hit);
+            session.callShot(hit, undefined, shootSeq);
           }
         }
       }
@@ -1734,7 +1736,7 @@ function Lobby({
   const host = session.isHost();
   const me = people.find((p) => p.id === session.myId());
   const readyCount = people.filter((p) => p.ready).length;
-  const allReady = people.length >= 1 && readyCount === people.length;
+  const allReady = people.length >= 2 && readyCount === people.length;
   return (
     <aside className="z-20 flex max-h-[46dvh] w-full shrink-0 flex-col overflow-y-auto overscroll-contain border-b border-white/10 bg-[#121c17] p-4 md:h-full md:max-h-none md:w-[min(100%,360px)] md:border-b-0 md:border-r">
       <p className="text-xs text-lime">
@@ -1775,7 +1777,7 @@ function Lobby({
                 type="button"
                 disabled={!host}
                 aria-pressed={room.mapId === m.id}
-                onClick={() => session.setRoom({ ...room, mapId: m.id, doors: {} })}
+                onClick={() => session.patchRoom({ mapId: m.id })}
                 className={`rounded-xl px-3 py-2 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
             >
               <div className="font-display">
@@ -1794,7 +1796,7 @@ function Lobby({
               className="mt-1 w-full bg-[#121c17] text-paper"
               disabled={!host}
               value={room.mode}
-              onChange={(e) => session.setRoom({ ...room, mode: e.target.value as RoomState["mode"] })}
+              onChange={(e) => session.patchRoom({ mode: e.target.value as RoomState["mode"] })}
             >
               <option value="normal">기본 숨바꼭질</option>
               <option value="infection">감염 (커스텀)</option>
@@ -1810,8 +1812,7 @@ function Lobby({
                 value={room.hunterMode ?? "ai"}
                 onChange={(e) => {
                   const hunterMode = e.target.value as RoomState["hunterMode"];
-                  session.setRoom({
-                    ...room,
+                  session.patchRoom({
                     hunterMode,
                     hunterPlayerId: hunterMode === "random" ? undefined : session.myId(),
                   });
@@ -1835,7 +1836,7 @@ function Lobby({
               disabled={!host}
               className="mt-1 w-full bg-transparent"
               value={room.hunterCount}
-              onChange={(e) => session.setRoom({ ...room, hunterCount: Number(e.target.value) || 1 })}
+              onChange={(e) => session.patchRoom({ hunterCount: Number(e.target.value) || 1 })}
             />
           </label>
           <label className="rounded-xl bg-white/8 p-2">
@@ -1850,7 +1851,7 @@ function Lobby({
               disabled={!host}
               className="mt-1 w-full bg-transparent"
               value={room.prepareTime || 8}
-              onChange={(e) => session.setRoom({ ...room, prepareTime: Math.max(3, Math.min(20, Number(e.target.value) || 8)) })}
+              onChange={(e) => session.patchRoom({ prepareTime: Math.max(3, Math.min(20, Number(e.target.value) || 8)) })}
             />
           </label>
           <label className="rounded-xl bg-white/8 p-2">
@@ -1865,7 +1866,7 @@ function Lobby({
               disabled={!host}
               className="mt-1 w-full bg-transparent"
               value={room.hideTime}
-              onChange={(e) => session.setRoom({ ...room, hideTime: Number(e.target.value) || 70 })}
+              onChange={(e) => session.patchRoom({ hideTime: Number(e.target.value) || 70 })}
             />
           </label>
           <label className="rounded-xl bg-white/8 p-2">
@@ -1880,7 +1881,7 @@ function Lobby({
               disabled={!host}
               className="mt-1 w-full bg-transparent"
               value={room.huntTime}
-              onChange={(e) => session.setRoom({ ...room, huntTime: Number(e.target.value) || 150 })}
+              onChange={(e) => session.patchRoom({ huntTime: Number(e.target.value) || 150 })}
             />
           </label>
           <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
@@ -1891,7 +1892,7 @@ function Lobby({
                 className="mr-2 accent-lime"
                 disabled={!host}
                 checked={Boolean(room.ammoEnabled)}
-                onChange={(e) => session.setRoom({ ...room, ammoEnabled: e.target.checked })}
+                onChange={(e) => session.patchRoom({ ammoEnabled: e.target.checked })}
               />
               탄약 제한 사용
             </span>
@@ -1910,7 +1911,7 @@ function Lobby({
               className="mt-1 w-full bg-transparent"
               value={room.ammoCount || 6}
               onChange={(e) =>
-                session.setRoom({ ...room, ammoCount: Math.max(3, Math.min(12, Number(e.target.value) || 6)) })
+                session.patchRoom({ ammoCount: Math.max(3, Math.min(12, Number(e.target.value) || 6)) })
               }
             />
           </label>
@@ -1924,10 +1925,14 @@ function Lobby({
               disabled={!allReady}
               className="mt-4 w-full rounded-full bg-lime py-3 font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {people.length < 2 ? "연습 라운드 시작" : "라운드 시작"}
+              {people.length < 2 ? "2인 이상 필요" : "라운드 시작"}
             </button>
             <p id="round-start-status" className="mt-2 text-center text-xs text-white/65">
-              {allReady ? "전원 준비됨" : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
+              {people.length < 2
+                ? "2인 이상 참가해야 라운드를 시작할 수 있습니다"
+                : allReady
+                  ? "전원 준비됨"
+                  : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
             </p>
             <p className="mt-2 text-center text-[11px] text-white/60">
               점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황

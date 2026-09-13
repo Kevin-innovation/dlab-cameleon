@@ -338,8 +338,9 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         const canSee = visibility > 0.46 && dot > 0.62 && clearSight(x, z, best.x, best.z, cols);
         if (canSee && dist <= TAG_RANGE + 0.6) {
           br.shootAt = now + SHOT_COOLDOWN + 180;
-          p.set("shootSeq", Number(p.get("shootSeq") ?? 0) + 1);
-          session.callShot(best.id, p.id);
+          const shootSeq = Number(p.get("shootSeq") ?? 0) + 1;
+          p.set("shootSeq", shootSeq);
+          session.callShot(best.id, p.id, shootSeq);
         }
       }
       continue;
