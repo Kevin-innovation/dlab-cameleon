@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { APP_NAME, DEFAULT_ROOM_CODE, MAX_PLAYERS, NICK_KEY, SERVERS } from "@/lib/config";
 import { MAPS } from "@/lib/maps";
+import { requestMobileLandscape } from "@/lib/mobile";
 import { connectOnline, createPractice, type Session } from "@/lib/session";
 import { AccessibleModal } from "./AccessibleModal";
 import { GameView } from "./GameView";
@@ -31,6 +32,7 @@ export default function GameApp() {
     setNick(name);
     setError("");
     setScreen({ t: "connecting" });
+    void requestMobileLandscape();
     try {
       const s = await connectOnline({
         roomCode: DEFAULT_ROOM_CODE,
@@ -58,6 +60,7 @@ export default function GameApp() {
     setError("");
     sessionStorage.setItem(NICK_KEY, name);
     setNick(name);
+    void requestMobileLandscape();
     setSession(createPractice(name));
     setScreen({ t: "practice" });
   };

@@ -25,6 +25,7 @@ import {
 import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
 import { getMap, MAPS } from "@/lib/maps";
+import { requestMobileLandscape } from "@/lib/mobile";
 import {
   beginRound,
   hiderAlive,
@@ -888,6 +889,13 @@ export function GameView({
             <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/75">
               카멜레온 게임은 가로 화면에서만 플레이할 수 있습니다.
             </p>
+            <button
+              type="button"
+              className="mt-5 rounded-full bg-lime px-5 py-2.5 font-display text-black"
+              onClick={() => void requestMobileLandscape()}
+            >
+              가로 화면으로 시작
+            </button>
           </div>
         )}
 
