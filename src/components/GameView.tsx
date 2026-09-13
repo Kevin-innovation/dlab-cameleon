@@ -105,11 +105,15 @@ export function GameView({
   const [atDoor, setAtDoor] = useState(false);
   const [tabOpen, setTabOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(() => session.getRoom().phase === "lobby");
+  const socialVisible = socialOpen && hud.phase === "lobby";
   const paintOpenRef = useRef(false);
   const viewActiveRef = useRef(false);
   const watchingRef = useRef(false);
+  const mobilePortraitRef = useRef(false);
   const touchKeysRef = useRef(new Set<string>());
+  const touchJoystickKeysRef = useRef(new Set<string>());
   const touchLookRef = useRef({ pointerId: -1, x: 0, y: 0, dx: 0, dy: 0 });
+  const touchFireRef = useRef(0);
   const helpRef = useRef(false);
   const colorRef = useRef(color);
   const brushRef = useRef(brush);
@@ -134,7 +138,6 @@ export function GameView({
   useEffect(() => {
     watchingRef.current = watching;
   }, [watching]);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -149,11 +152,14 @@ export function GameView({
     session.me().set("z", spawn0.z, true);
 
     const keys = new Set<string>();
+    const touchJoystickKeys = touchJoystickKeysRef.current;
+    const mobilePortrait = window.matchMedia("(max-width: 767px) and (orientation: portrait)");
     let last = performance.now();
     let lastSync = 0;
     let lastShot = 0;
     let lastTaunt = 0;
     let lastForced = Date.now();
+    let seenTouchFire = touchFireRef.current;
     let seenRound = session.getRoom().round;
     let bakedId = startMap.id;
     const hostTauntSeq = new Map<string, number>();
@@ -163,6 +169,24 @@ export function GameView({
       const tag = el?.tagName;
       return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || !!el?.isContentEditable;
     };
+
+    const syncMobileOrientation = () => {
+      mobilePortraitRef.current = mobilePortrait.matches;
+      if (!mobilePortrait.matches) return;
+      document.exitPointerLock();
+      viewActiveRef.current = false;
+      keys.clear();
+      touchKeys.clear();
+      touchJoystickKeys.clear();
+      touchLookRef.current.pointerId = -1;
+      touchLookRef.current.dx = 0;
+      touchLookRef.current.dy = 0;
+      world.exitWatch();
+      watchingRef.current = false;
+      setWatching(false);
+    };
+    syncMobileOrientation();
+    mobilePortrait.addEventListener("change", syncMobileOrientation);
 
     const tryLock = () => {
       if (paintOpenRef.current || helpRef.current) return;
@@ -179,6 +203,7 @@ export function GameView({
 
     const onKey = (e: KeyboardEvent, down: boolean) => {
       if (typing(e)) return;
+      if (mobilePortraitRef.current) return;
       const k = normalizeKey(e);
       if (down) {
         if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " ", "tab"].includes(k)) {
@@ -264,6 +289,7 @@ export function GameView({
       viewActiveRef.current = false;
       keys.clear();
       touchKeys.clear();
+      touchJoystickKeys.clear();
       touchLookRef.current.pointerId = -1;
       touchLookRef.current.dx = 0;
       touchLookRef.current.dy = 0;
@@ -271,7 +297,7 @@ export function GameView({
     window.addEventListener("blur", onBlur);
 
     const onMouseMove = (e: MouseEvent) => {
-      if (paintOpenRef.current || helpRef.current) return;
+      if (mobilePortraitRef.current || paintOpenRef.current || helpRef.current) return;
       const lockedNow = document.pointerLockElement === canvas;
       if (!lockedNow && !viewActiveRef.current) return;
       if (!lockedNow && e.target !== canvas) return;
@@ -342,6 +368,10 @@ export function GameView({
     stage?.addEventListener("contextmenu", onContext);
 
     const onPointerDown = (e: PointerEvent) => {
+      if (mobilePortraitRef.current) {
+        e.preventDefault();
+        return;
+      }
       if (e.button === 2) {
         const room = session.getRoom();
         const me = snapsFrom(session).find((p) => p.id === session.myId());
@@ -462,6 +492,23 @@ export function GameView({
       const players = snapsFrom(session);
       const me = players.find((p) => p.id === session.myId());
 
+      if (touchFireRef.current !== seenTouchFire) {
+        seenTouchFire = touchFireRef.current;
+        if (!mobilePortraitRef.current && !paintOpenRef.current && !helpRef.current && !watchingRef.current && me && room.phase === "hunt" && isHunter(room, me.id)) {
+          const shotAt = Date.now();
+          const rounds = room.ammoCount || 6;
+          const ammoLeft = room.ammo?.[me.id] ?? rounds;
+          if (shotAt - lastShot >= SHOT_COOLDOWN && ammoLeft > 0) {
+            lastShot = shotAt;
+            world.playShot(me.id, true);
+            session.me().set("shootSeq", Number(session.me().get("shootSeq") ?? 0) + 1, true);
+            const aim = world.aimPlayer(me.id);
+            const hit = aim && aim.dist <= TAG_RANGE + 1.2 && hiderAlive(room, aim.id) ? aim.id : "";
+            session.callShot(hit);
+          }
+        }
+      }
+
       if (room.round !== seenRound) {
         seenRound = room.round;
         if (me && room.round > 0) {
@@ -490,10 +537,12 @@ export function GameView({
       }
 
       if (session.kind === "practice") tickSoloBots(session, map, room, dt, Date.now());
-      const frameKeys = new Set(keys);
-      for (const key of touchKeysRef.current) frameKeys.add(key);
+      const frameKeys = mobilePortraitRef.current ? new Set<string>() : new Set(keys);
+      if (!mobilePortraitRef.current) {
+        for (const key of touchKeysRef.current) frameKeys.add(key);
+      }
       const look = touchLookRef.current;
-      if (!paintOpenRef.current && !helpRef.current && (look.dx !== 0 || look.dy !== 0)) {
+      if (!mobilePortraitRef.current && !paintOpenRef.current && !helpRef.current && (look.dx !== 0 || look.dy !== 0)) {
         world.lookDelta(look.dx, look.dy);
         look.dx = 0;
         look.dy = 0;
@@ -512,8 +561,9 @@ export function GameView({
         watchingRef.current = false;
         setWatching(false);
       }
-      if (watchingRef.current) world.stepSpectate(dt, frameKeys);
+      if (watchingRef.current && !mobilePortraitRef.current) world.stepSpectate(dt, frameKeys);
       const localMoving =
+        !mobilePortraitRef.current &&
         !watchingRef.current &&
         (frameKeys.has("w") ||
           frameKeys.has("a") ||
@@ -526,7 +576,7 @@ export function GameView({
       const moved = world.stepLocal(
         dt,
         { keys: frameKeys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
-        !hunterWait && room.phase !== "result" && !watchingRef.current,
+        !mobilePortraitRef.current && !hunterWait && room.phase !== "result" && !watchingRef.current,
         pose,
         ghost,
       );
@@ -638,8 +688,10 @@ export function GameView({
       window.removeEventListener("pointercancel", onPointerUpPaint);
       window.removeEventListener("pointermove", trackMouse);
       canvas.parentElement?.removeEventListener("contextmenu", onContext);
+      mobilePortrait.removeEventListener("change", syncMobileOrientation);
       ro.disconnect();
       touchKeys.clear();
+      touchJoystickKeys.clear();
       touchLookRef.current.pointerId = -1;
       touchLookRef.current.dx = 0;
       touchLookRef.current.dy = 0;
@@ -701,6 +753,7 @@ export function GameView({
     if (on) {
       setPaintOpen(false);
       touchKeysRef.current.delete(" ");
+      clearTouchJoystick();
       touchKeysRef.current.delete("shift");
       touchKeysRef.current.delete("control");
     }
@@ -729,6 +782,24 @@ export function GameView({
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     touchKeysRef.current.delete(key);
+  };
+
+  const setTouchJoystickKeys = (keys: string[]) => {
+    for (const key of touchJoystickKeysRef.current) touchKeysRef.current.delete(key);
+    touchJoystickKeysRef.current.clear();
+    for (const key of keys) {
+      touchJoystickKeysRef.current.add(key);
+      touchKeysRef.current.add(key);
+    }
+  };
+
+  const clearTouchJoystick = () => {
+    for (const key of touchJoystickKeysRef.current) touchKeysRef.current.delete(key);
+    touchJoystickKeysRef.current.clear();
+  };
+
+  const triggerTouchFire = () => {
+    touchFireRef.current += 1;
   };
 
   const touchLookStart = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -789,11 +860,15 @@ export function GameView({
         />
 
         {hud.phase !== "lobby" && (
-          <div className="mobile-portrait-guard pointer-events-auto absolute inset-0 z-[80] hidden flex-col items-center justify-center bg-[#0b100d]/[.97] px-6 text-center">
+          <div
+            className="mobile-portrait-guard pointer-events-auto absolute inset-0 z-[80] hidden flex-col items-center justify-center bg-[#0b100d] px-6 text-center"
+            role="status"
+            aria-live="polite"
+          >
             <div className="text-4xl" aria-hidden="true">↔</div>
             <h2 className="text-wrap-balance mt-3 font-display text-3xl text-lime">휴대폰을 가로로 돌려주세요</h2>
             <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/75">
-              카멜레온 게임은 가로 화면에서 터치 이동과 시야 조작을 사용할 수 있습니다.
+              카멜레온 게임은 가로 화면에서만 플레이할 수 있습니다.
             </p>
           </div>
         )}
@@ -996,13 +1071,18 @@ export function GameView({
           )}
         </div>
 
-        {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
+        {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && !socialVisible && !paintOpen && (
           <TouchControls
             canWatch={myRole === "hider" || hud.phase === "lobby"}
+            canFire={myRole === "hunter" && hud.phase === "hunt"}
+            canPaint={myRole !== "hunter"}
             watching={watching}
             paintOpen={paintOpen}
             onTogglePaint={() => setPaintOpen((v) => !v)}
             onToggleWatch={toggleWatching}
+            onFire={triggerTouchFire}
+            onJoystickChange={setTouchJoystickKeys}
+            onJoystickEnd={clearTouchJoystick}
             onPress={touchPress}
             onRelease={touchRelease}
             onKeyboardPress={touchKeyboardPress}
@@ -1110,7 +1190,7 @@ export function GameView({
         session={session}
         room={hud}
         people={people}
-        open={socialOpen}
+        open={socialVisible}
         onToggle={() => setSocialOpen((value) => !value)}
       />
 
@@ -1140,6 +1220,8 @@ export function GameView({
 
 function TouchControls({
   canWatch,
+  canFire,
+  canPaint,
   watching,
   paintOpen,
   onTogglePaint,
@@ -1151,8 +1233,13 @@ function TouchControls({
   onLookStart,
   onLookMove,
   onLookEnd,
+  onFire,
+  onJoystickChange,
+  onJoystickEnd,
 }: {
   canWatch: boolean;
+  canFire: boolean;
+  canPaint: boolean;
   watching: boolean;
   paintOpen: boolean;
   onTogglePaint: () => void;
@@ -1164,7 +1251,86 @@ function TouchControls({
   onLookStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookEnd: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onFire: () => void;
+  onJoystickChange: (keys: string[]) => void;
+  onJoystickEnd: () => void;
 }) {
+  const joystickKnobRef = useRef<HTMLSpanElement>(null);
+  const joystickPointerRef = useRef(-1);
+
+  const updateJoystick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const max = Math.max(1, Math.min(rect.width, rect.height) / 2 - 25);
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const length = Math.hypot(event.clientX - centerX, event.clientY - centerY) || 1;
+    const scale = Math.min(1, max / length);
+    const dx = (event.clientX - centerX) * scale;
+    const dy = (event.clientY - centerY) * scale;
+    if (joystickKnobRef.current) {
+      joystickKnobRef.current.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    }
+    const threshold = max * 0.24;
+    const next: string[] = [];
+    if (dy < -threshold) next.push("w");
+    if (dy > threshold) next.push("s");
+    if (dx < -threshold) next.push("a");
+    if (dx > threshold) next.push("d");
+    onJoystickChange(next);
+  };
+
+  const resetJoystick = () => {
+    joystickPointerRef.current = -1;
+    if (joystickKnobRef.current) joystickKnobRef.current.style.transform = "translate(-50%, -50%)";
+    onJoystickEnd();
+  };
+
+  const joystickStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    joystickPointerRef.current = event.pointerId;
+    updateJoystick(event);
+  };
+
+  const joystickMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (joystickPointerRef.current !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    updateJoystick(event);
+  };
+
+  const joystickEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (joystickPointerRef.current !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resetJoystick();
+  };
+
+  const joystickKey = (key: string) => ({
+    ArrowUp: "w",
+    ArrowDown: "s",
+    ArrowLeft: "a",
+    ArrowRight: "d",
+    w: "w",
+    a: "a",
+    s: "s",
+    d: "d",
+  })[key];
+
+  const joystickKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const key = joystickKey(event.key);
+    if (!key) return;
+    event.preventDefault();
+    onJoystickChange([key]);
+  };
+
+  const joystickKeyUp = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!joystickKey(event.key)) return;
+    event.preventDefault();
+    onJoystickEnd();
+  };
+
   const button = (key: string, label: string, className = "") => (
     <button
       type="button"
@@ -1183,13 +1349,23 @@ function TouchControls({
 
   return (
     <div className="mobile-touch-controls pointer-events-none absolute inset-0 z-20 select-none" aria-label="터치 게임 조작">
-      <div className="pointer-events-auto absolute bottom-3 left-3 grid grid-cols-3 gap-1.5" aria-label="이동 조작">
-        <span />
-        {button("w", "앞으로")}
-        <span />
-        {button("a", "왼쪽")}
-        {button("s", "뒤로")}
-        {button("d", "오른쪽")}
+      <div
+        className="mobile-joystick pointer-events-auto absolute bottom-3 left-3 h-32 w-32 rounded-full border border-white/20 bg-black/35 shadow-lg backdrop-blur-sm"
+        data-touch-control="true"
+        role="group"
+        tabIndex={0}
+        aria-label="이동 조이스틱. 드래그해서 이동합니다."
+        aria-keyshortcuts="W A S D ArrowUp ArrowDown ArrowLeft ArrowRight"
+        onPointerDown={joystickStart}
+        onPointerMove={joystickMove}
+        onPointerUp={joystickEnd}
+        onPointerCancel={joystickEnd}
+        onLostPointerCapture={joystickEnd}
+        onKeyDown={joystickKeyDown}
+        onKeyUp={joystickKeyUp}
+      >
+        <span ref={joystickKnobRef} className="pointer-events-none absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border border-lime/70 bg-lime/25 shadow-[0_0_18px_rgba(198,255,74,0.3)]" />
+        <span className="pointer-events-none absolute inset-0 grid place-items-center text-[10px] font-semibold tracking-widest text-white/60">이동</span>
       </div>
 
       <div
@@ -1206,9 +1382,22 @@ function TouchControls({
         시야 드래그
       </div>
 
-      <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+      <div className="mobile-touch-actions pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
         {button("shift", "달리기")}
         {button(" ", "점프·벽 붙기")}
+        {canFire && (
+          <button
+            type="button"
+            className="mobile-touch-button rounded-xl border border-pink/40 bg-pink px-3 py-2 text-xs font-semibold text-black shadow-lg backdrop-blur-sm"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onFire();
+            }}
+          >
+            발사
+          </button>
+        )}
         {canWatch && (
           <button
             type="button"
@@ -1223,7 +1412,7 @@ function TouchControls({
             {watching ? "관전 종료" : "관전"}
           </button>
         )}
-        {!watching && (
+        {!watching && canPaint && (
           <button
             type="button"
             aria-pressed={paintOpen}

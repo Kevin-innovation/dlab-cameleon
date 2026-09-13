@@ -94,7 +94,57 @@ label:has(> select:focus-visible) {
   display: none;
 }
 
+@media (max-width: 767px) {
+  .game-shell #game-instructions {
+    display: none;
+  }
+
+  .game-action-controls {
+    top: 0.75rem;
+    right: auto;
+    bottom: auto;
+    left: 0.75rem;
+  }
+
+  .mobile-joystick,
+  .mobile-look-pad {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    touch-action: none;
+  }
+
+  .mobile-joystick {
+    left: 0.75rem;
+    width: 7.25rem;
+    height: 7.25rem;
+  }
+
+  .mobile-look-pad {
+    right: 0.75rem;
+    width: min(42vw, 11rem);
+    height: 7.25rem;
+  }
+
+  .mobile-portrait-guard {
+    top: 4.25rem;
+    right: 0.75rem;
+    bottom: auto;
+    left: 0.75rem;
+    align-items: flex-start;
+    justify-content: flex-start;
+    background: transparent;
+    padding: 0;
+  }
+
+  .mobile-portrait-guard > div {
+    margin-left: auto;
+  }
+}
+
 @media (max-width: 767px) and (orientation: landscape) {
+  .mobile-touch-controls {
+    display: block;
+  }
+
   .game-shell {
     flex-direction: row;
   }
@@ -117,24 +167,41 @@ label:has(> select:focus-visible) {
     overflow-y: auto;
   }
 
-  .game-shell #game-instructions {
-    display: none;
-  }
-
   .game-action-controls {
     top: 0.75rem;
     right: 0.75rem;
+    left: auto;
     bottom: auto;
   }
 
-  .mobile-touch-controls {
-    display: block;
+  .mobile-touch-actions {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
 }
 
 @media (max-width: 767px) and (orientation: portrait) {
+  .mobile-touch-controls {
+    display: none;
+  }
+
+  .mobile-touch-actions {
+    display: none;
+  }
+
   .mobile-portrait-guard {
     display: flex;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    align-items: center;
+    justify-content: center;
+    background: #0b100d;
+    padding: 1.5rem;
+  }
+
+  .mobile-portrait-guard > div {
+    margin-left: 0;
   }
 }
 
