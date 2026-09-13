@@ -1876,6 +1876,14 @@ function RoomSocialPanel({
 }) {
   const [draft, setDraft] = useState("");
   const messages = (room.chat ?? []).slice(-24);
+  const lastMessageId = messages[messages.length - 1]?.id ?? "";
+  const chatLogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const log = chatLogRef.current;
+    if (log) log.scrollTop = log.scrollHeight;
+  }, [open, lastMessageId]);
 
   const send = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1936,6 +1944,7 @@ function RoomSocialPanel({
               <span className="text-[10px] text-white/55">최근 {messages.length}개</span>
             </div>
             <div
+              ref={chatLogRef}
               className="mt-1.5 h-40 overflow-y-auto rounded-xl bg-black/25 p-2"
               role="log"
               aria-live="polite"
@@ -1967,6 +1976,7 @@ function RoomSocialPanel({
                 id="room-chat-input"
                 name="message"
                 autoComplete="off"
+                enterKeyHint="send"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={120}
