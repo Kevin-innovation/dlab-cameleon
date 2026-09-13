@@ -1,12 +1,19 @@
 import { SHOT_COOLDOWN, TAG_RANGE, WHITE } from "./config";
-import { hunterVisibility } from "./camouflage";
+import { colorMatch, hunterVisibility } from "./camouflage";
 import { moveWithSlide, poseRadius } from "./engine/collision";
 import { doorColliders, mapColliders } from "./maps";
 import { hiderAlive, isHunter, roleOf } from "./round";
-import type { Session } from "./session";
+import type { Session, SessionPlayer } from "./session";
 import type { Collider, GameMap, PaintBlob, Pose, RoomState } from "./types";
 
-type HideSpot = { x: number; z: number; pose: Pose; fill: string };
+type HideSpot = {
+  x: number;
+  z: number;
+  pose: Pose;
+  fill: string;
+  palette: string[];
+  quality: number;
+};
 
 type Brain = {
   tx: number;
@@ -23,6 +30,8 @@ type Brain = {
   searchSpots: HideSpot[];
   searchSpotIndex: number;
   pauseUntil: number;
+  paintStartedAt: number;
+  paintDuration: number;
 };
 
 const brains = new Map<string, Brain>();
@@ -68,13 +77,16 @@ function clearSight(ax: number, az: number, bx: number, bz: number, boxes: Colli
 function hideSpot(map: GameMap, i: number, round: number): HideSpot {
   const props = map.boxes.filter((b) => b.h >= 0.55 && b.h <= 3.4 && b.w < map.w * 0.2 && b.d < map.d * 0.2);
   const rnd = mul(`spot${i}${map.id}${round}`);
-  const p = props[Math.floor(rnd() * Math.max(1, props.length))] ?? {
+  const fallback: GameMap["boxes"][number] = {
     x: map.w * (0.2 + rnd() * 0.6),
+    y: 0.5,
     z: map.d * (0.2 + rnd() * 0.6),
     w: 1,
+    h: 1,
     d: 1,
     color: "#6b4a32",
   };
+  const p = props[Math.floor(rnd() * Math.max(1, props.length))] ?? fallback;
   const side = rnd();
   const pad = 0.55 + rnd() * 0.35;
   let x = p.x;
@@ -86,15 +98,50 @@ function hideSpot(map: GameMap, i: number, round: number): HideSpot {
   x = Math.max(2, Math.min(map.w - 2, x));
   z = Math.max(2, Math.min(map.d - 2, z));
   const poses: Pose[] = ["stick", "crouch", "sit", "lie", "stretch", "stick"];
-  return { x, z, pose: poses[Math.floor(rnd() * poses.length)], fill: p.color || "#6b4a32" };
+  const fill = p.color || "#6b4a32";
+  const palette = [...new Set([fill, ...(p.colors ?? [])])];
+  const hunter = map.hunterSpawns[0] ?? { x: map.w / 2, z: map.d / 2 };
+  const distanceFromHunter = Math.hypot(x - hunter.x, z - hunter.z);
+  const covered = !clearSight(hunter.x, hunter.z, x, z, mapColliders(map));
+  const paletteMatch =
+    palette.slice(1).reduce((sum, color) => sum + colorMatch(fill, color), 0) / Math.max(1, palette.length - 1);
+  const quality = Math.max(
+    68,
+    Math.min(
+      94,
+      Math.round(72 + Math.min(12, distanceFromHunter * 0.45) + (covered ? 8 : 0) + paletteMatch * 0.08),
+    ),
+  );
+  return {
+    x,
+    z,
+    pose: poses[Math.floor(rnd() * poses.length)],
+    fill,
+    palette,
+    quality,
+  };
 }
 
-function blobsFor(fill: string, i: number): PaintBlob[] {
+function blobsFor(fill: string, palette: string[], i: number): PaintBlob[] {
   const rnd = mul(`paint${i}${fill}`);
   const parts: PaintBlob["part"][] = ["head", "torso", "armL", "armR", "legL", "legR"];
+  const accents = palette.filter((color) => color.toLowerCase() !== fill.toLowerCase()).slice(0, 2);
   const out: PaintBlob[] = [];
   for (const part of parts) {
     out.push({ x: 0.5, y: 0.5, r: 0.55, c: fill, part, tx: 0.5, ty: 0.5 });
+    for (const [accentIndex, color] of accents.entries()) {
+      if (rnd() > 0.2 + accentIndex * 0.18) {
+        out.push({
+          x: 0.2 + rnd() * 0.6,
+          y: 0.18 + rnd() * 0.64,
+          r: 0.1 + rnd() * 0.07,
+          c: color,
+          part,
+          tx: 0.35 + rnd() * 0.3,
+          ty: 0.3 + rnd() * 0.4,
+        });
+      }
+    }
     if (rnd() > 0.35) {
       out.push({
         x: 0.25 + rnd() * 0.5,
@@ -110,6 +157,31 @@ function blobsFor(fill: string, i: number): PaintBlob[] {
   return out;
 }
 
+function mixHex(from: string, to: string, amount: number) {
+  const parse = (value: string) => {
+    const normalized = value.trim().replace(/^#/, "");
+    if (!/^[0-9a-f]{6}$/i.test(normalized)) return null;
+    return [0, 2, 4].map((index) => Number.parseInt(normalized.slice(index, index + 2), 16));
+  };
+  const left = parse(from);
+  const right = parse(to);
+  if (!left || !right) return amount >= 0.65 ? to : from;
+  const t = Math.max(0, Math.min(1, amount));
+  return `#${left
+    .map((value, index) => Math.round(value + (right[index] - value) * t).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function applyBotPaint(p: SessionPlayer, br: Brain, now: number) {
+  if (!br.paintStartedAt) br.paintStartedAt = now;
+  const progress = Math.max(0, Math.min(1, (now - br.paintStartedAt) / br.paintDuration));
+  const blobCount = progress <= 0 ? 0 : Math.max(1, Math.ceil(br.blobs.length * progress));
+  p.set("fill", mixHex(WHITE, br.fill, progress));
+  p.set("blobs", br.blobs.slice(0, blobCount));
+  p.set("camoScore", Math.round(br.camoScore * progress));
+  return progress >= 1;
+}
+
 export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
   brains.clear();
   const players = session.players();
@@ -117,11 +189,17 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
     if (p.id === session.myId()) continue;
     const i = Number(String(p.id).replace("bot-", "")) || 0;
     const role = roleOf(room, p.id);
-    const searchSpots =
+    const candidates =
       role === "hunter"
         ? []
         : [hideSpot(map, i, room.round), hideSpot(map, i + 13, room.round), hideSpot(map, i + 29, room.round)];
-    const finalSpot = searchSpots[searchSpots.length - 1];
+    const finalSpot = candidates.reduce<HideSpot | undefined>(
+      (best, spot) => (!best || spot.quality > best.quality ? spot : best),
+      undefined,
+    );
+    const searchSpots = finalSpot
+      ? [...candidates.filter((spot) => spot !== finalSpot), finalSpot]
+      : candidates;
     const sp = role === "hunter" ? map.hunterSpawns[i % map.hunterSpawns.length] : map.spawns[i % map.spawns.length];
     p.set("x", sp.x);
     p.set("z", sp.z);
@@ -140,8 +218,8 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
       tz: finalSpot?.z ?? sp.z,
       pose: finalSpot?.pose ?? "stand",
       fill: finalSpot?.fill ?? WHITE,
-      blobs: finalSpot ? blobsFor(finalSpot.fill, i) : [],
-      camoScore: finalSpot ? 86 - (i % 3) * 7 : 0,
+      blobs: finalSpot ? blobsFor(finalSpot.fill, finalSpot.palette, i) : [],
+      camoScore: finalSpot?.quality ?? 0,
       settled: false,
       shootAt: 0,
       patrol: i,
@@ -150,6 +228,8 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
       searchSpots,
       searchSpotIndex: 0,
       pauseUntil: 0,
+      paintStartedAt: 0,
+      paintDuration: 2200 + (i % 3) * 450,
     });
   }
 }
@@ -264,6 +344,16 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
     }
 
     if (!hunter) {
+      const finalIndex = br.searchSpots.length - 1;
+      const finalSpot = br.searchSpots[finalIndex];
+      if (room.phase === "hunt" && !br.settled && finalSpot) {
+        br.searchSpotIndex = finalIndex;
+        br.tx = finalSpot.x;
+        br.tz = finalSpot.z;
+        br.pose = finalSpot.pose;
+        br.settled = true;
+        br.paintStartedAt = now - br.paintDuration;
+      }
       const target = br.searchSpots[br.searchSpotIndex];
       if (target) {
         br.tx = target.x;
@@ -296,7 +386,15 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
             br.pauseUntil = 0;
             continue;
           }
-          br.settled = lastSpot || now >= room.phaseEndsAt - finalWindow;
+          if (!lastSpot && now >= room.phaseEndsAt - finalWindow && finalSpot) {
+            br.searchSpotIndex = finalIndex;
+            br.tx = finalSpot.x;
+            br.tz = finalSpot.z;
+            br.pose = finalSpot.pose;
+            br.pauseUntil = 0;
+            continue;
+          }
+          br.settled = lastSpot;
         }
         if (!br.settled) {
           p.set("pose", "stand");
@@ -307,10 +405,8 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         }
         p.set("x", br.tx);
         p.set("z", br.tz);
-        p.set("pose", br.pose);
-        p.set("fill", br.fill);
-        p.set("blobs", br.blobs);
-        p.set("camoScore", br.camoScore);
+        const painted = applyBotPaint(p, br, now);
+        p.set("pose", painted ? br.pose : "crouch");
         if (room.phase === "hunt" && Math.random() < 0.0009) {
           p.set("x", br.tx + (Math.random() - 0.5) * 0.18);
           p.set("z", br.tz + (Math.random() - 0.5) * 0.18);
