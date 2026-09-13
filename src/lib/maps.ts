@@ -362,11 +362,27 @@ function placeOnStage(map: GameMap, box: BoxDef) {
 }
 
 function landmarkProps(map: GameMap): BoxDef[] {
+  if (map.id === "mansion") {
+    return [
+      // 북쪽 거실: 큰 소파 + 2인용 소파 + 테이블로 한 덩어리의 은신처를 만든다.
+      B(18, 22.5, 3.6, 1.25, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 } }),
+      B(24, 23, 2.6, 1.15, "#7b3944", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.42, d: 1.03 } }),
+      B(27.5, 23, 1.8, 1.5, "#365b78", { h: 0.95, collide: true, prop: "armchair" }),
+      B(29.8, 24.5, 2.4, 1.4, "#6d4c2a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 2.2, d: 1.2 }, pattern: "wood" }),
+      // 동쪽 서재: 시야를 완전히 막지 않는 낮은 책장 은신처.
+      B(40.5, 20, 2.4, 0.55, "#5c2e12", { h: 2.35, collide: true, prop: "bookshelf", pattern: "books", colors: bookColors }),
+      B(3.5, 24.5, 2.8, 1.15, "#7b3944", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.62, d: 1.03 } }),
+    ];
+  }
   if (map.id === "sewer") {
     return [
       B(3.5, 25.5, 1.35, 1.35, "#922b21", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
       B(5.1, 25.8, 1.25, 1.25, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
       B(38.2, 26, 1.35, 1.35, "#b03a2e", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
+      B(16.5, 27, 1.35, 1.35, "#922b21", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
+      B(18.1, 27.4, 1.25, 1.25, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
+      B(31.5, 5.5, 1.3, 1.3, "#b03a2e", { h: 1.2, collide: true, prop: "barrel", shape: "cylinder" }),
+      B(34, 26, 2.2, 1.5, "#2c3e50", { h: 1.35, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] }),
     ];
   }
   if (map.id === "backrooms") {
@@ -375,12 +391,22 @@ function landmarkProps(map: GameMap): BoxDef[] {
       B(24.2, 24, 2.2, 1.4, "#6d5c3a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 2.02, d: 1.2 }, pattern: "wood" }),
       B(29, 22, 1.8, 1.5, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
       B(31.3, 22, 1.1, 1.1, "#d6c57c", { h: 3.2, collide: true, prop: "floorLamp", shape: "cylinder" }),
+      B(6.5, 22.2, 2.8, 1.15, "#8c7742", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.62, d: 1.03 } }),
+      B(9.8, 24, 2.1, 1.3, "#6d5c3a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 1.92, d: 1.1 }, pattern: "wood" }),
+      B(13, 22, 1.7, 1.4, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
+      B(33, 18, 2.6, 0.6, "#6d5c3a", { h: 2.25, collide: true, prop: "bookshelf", collider: { w: 2.3, d: 0.52 }, pattern: "wood" }),
     ];
   }
   if (map.id === "farm") {
     return [
       B(44, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
       B(36, 28, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
+      B(14, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
+      B(17, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
+      B(3.5, 29, 2.2, 1.6, "#e39b2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
+      B(6.2, 29.2, 2.2, 1.6, "#d79a2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
+      B(40, 29, 2.2, 1.6, "#e39b2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
+      B(43, 29.2, 2.2, 1.6, "#d79a2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
     ];
   }
   return [];
