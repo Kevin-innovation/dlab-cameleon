@@ -45,6 +45,7 @@ body {
 
 button {
   cursor: pointer;
+  transition: filter 150ms ease, transform 100ms ease;
 }
 
 button,
@@ -63,9 +64,19 @@ button:not(:disabled):hover {
   filter: brightness(1.08);
 }
 
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
 :where(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 3px solid var(--lime);
   outline-offset: 3px;
+}
+
+label:has(> input:focus-visible),
+label:has(> select:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--lime) 60%, transparent);
+  outline-offset: 2px;
 }
 
 .safe-screen {

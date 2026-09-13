@@ -703,7 +703,7 @@ export function GameView({
               >
                 <span className="font-display text-[11px] tracking-wide text-pink">처치</span>
                 <span className="font-display text-white">{f.byName}</span>
-                <span className="text-white/40">→</span>
+                <span className="text-white/60">→</span>
                 <span className="font-display text-lime">{f.name}</span>
               </div>
             ))}
@@ -764,7 +764,7 @@ export function GameView({
               <div className="absolute h-10 w-px bg-white/70" />
             </div>
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-center">
-              <div className="text-[11px] tracking-wide text-white/55">탄약</div>
+              <div className="text-[11px] tracking-wide text-white/65">탄약</div>
               <div className="flex items-center justify-center gap-1">
                 {Array.from({ length: hud.ammoCount || 6 }).map((_, i) => (
                   <span
@@ -968,7 +968,7 @@ export function GameView({
                 지우기
               </button>
             </div>
-            <p className="mt-2 text-[11px] leading-snug text-white/55">
+            <p className="mt-2 text-[11px] leading-snug text-white/65">
               스포이드로 벽 색을 찍고, 붓으로 몸을 클릭한 채 드래그하면 선이 그어집니다.
             </p>
           </aside>
@@ -1067,7 +1067,7 @@ function Lobby({
               {p.id === session.myId() ? " (나)" : ""}
               {host && p.id === session.myId() ? " · 호스트" : ""}
             </span>
-            <span className={p.ready ? "text-lime" : "text-white/40"}>{p.ready ? "준비" : "대기"}</span>
+            <span className={p.ready ? "text-lime" : "text-white/60"}>{p.ready ? "준비" : "대기"}</span>
           </li>
         ))}
       </ul>
@@ -1098,7 +1098,7 @@ function Lobby({
               <div className="font-display">
                 {m.name} · {m.difficulty}
               </div>
-              <div className={`text-xs ${room.mapId === m.id ? "text-black/70" : "text-white/55"}`}>{m.blurb}</div>
+              <div className={`text-xs ${room.mapId === m.id ? "text-black/70" : "text-white/65"}`}>{m.blurb}</div>
             </button>
           ))}
         </div>
@@ -1214,19 +1214,19 @@ function Lobby({
             >
               {people.length < 2 ? "연습 라운드 시작" : "라운드 시작"}
             </button>
-            <p id="round-start-status" className="mt-2 text-center text-xs text-white/55">
+            <p id="round-start-status" className="mt-2 text-center text-xs text-white/65">
               {allReady ? "전원 준비됨" : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
             </p>
-            <p className="mt-2 text-center text-[11px] text-white/40">
+            <p className="mt-2 text-center text-[11px] text-white/60">
               점수: 처치 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
             </p>
           </>
         ) : (
           <>
-            <p className="mt-4 text-center text-sm text-white/60">
+            <p className="mt-4 text-center text-sm text-white/65">
               호스트 시작 대기 · 준비 {readyCount}/{people.length}
             </p>
-            <p className="mt-2 text-center text-[11px] text-white/40">
+            <p className="mt-2 text-center text-[11px] text-white/60">
               점수: 처치 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
             </p>
           </>
@@ -1261,7 +1261,7 @@ function RoomSocialPanel({
   };
 
   return (
-    <aside className="pointer-events-auto absolute right-3 top-[5.5rem] z-30 w-[min(calc(100vw-1.5rem),320px)]">
+    <aside className="pointer-events-auto absolute bottom-24 left-3 right-3 top-auto z-30 max-h-[calc(100dvh-11rem)] w-auto overflow-y-auto overscroll-contain md:bottom-auto md:left-auto md:right-3 md:top-[5.5rem] md:w-[min(calc(100vw-1.5rem),320px)] md:max-h-none md:overflow-visible">
       <button
         type="button"
         aria-expanded={open}
@@ -1271,7 +1271,7 @@ function RoomSocialPanel({
       >
         <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_rgba(198,255,74,0.8)]" aria-hidden="true" />
         <span>접속자 {people.length}/{MAX_PLAYERS}</span>
-        <span className="text-white/45">·</span>
+        <span className="text-white/60">·</span>
         <span>{open ? "패널 닫기" : "채팅 열기"}</span>
       </button>
 
@@ -1286,7 +1286,7 @@ function RoomSocialPanel({
               <h2 id="room-social-title" className="text-wrap-balance font-display text-lg">통합 룸</h2>
               <span className="text-xs text-lime">최대 {MAX_PLAYERS}인</span>
             </div>
-            <p className="mt-0.5 text-[11px] text-white/50">현재 접속 중인 플레이어</p>
+            <p className="mt-0.5 text-[11px] text-white/60">현재 접속 중인 플레이어</p>
             <ul className="mt-2 grid grid-cols-2 gap-1.5" aria-label="접속자 목록">
               {people.map((person) => {
                 const status = presenceStatus(room, person, session.myId());
@@ -1298,7 +1298,7 @@ function RoomSocialPanel({
                   >
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-lime" aria-hidden="true" />
                     <span className="min-w-0 flex-1 truncate">{person.name}</span>
-                    <span className="shrink-0 text-[10px] text-white/45">{status}</span>
+                    <span className="shrink-0 text-[10px] text-white/60">{status}</span>
                   </li>
                 );
               })}
@@ -1308,7 +1308,7 @@ function RoomSocialPanel({
           <div className="px-3 pt-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold tracking-wide text-white/65">방 채팅</h3>
-              <span className="text-[10px] text-white/35">최근 {messages.length}개</span>
+              <span className="text-[10px] text-white/55">최근 {messages.length}개</span>
             </div>
             <div
               className="mt-1.5 h-40 overflow-y-auto rounded-xl bg-black/25 p-2"
@@ -1317,14 +1317,14 @@ function RoomSocialPanel({
               aria-label="방 채팅 메시지"
             >
               {messages.length === 0 ? (
-                <p className="grid h-full place-items-center text-xs text-white/35">첫 인사를 남겨보세요.</p>
+                <p className="grid h-full place-items-center text-xs text-white/55">첫 인사를 남겨보세요.</p>
               ) : (
                 <ul className="space-y-2">
                   {messages.map((message) => (
                     <li key={message.id} className="text-xs leading-snug">
                       <div className="flex items-baseline gap-1.5">
                         <span className="font-semibold text-lime">{message.senderName}</span>
-                        <time className="text-[10px] text-white/30" dateTime={new Date(message.at).toISOString()}>
+                        <time className="text-[10px] text-white/55" dateTime={new Date(message.at).toISOString()}>
                           {new Date(message.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
                         </time>
                       </div>
@@ -1405,7 +1405,7 @@ function ScoreTab({
       <div className="w-full max-w-4xl rounded-3xl border border-white/10 bg-[#121c17]/95 p-5 shadow-2xl">
         <div className="flex items-end justify-between">
           <h2 className="text-wrap-balance font-display text-3xl">현황</h2>
-          <p className="text-xs text-white/50">Tab을 떼면 닫힙니다</p>
+          <p className="text-xs text-white/60">Tab을 떼면 닫힙니다</p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <section className="rounded-2xl bg-black/30 p-3">
@@ -1415,17 +1415,17 @@ function ScoreTab({
           <section className="rounded-2xl bg-black/30 p-3">
             <h4 className="text-xs tracking-wide text-lime/80">생존자 {survivors.length}</h4>
             <ul className="mt-2 space-y-1">
-              {survivors.length ? survivors.map(row) : <li className="text-sm text-white/40">없음</li>}
+              {survivors.length ? survivors.map(row) : <li className="text-sm text-white/60">없음</li>}
             </ul>
           </section>
           <section className="rounded-2xl bg-black/30 p-3">
             <h4 className="text-xs tracking-wide text-pink/80">죽은자 {dead.length}</h4>
             <ul className="mt-2 space-y-1">
-              {dead.length ? dead.map(row) : <li className="text-sm text-white/40">없음</li>}
+              {dead.length ? dead.map(row) : <li className="text-sm text-white/60">없음</li>}
             </ul>
           </section>
         </div>
-        <p className="mt-4 text-center text-xs text-white/55">
+        <p className="mt-4 text-center text-xs text-white/65">
           점수 기준 · 처치 +{SCORE_TAG} · 카멜레온 생존 승리 +{SCORE_SURVIVE} · 술래 팀 승리 +{SCORE_HUNT_WIN}
         </p>
       </div>
@@ -1452,7 +1452,7 @@ function ResultPanel({
     >
         <p className="text-lime">라운드 {room.round}</p>
         <h2 id="result-title" className="text-wrap-balance font-display text-4xl">{room.winner === "hiders" ? "카멜레온 승!" : "술래 승!"}</h2>
-        <p className="mt-2 text-xs text-white/55">
+        <p className="mt-2 text-xs text-white/65">
           처치 +{SCORE_TAG} · 생존 승리 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN}
         </p>
         <ul className="mt-4 space-y-1 text-left">
@@ -1486,7 +1486,7 @@ function RevealPanel({ room, timeLeft }: { room: RoomState; timeLeft: number }) 
           숨은 장소를 감상하고 다음 라운드를 준비하세요.
         </p>
         <div className="mt-5 font-display text-6xl tabular-nums text-lime">{timeLeft}</div>
-        <p className="mt-2 text-xs text-white/45">
+        <p className="mt-2 text-xs text-white/60">
           {room.winner === "hiders" ? "카멜레온 팀 승리" : "술래 팀 승리"} · Tab으로 현황 보기
         </p>
       </div>
