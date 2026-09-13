@@ -16,7 +16,6 @@ import {
   SYNC_HZ,
   TAUNT_COOLDOWN,
   FORCED_TAUNT,
-  TAG_RANGE,
   WHITE,
   SCORE_TAG,
   SCORE_SURVIVE,
@@ -24,7 +23,7 @@ import {
 } from "@/lib/config";
 import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
-import { camouflageMeter } from "@/lib/camouflage";
+import { camouflageMeter, tagRangeForCamouflage } from "@/lib/camouflage";
 import { getMap, MAPS } from "@/lib/maps";
 import { MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
 import {
@@ -441,8 +440,14 @@ export function GameView({
         const aim = lockedNow
           ? world.aimPlayer(me.id)
           : world.aimPlayer(me.id, e.clientX, e.clientY);
+        const target = aim ? snapsFrom(session).find((p) => p.id === aim.id) : undefined;
         const hit =
-          aim && aim.dist <= TAG_RANGE + 1.2 && hiderAlive(room, aim.id) ? aim.id : "";
+          aim &&
+          target &&
+          aim.dist <= tagRangeForCamouflage(target.camoScore) + 1.2 &&
+          hiderAlive(room, aim.id)
+            ? aim.id
+            : "";
         session.callShot(hit);
       }
     };
@@ -513,7 +518,14 @@ export function GameView({
             world.playShot(me.id, true);
             session.me().set("shootSeq", Number(session.me().get("shootSeq") ?? 0) + 1, true);
             const aim = world.aimPlayer(me.id);
-            const hit = aim && aim.dist <= TAG_RANGE + 1.2 && hiderAlive(room, aim.id) ? aim.id : "";
+            const target = aim ? players.find((p) => p.id === aim.id) : undefined;
+            const hit =
+              aim &&
+              target &&
+              aim.dist <= tagRangeForCamouflage(target.camoScore) + 1.2 &&
+              hiderAlive(room, aim.id)
+                ? aim.id
+                : "";
             session.callShot(hit);
           }
         }
@@ -534,10 +546,12 @@ export function GameView({
           session.me().set("z", spawn.z, true);
           session.me().set("fill", WHITE, true);
           session.me().set("blobs", [], true);
+          session.me().set("camoScore", 0, true);
           session.me().set("pose", "stand", true);
           session.me().set("role", role, true);
           session.me().set("alive", role !== "spectator", true);
           session.me().set("ready", false, true);
+          setTargetColor("");
           setPaintOpen(false);
           world.exitWatch();
           watchingRef.current = false;
@@ -725,6 +739,12 @@ export function GameView({
   const me = people.find((p) => p.id === session.myId());
   const myRole = me ? roleOf(hud, me.id) : "spectator";
   const camouflage = camouflageMeter(me?.fill ?? WHITE, me?.blobs ?? [], targetColor);
+  useEffect(() => {
+    const score = camouflage.score ?? 0;
+    if (Number(session.me().get("camoScore") ?? 0) !== score) {
+      session.me().set("camoScore", score, false);
+    }
+  }, [camouflage.score, session]);
   const hunterHide = myRole === "hunter" && (hud.phase === "prepare" || hud.phase === "hide");
   const timeLeft = remaining(hud, nowTick);
   const phaseAnnouncement =
@@ -1298,6 +1318,7 @@ export function GameView({
             <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
             <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
             <li>화면의 자세 버튼으로 몸의 형태를 고르고, F로 페인트를 엽니다. Space로 벽 색을 빨아 칠하고, T로 휘파람, V로 관전, E로 문을 엽니다. 열고 지나가면 닫힙니다.</li>
+            <li>위장도가 높으면 술래 화면에서 멀리 있을 때 희미하게 보이고, 가까이 접근할수록 선명해집니다. 움직이면 더 쉽게 드러납니다.</li>
             <li>술래는 1인칭으로 맵을 수색합니다. 우클릭으로 3인칭을 전환하고, 가까이 조준해 맞히면 상대를 발견합니다. 탄약 제한은 방 옵션입니다.</li>
             <li>기본 숨바꼭질에서는 발견된 Hider가 관전 상태가 됩니다. 감염은 별도 커스텀 모드입니다.</li>
             <li>Tab을 누르면 참여자·생존자·탈락자와 점수가 나옵니다. 발견 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>

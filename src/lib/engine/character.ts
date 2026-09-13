@@ -19,6 +19,7 @@ export type CharacterRig = {
   parts: Record<BodyPart, PartLayer>;
   fill: string;
   blobs: PaintBlob[];
+  stealthOpacity: number;
   pose: Pose;
   paintSig: string;
   ghost: boolean;
@@ -210,6 +211,7 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     parts,
     fill: WHITE,
     blobs: [],
+    stealthOpacity: 1,
     pose: "stand",
     paintSig: "",
     ghost: false,
@@ -233,6 +235,19 @@ export function applyPaint(rig: CharacterRig, fill: string, blobs: PaintBlob[]) 
     const layer = rig.parts[id];
     paintCanvas(layer.ctx, fill, blobs, id);
     layer.texture.needsUpdate = true;
+  }
+}
+
+export function setCamouflageLook(rig: CharacterRig, opacity: number) {
+  const next = Math.max(0.24, Math.min(1, opacity));
+  if (Math.abs(rig.stealthOpacity - next) < 0.015) return;
+  rig.stealthOpacity = next;
+  if (rig.ghost) return;
+  for (const part of Object.values(rig.parts)) {
+    const mat = part.mesh.material as THREE.MeshStandardMaterial;
+    mat.transparent = true;
+    mat.opacity = next;
+    mat.depthWrite = next > 0.72;
   }
 }
 
@@ -276,8 +291,8 @@ export function setGhostLook(rig: CharacterRig, ghost: boolean) {
   for (const part of Object.values(rig.parts)) {
     const mat = part.mesh.material as THREE.MeshStandardMaterial;
     mat.transparent = true;
-    mat.opacity = ghost ? 0.28 : 1;
-    mat.depthWrite = !ghost;
+    mat.opacity = ghost ? 0.28 : rig.stealthOpacity;
+    mat.depthWrite = ghost ? false : rig.stealthOpacity > 0.72;
     mat.emissive.set(ghost ? "#7ecbff" : "#000000");
     mat.emissiveIntensity = ghost ? 0.45 : 0;
     part.mesh.castShadow = !ghost;

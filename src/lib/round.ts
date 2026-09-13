@@ -7,8 +7,8 @@ import {
   SCORE_HUNT_WIN,
   SCORE_SURVIVE,
   SCORE_TAG,
-  TAG_RANGE,
 } from "./config";
+import { tagRangeForCamouflage } from "./camouflage";
 import type { PlayerSnap, RoomState } from "./types";
 
 export function emptyRoom(): RoomState {
@@ -136,7 +136,7 @@ export function processFire(
       hunter &&
       best &&
       hiderAlive(next, best.id) &&
-      Math.hypot(best.x - hunter.x, best.z - hunter.z) <= TAG_RANGE
+      Math.hypot(best.x - hunter.x, best.z - hunter.z) <= tagRangeForCamouflage(best.camoScore)
     ) {
       const caughtIds = next.caughtIds.includes(best.id)
         ? next.caughtIds

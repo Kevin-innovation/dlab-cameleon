@@ -1,4 +1,5 @@
 import { SHOT_COOLDOWN, TAG_RANGE, WHITE } from "./config";
+import { hunterVisibility } from "./camouflage";
 import { moveWithSlide, poseRadius } from "./engine/collision";
 import { doorColliders, mapColliders } from "./maps";
 import { hiderAlive, isHunter, roleOf } from "./round";
@@ -13,6 +14,7 @@ type Brain = {
   pose: Pose;
   fill: string;
   blobs: PaintBlob[];
+  camoScore: number;
   settled: boolean;
   shootAt: number;
   patrol: number;
@@ -104,6 +106,7 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
     p.set("pose", "stand");
     p.set("fill", WHITE);
     p.set("blobs", []);
+    p.set("camoScore", 0);
     p.set("ready", true);
     p.set("alive", true);
     p.set("role", role);
@@ -114,6 +117,7 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
       pose: finalSpot?.pose ?? "stand",
       fill: finalSpot?.fill ?? WHITE,
       blobs: finalSpot ? blobsFor(finalSpot.fill, i) : [],
+      camoScore: finalSpot ? 86 - (i % 3) * 7 : 0,
       settled: false,
       shootAt: 0,
       patrol: i,
@@ -139,6 +143,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
     y: Number(p.get("y") ?? 0),
     yaw: Number(p.get("yaw") ?? 0),
     fill: String(p.get("fill") ?? WHITE),
+    camoScore: Number(p.get("camoScore") ?? 0),
     hunter: isHunter(room, p.id),
     alive: hiderAlive(room, p.id),
   }));
@@ -175,8 +180,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
       let bestScore = -1;
       for (const h of hiders) {
         const dist = Math.hypot(h.x - x, h.z - z);
-        const painted = h.fill !== WHITE;
-        const see = painted ? (dist < 5.8 ? 1.15 : dist < 9 ? 0.55 : 0.12) : dist < 12 ? 1.4 : 0.2;
+        const see = hunterVisibility(h.camoScore, dist);
         const score = see * (18 - Math.min(18, dist));
         if (score > bestScore) {
           bestScore = score;
@@ -223,8 +227,8 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         const fz = -Math.cos(yaw);
         const inv = 1 / Math.max(0.001, dist);
         const dot = fx * (best.x - x) * inv + fz * (best.z - z) * inv;
-        const painted = best.fill !== WHITE;
-        const canSee = !painted ? dist < 8.5 && dot > 0.62 : (dist < 4.6 && dot > 0.55) || (dist < 3.1 && dot > 0.2);
+        const visibility = hunterVisibility(best.camoScore, dist, "stand", true);
+        const canSee = visibility > 0.46 && dot > 0.62;
         if (canSee && dist <= TAG_RANGE + 0.6) {
           br.shootAt = now + SHOT_COOLDOWN + 180;
           p.set("shootSeq", Number(p.get("shootSeq") ?? 0) + 1);
@@ -256,6 +260,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         p.set("pose", "stand");
         p.set("fill", WHITE);
         p.set("blobs", []);
+        p.set("camoScore", 0);
       } else {
         if (!br.settled && room.phase === "hide") {
           br.pauseUntil ||= now + 950 + ((br.patrol + br.searchSpotIndex) % 3) * 350;
@@ -272,6 +277,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
           p.set("pose", "stand");
           p.set("fill", WHITE);
           p.set("blobs", []);
+          p.set("camoScore", 0);
           continue;
         }
         p.set("x", br.tx);
@@ -279,6 +285,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         p.set("pose", br.pose);
         p.set("fill", br.fill);
         p.set("blobs", br.blobs);
+        p.set("camoScore", br.camoScore);
         if (room.phase === "hunt" && Math.random() < 0.0009) {
           p.set("x", br.tx + (Math.random() - 0.5) * 0.18);
           p.set("z", br.tz + (Math.random() - 0.5) * 0.18);

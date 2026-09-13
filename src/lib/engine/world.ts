@@ -21,12 +21,14 @@ import {
   createCharacter,
   createViewGun,
   extendPaint,
+  setCamouflageLook,
   setGhostLook,
   setNameVisible,
   uvPaint,
   type CharacterRig,
 } from "./character";
 import { makePatternCanvas, rgbToHex } from "./textures";
+import { hunterVisibility } from "../camouflage";
 
 export type WorldInput = {
   keys: Set<string>;
@@ -44,6 +46,7 @@ export class GameWorld {
   pointer = new THREE.Vector2();
   mapGroup = new THREE.Group();
   players = new Map<string, CharacterRig>();
+  private playerVisibility = new Map<string, number>();
   colliders: Collider[] = [];
   private baseColliders: Collider[] = [];
   private doorRigs: { def: DoorDef; pivot: THREE.Group; leaf: THREE.Mesh }[] = [];
@@ -607,6 +610,7 @@ export class GameWorld {
     opts: { hideLocal?: boolean; localMoving?: boolean; dt?: number } = {},
   ) {
     const seen = new Set<string>();
+    this.playerVisibility.clear();
     const self = snaps.find((p) => p.id === myId);
     const dt = opts.dt ?? 0.016;
     const now = Date.now();
@@ -661,6 +665,19 @@ export class GameWorld {
       const moving =
         (p.id === myId && !!opts.localMoving) ||
         Math.hypot(rig.group.position.x - prevX, rig.group.position.z - prevZ) > 0.012;
+      const hunterIsSearching =
+        room.phase === "hunt" &&
+        !!self &&
+        isHunter(room, self.id) &&
+        p.id !== myId &&
+        !isHunter(room, p.id) &&
+        hiderAlive(room, p.id);
+      const selfX = self?.id === myId ? this.localX : self?.x ?? 0;
+      const selfZ = self?.id === myId ? this.localZ : self?.z ?? 0;
+      const distance = Math.hypot(x - selfX, z - selfZ);
+      const visibility = hunterIsSearching ? hunterVisibility(p.camoScore, distance, p.pose, moving) : 1;
+      this.playerVisibility.set(p.id, visibility);
+      setCamouflageLook(rig, visibility);
       if (p.shootSeq > rig.shootSeq) {
         rig.shootSeq = p.shootSeq;
         if (p.id !== myId) this.playShot(p.id, false);
@@ -692,6 +709,7 @@ export class GameWorld {
         this.scene.remove(rig.group);
         disposeObject(rig.group);
         this.players.delete(id);
+        this.playerVisibility.delete(id);
       }
     }
   }
@@ -940,6 +958,7 @@ export class GameWorld {
     const meshes: THREE.Object3D[] = [];
     for (const [id, rig] of this.players) {
       if (id === myId || !rig.group.visible) continue;
+      if ((this.playerVisibility.get(id) ?? 1) < 0.42) continue;
       meshes.push(rig.body);
     }
     const pick = (nx: number, ny: number) => {
@@ -965,6 +984,7 @@ export class GameWorld {
     let bestDot = 0.88;
     for (const [id, rig] of this.players) {
       if (id === myId || !rig.group.visible) continue;
+      if ((this.playerVisibility.get(id) ?? 1) < 0.42) continue;
       const dx = rig.group.position.x - this.camera.position.x;
       const dy = rig.group.position.y + 1.05 - this.camera.position.y;
       const dz = rig.group.position.z - this.camera.position.z;

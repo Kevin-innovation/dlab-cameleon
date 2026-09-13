@@ -124,6 +124,7 @@ export type PlayerSnap = {
   pose: Pose;
   fill: string;
   blobs: PaintBlob[];
+  camoScore?: number;
   role: Role;
   alive: boolean;
   shootSeq: number;

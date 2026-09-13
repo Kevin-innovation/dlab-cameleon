@@ -1,5 +1,5 @@
-import { WHITE } from "./config";
-import type { PaintBlob } from "./types";
+import { TAG_RANGE, WHITE } from "./config";
+import type { PaintBlob, Pose } from "./types";
 
 export type CamouflageMeter = {
   score: number | null;
@@ -66,4 +66,25 @@ export function camouflageMeter(fill: string, blobs: PaintBlob[], targetColor: s
     return { score, colorMatch: match, coverage, label: "조금 어색함", detail: "추천 색을 적용하거나 빈 곳을 더 칠해 보세요." };
   }
   return { score, colorMatch: match, coverage, label: "눈에 띔", detail: "표면 색과 몸 색의 차이가 큽니다." };
+}
+
+export function hunterVisibility(
+  score: number | undefined,
+  distance: number,
+  pose: Pose = "stand",
+  moving = false,
+) {
+  const concealment = Math.max(0, Math.min(1, (score ?? 0) / 100));
+  const distanceFactor = Math.max(0, Math.min(1, (distance - 1.5) / 7));
+  const poseBonus = pose === "stick" || pose === "lie" || pose === "ball" ? 0.08 : 0;
+  const motionPenalty = moving ? 0.16 : 0;
+  return Math.max(
+    0.24,
+    Math.min(1, 1 - concealment * Math.max(0, distanceFactor * 0.72 + poseBonus - motionPenalty)),
+  );
+}
+
+export function tagRangeForCamouflage(score: number | undefined) {
+  const concealment = Math.max(0, Math.min(1, (score ?? 0) / 100));
+  return TAG_RANGE * (1 - concealment * 0.32);
 }
