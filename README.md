@@ -12,6 +12,7 @@
 - 접속자 목록과 최근 60개 방 채팅 제공
 - 라운드 종료 후 30초 공개 라운드에서 모든 플레이어 위치 공개
 - 생성형 맨션 벽지 텍스처 적용 (`public/textures/mansion-wallpaper-v1.png`)
+- 스포이드 표면 색 저장 · 추천 색 전체 칠하기 · 색상/범위 기반 위장도 피드백
 - AI 연습전은 봇이 여러 지점을 탐색한 뒤 각자 다른 장소·자세·색으로 숨음
 
 ## 룰
@@ -50,6 +51,7 @@ AI 연습전 대기실에서는 **술래 설정**을 `AI 술래`, `내가 술래
 - `src/components/GameApp.tsx` — 닉네임 / 한국 서버 통합 룸 입장
 - `src/components/GameView.tsx` — 대기실, 접속자, 방 채팅, 페인트, 라운드
 - `src/lib/engine/world.ts` — Three.js 씬, 카메라, 레이캐스트, 오브젝트 텍스처
+- `src/lib/camouflage.ts` — 표면 색상 일치도와 칠한 범위 기반 위장도 계산
 - `src/lib/maps.ts` — 3D 저택 / 농장 / 하수도
 - `src/lib/round.ts` — 역할 배정, 태그, 승패
 - `src/lib/session.ts` — Playroom 세션, 접속자 동기화, 호스트 채팅 RPC, 로컬 연습

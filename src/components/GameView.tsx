@@ -24,6 +24,7 @@ import {
 } from "@/lib/config";
 import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
+import { camouflageMeter } from "@/lib/camouflage";
 import { getMap, MAPS } from "@/lib/maps";
 import { MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
 import {
@@ -103,6 +104,7 @@ export function GameView({
   const [paintOpen, setPaintOpen] = useState(false);
   const [locked, setLocked] = useState(false);
   const [color, setColor] = useState("#6b8f71");
+  const [targetColor, setTargetColor] = useState("");
   const [brush, setBrush] = useState(14);
   const [tool, setTool] = useState<Tool>("dropper");
   const [help, setHelp] = useState(false);
@@ -257,7 +259,9 @@ export function GameView({
           if (c) {
             setColor(c);
             colorRef.current = c;
-            setTool("dropper");
+            setTargetColor(c);
+            setTool("brush");
+            toolRef.current = "brush";
           }
         }
         if (k === "v") {
@@ -400,6 +404,9 @@ export function GameView({
           if (c) {
             setColor(c);
             colorRef.current = c;
+            setTargetColor(c);
+            setTool("brush");
+            toolRef.current = "brush";
           }
           return;
         }
@@ -717,6 +724,7 @@ export function GameView({
 
   const me = people.find((p) => p.id === session.myId());
   const myRole = me ? roleOf(hud, me.id) : "spectator";
+  const camouflage = camouflageMeter(me?.fill ?? WHITE, me?.blobs ?? [], targetColor);
   const hunterHide = myRole === "hunter" && (hud.phase === "prepare" || hud.phase === "hide");
   const timeLeft = remaining(hud, nowTick);
   const phaseAnnouncement =
@@ -740,6 +748,7 @@ export function GameView({
     if (players.length < 1) return;
     if (!force && players.some((p) => !p.ready)) return;
     session.setRoom(beginRound(session.getRoom(), players.map((p) => p.id), Date.now()));
+    setTargetColor("");
   };
 
   const toggleWatching = () => {
@@ -1084,13 +1093,13 @@ export function GameView({
             </button>
           )}
           {hud.phase !== "reveal" && !(myRole === "hunter" && hud.phase === "hunt") && (
-            <div className="pose-action-row flex flex-wrap justify-end gap-1.5 pt-2" role="group" aria-label="자세 선택. 1번부터 7번 키로 선택합니다.">
+            <div className="pose-action-row flex flex-wrap justify-end gap-1.5 pt-2" role="group" aria-label="자세 선택">
               {POSES.map((p, index) => (
                 <button
                   key={p.id}
                   type="button"
                   aria-keyshortcuts={String(index + 1)}
-                  aria-label={`${p.label}, ${index + 1}번 키`}
+                  aria-label={p.label}
                   title={`${p.hint} · ${index + 1}번 키`}
                   onClick={() => {
                     const w = worldRef.current;
@@ -1135,7 +1144,7 @@ export function GameView({
 
         {paintOpen && myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
           <aside
-            className="absolute bottom-24 right-3 z-20 w-[230px] overscroll-contain rounded-2xl border border-white/10 bg-[#121a16]/95 p-3 shadow-xl"
+            className="absolute bottom-24 right-3 z-20 max-h-[calc(100dvh-6rem)] w-[230px] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#121a16]/95 p-3 shadow-xl"
             role="dialog"
             aria-modal="false"
             aria-labelledby="paint-panel-title"
@@ -1189,6 +1198,52 @@ export function GameView({
                 className="w-full"
               />
             </label>
+            <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold">위장도</span>
+                <span className={camouflage.score !== null && camouflage.score >= 68 ? "text-lime" : "text-pink"}>
+                  {camouflage.score === null ? "—" : `${camouflage.score}%`}
+                </span>
+              </div>
+              <div
+                className="mt-2 h-2 overflow-hidden rounded-full bg-black/45"
+                role="progressbar"
+                aria-label="위장도"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={camouflage.score ?? 0}
+                aria-valuetext={camouflage.score === null ? "측정 전" : `${camouflage.score}%`}
+              >
+                <div
+                  className={`h-full rounded-full transition-[width] ${camouflage.score !== null && camouflage.score >= 68 ? "bg-lime" : "bg-pink"}`}
+                  style={{ width: `${camouflage.score ?? 0}%` }}
+                />
+              </div>
+              <div className="mt-2 text-[11px] font-semibold text-white/85">{camouflage.label}</div>
+              <div className="mt-1 text-[10px] leading-snug text-white/60">{camouflage.detail}</div>
+              <div className="mt-2 flex items-center gap-2 text-[10px] text-white/60">
+                <span
+                  className="h-4 w-4 shrink-0 rounded-full border border-white/25"
+                  style={{ backgroundColor: targetColor || "#2a332d" }}
+                  aria-hidden="true"
+                />
+                <span>{targetColor ? `찍은 표면 ${targetColor}` : "찍은 표면 없음"}</span>
+              </div>
+              {targetColor && (
+                <button
+                  type="button"
+                  className="mt-2 w-full rounded-lg bg-lime/90 py-1.5 text-[11px] font-semibold text-black"
+                  onClick={() => {
+                    setColor(targetColor);
+                    colorRef.current = targetColor;
+                    session.me().set("fill", targetColor, true);
+                    session.me().set("blobs", [], true);
+                  }}
+                >
+                  추천 색으로 몸 전체 칠하기
+                </button>
+              )}
+            </div>
             <div className="mt-2 flex gap-1">
               <button
                 type="button"
@@ -1212,7 +1267,7 @@ export function GameView({
               </button>
             </div>
             <p className="mt-2 text-[11px] leading-snug text-white/65">
-              스포이드로 벽 색을 찍고, 붓으로 몸을 클릭한 채 드래그하면 선이 그어집니다.
+              스포이드로 표면을 클릭하면 추천 색으로 저장되고 붓 도구로 자동 전환됩니다. 몸을 클릭한 채 드래그하면 선이 그어집니다.
             </p>
           </aside>
         )}
