@@ -407,7 +407,12 @@ export function GameView({
         return;
       }
       if (e.button !== 0) return;
+      if (e.pointerType && e.pointerType !== "mouse") return;
       const el = e.target as HTMLElement;
+      if (el.closest('[data-touch-control="true"]')) {
+        viewActiveRef.current = false;
+        return;
+      }
       if (el.closest("button, input, select, textarea, aside, label")) {
         viewActiveRef.current = false;
         return;
@@ -819,7 +824,11 @@ export function GameView({
   const touchPress = (key: string, event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is optional on older mobile browsers.
+    }
     touchKeysRef.current.add(key);
   };
 
