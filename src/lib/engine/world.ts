@@ -1,7 +1,8 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, SNEAK_SPEED, WHITE } from "../config";
 import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
-import type { BodyPart, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, RoomState } from "../types";
+import type { BodyPart, BoxDef, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, PropKind, RoomState } from "../types";
 import { hiderAlive, isHunter } from "../round";
 import {
   blocked,
@@ -96,6 +97,8 @@ export class GameWorld {
   private fpKick = 0;
   private viewBob = 0;
   private reducedMotion = false;
+  private textureLoader = new THREE.TextureLoader();
+  private imageTextures = new Map<string, THREE.Texture>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -189,6 +192,12 @@ export class GameWorld {
     this.camBlockers.push(ceil);
 
     for (const b of map.boxes) {
+      if (b.prop) {
+        const prop = this.createPropVisual(b);
+        this.mapGroup.add(prop);
+        if (b.collide || b.h >= 0.28) this.addMeshBlockers(prop);
+        continue;
+      }
       const geo =
         b.shape === "cylinder"
           ? new THREE.CylinderGeometry(Math.min(b.w, b.d) / 2, Math.min(b.w, b.d) / 2, b.h, 12)
@@ -197,11 +206,7 @@ export class GameWorld {
             : new THREE.BoxGeometry(b.w, b.h, b.d);
       let mat: THREE.MeshStandardMaterial;
       if (b.texture) {
-        const tex = new THREE.TextureLoader().load(b.texture);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(Math.max(1, b.w / 3), Math.max(1, b.h / 3));
+        const tex = this.loadImageTexture(b.texture, Math.max(1, b.w / 3), Math.max(1, b.h / 3));
         mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(b.x, b.y, b.z);
@@ -250,6 +255,186 @@ export class GameWorld {
     }
     this.baseColliders = mapColliders(map);
     this.syncDoors({});
+  }
+
+  private loadImageTexture(path: string, repeatX = 1, repeatY = 1) {
+    const key = `${path}|${repeatX.toFixed(2)}|${repeatY.toFixed(2)}`;
+    let texture = this.imageTextures.get(key);
+    if (!texture) {
+      texture = this.textureLoader.load(path);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeatX, repeatY);
+      this.imageTextures.set(key, texture);
+    }
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private propMaterial(def: BoxDef, color = def.color, roughness = 0.78) {
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      roughness,
+      metalness: 0.03,
+    });
+    if (def.texture) material.map = this.loadImageTexture(def.texture, Math.max(1, def.w / 2.5), Math.max(1, def.h / 1.4));
+    return material;
+  }
+
+  private createPropVisual(def: BoxDef) {
+    const group = new THREE.Group();
+    group.position.set(def.x, def.y, def.z);
+    group.rotation.y = def.rotation ?? 0;
+    const w = Math.max(0.12, def.w);
+    const h = Math.max(0.12, def.h);
+    const d = Math.max(0.12, def.d);
+    const soft = (color = def.color, roughness = 0.82) => this.propMaterial(def, color, roughness);
+    const wood = (color = "#6d4428") => this.propMaterial({ ...def, texture: undefined }, color, 0.58);
+    const metal = (color = "#2d3434") => {
+      const material = this.propMaterial({ ...def, texture: undefined }, color, 0.32);
+      material.metalness = 0.72;
+      return material;
+    };
+    const leaf = (color = "#2c6e4a") => this.propMaterial({ ...def, texture: undefined }, color, 0.9);
+    const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0) => {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData.color = def.color;
+      mesh.userData.prop = def.prop;
+      group.add(mesh);
+      return mesh;
+    };
+    const rounded = (width: number, height: number, depth: number, radius: number, material: THREE.Material, x = 0, y = 0, z = 0) =>
+      add(
+        new RoundedBoxGeometry(
+          Math.max(0.04, width),
+          Math.max(0.04, height),
+          Math.max(0.04, depth),
+          2,
+          Math.min(radius, width / 2, height / 2, depth / 2),
+        ),
+        material,
+        x,
+        y,
+        z,
+      );
+
+    switch (def.prop as PropKind) {
+      case "sofa": {
+        const baseH = Math.min(0.34, h * 0.34);
+        const armW = Math.min(0.28, w * 0.16);
+        const cushionH = Math.min(0.2, h * 0.2);
+        rounded(w * 0.94, baseH, d * 0.86, 0.1, soft(), 0, -h * 0.23, 0);
+        rounded(armW, h * 0.62, d * 0.88, 0.1, soft(), -w * 0.42, 0.01, 0);
+        rounded(armW, h * 0.62, d * 0.88, 0.1, soft(), w * 0.42, 0.01, 0);
+        rounded(w * 0.84, h * 0.56, d * 0.2, 0.09, soft(), 0, h * 0.17, -d * 0.31);
+        const gap = Math.min(0.06, w * 0.03);
+        const cushionW = (w * 0.78 - gap) / 2;
+        rounded(cushionW, cushionH, d * 0.62, 0.07, soft(), -(cushionW + gap) / 2, -h * 0.02, d * 0.05);
+        rounded(cushionW, cushionH, d * 0.62, 0.07, soft(), (cushionW + gap) / 2, -h * 0.02, d * 0.05);
+        const leg = new THREE.CylinderGeometry(0.045, 0.055, Math.min(0.16, h * 0.16), 8);
+        for (const x of [-w * 0.35, w * 0.35]) for (const z of [-d * 0.28, d * 0.28]) add(leg.clone(), wood("#3b251a"), x, -h * 0.42, z);
+        break;
+      }
+      case "armchair": {
+        const armW = Math.min(0.24, w * 0.18);
+        rounded(w * 0.92, h * 0.34, d * 0.86, 0.1, soft(), 0, -h * 0.23, 0);
+        rounded(armW, h * 0.64, d * 0.9, 0.1, soft(), -w * 0.38, 0.01, 0);
+        rounded(armW, h * 0.64, d * 0.9, 0.1, soft(), w * 0.38, 0.01, 0);
+        rounded(w * 0.7, h * 0.54, d * 0.2, 0.08, soft(), 0, h * 0.17, -d * 0.31);
+        rounded(w * 0.62, h * 0.2, d * 0.58, 0.07, soft(), 0, -h * 0.02, d * 0.04);
+        const leg = new THREE.CylinderGeometry(0.04, 0.05, Math.min(0.16, h * 0.16), 8);
+        for (const x of [-w * 0.3, w * 0.3]) for (const z of [-d * 0.27, d * 0.27]) add(leg.clone(), wood("#3b251a"), x, -h * 0.42, z);
+        break;
+      }
+      case "coffeeTable": {
+        const topH = Math.min(0.16, h * 0.24);
+        rounded(w * 0.92, topH, d * 0.88, 0.07, wood(def.color), 0, h * 0.2, 0);
+        const legH = Math.max(0.12, h * 0.62);
+        const leg = new THREE.CylinderGeometry(Math.min(0.07, w * 0.05), Math.min(0.085, w * 0.06), legH, 8);
+        for (const x of [-w * 0.35, w * 0.35]) for (const z of [-d * 0.3, d * 0.3]) add(leg.clone(), wood("#4b2d1b"), x, -h * 0.12, z);
+        rounded(w * 0.65, 0.07, d * 0.52, 0.025, wood("#815533"), 0, -h * 0.16, 0);
+        break;
+      }
+      case "chair": {
+        rounded(w * 0.78, Math.min(0.16, h * 0.2), d * 0.78, 0.06, soft(), 0, h * 0.05, 0.03);
+        rounded(w * 0.68, h * 0.62, Math.min(0.18, d * 0.2), 0.06, soft(), 0, h * 0.29, -d * 0.29);
+        const legH = Math.max(0.12, h * 0.58);
+        const leg = new THREE.CylinderGeometry(0.035, 0.045, legH, 8);
+        for (const x of [-w * 0.27, w * 0.27]) for (const z of [-d * 0.25, d * 0.25]) add(leg.clone(), wood("#4b2d1b"), x, -h * 0.21, z);
+        break;
+      }
+      case "plant": {
+        const potR = Math.min(w, d) * 0.28;
+        add(new THREE.CylinderGeometry(potR * 0.82, potR, Math.max(0.16, h * 0.3), 12), soft("#9a5336"), 0, -h * 0.29, 0);
+        add(new THREE.CylinderGeometry(potR * 0.16, potR * 0.2, h * 0.34, 8), wood("#4c321d"), 0, -h * 0.02, 0);
+        const canopy = [
+          [0, h * 0.25, 0, 0.65],
+          [-w * 0.2, h * 0.12, d * 0.08, 0.52],
+          [w * 0.2, h * 0.1, -d * 0.04, 0.5],
+        ] as const;
+        canopy.forEach(([x, y, z, scale], index) => {
+          const mesh = add(new THREE.SphereGeometry(0.5, 12, 8), leaf(index === 1 ? "#3f8250" : def.colors?.[0] ?? "#2c6e4a"), x, y, z);
+          mesh.scale.set(w * scale, h * scale, d * scale);
+        });
+        break;
+      }
+      case "floorLamp": {
+        const baseR = Math.min(w, d) * 0.42;
+        add(new THREE.CylinderGeometry(baseR, baseR * 1.15, Math.max(0.08, h * 0.08), 16), metal("#5c5143"), 0, -h * 0.42, 0);
+        add(new THREE.CylinderGeometry(0.035, 0.05, h * 0.66, 10), metal("#9c8d72"), 0, -h * 0.05, 0);
+        add(new THREE.CylinderGeometry(w * 0.38, w * 0.52, h * 0.26, 16, 1, true), soft("#e7d5a5", 0.65), 0, h * 0.32, 0);
+        add(new THREE.SphereGeometry(w * 0.16, 12, 8), new THREE.MeshBasicMaterial({ color: "#ffe8a6" }), 0, h * 0.3, 0);
+        break;
+      }
+      case "painting": {
+        const frame = wood("#6f4425");
+        rounded(w, h, Math.max(0.055, d), 0.045, frame);
+        rounded(w * 0.84, h * 0.78, Math.max(0.025, d * 0.65), 0.02, soft(def.colors?.[0] ?? def.color, 0.9), 0, 0, d * 0.55);
+        rounded(w * 0.58, h * 0.08, Math.max(0.028, d * 0.72), 0.012, soft(def.colors?.[1] ?? "#e6c15a", 0.9), 0, h * 0.16, d * 0.57);
+        break;
+      }
+      case "barrel": {
+        const radius = Math.min(w, d) * 0.46;
+        add(new THREE.CylinderGeometry(radius, radius * 1.04, h * 0.88, 14), soft(def.color, 0.64), 0, 0, 0);
+        const hoop = new THREE.TorusGeometry(radius * 1.01, Math.max(0.025, radius * 0.055), 6, 14);
+        for (const y of [-h * 0.25, h * 0.25]) add(hoop.clone(), metal("#302d29"), 0, y, 0).rotation.x = Math.PI / 2;
+        break;
+      }
+      case "bookshelf": {
+        const sideW = Math.min(0.12, w * 0.07);
+        const backD = Math.min(0.1, d * 0.18);
+        rounded(sideW, h, d, 0.025, wood(def.color), -w * 0.43, 0, 0);
+        rounded(sideW, h, d, 0.025, wood(def.color), w * 0.43, 0, 0);
+        rounded(w * 0.9, Math.min(0.12, h * 0.06), d, 0.025, wood(def.color), 0, -h * 0.45, 0);
+        rounded(w * 0.9, Math.min(0.12, h * 0.06), d, 0.025, wood(def.color), 0, h * 0.45, 0);
+        rounded(w * 0.82, h * 0.92, backD, 0.02, wood("#4b2d1b"), 0, 0, -d * 0.38);
+        const colors = def.colors ?? ["#c0392b", "#2980b9", "#27ae60", "#f1c40f"];
+        const rows = 3;
+        for (let row = 0; row < rows; row++) {
+          const shelfY = -h * 0.31 + row * h * 0.3;
+          rounded(w * 0.86, 0.06, d * 0.9, 0.015, wood("#5a351e"), 0, shelfY - h * 0.1, 0);
+          const bookW = w * 0.12;
+          for (let col = 0; col < 6; col++) {
+            const bookH = h * (0.17 + ((col + row) % 3) * 0.035);
+            rounded(bookW, bookH, d * 0.5, 0.018, soft(colors[(col + row) % colors.length], 0.86), -w * 0.33 + col * w * 0.13, shelfY + bookH * 0.45, d * 0.08);
+          }
+        }
+        break;
+      }
+      default:
+        rounded(w, h, d, Math.min(0.08, w * 0.1, h * 0.1, d * 0.1), soft());
+    }
+    return group;
+  }
+
+  private addMeshBlockers(object: THREE.Object3D) {
+    object.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) this.camBlockers.push(child);
+    });
   }
 
   syncDoors(open: Record<string, boolean>) {
@@ -1056,6 +1241,8 @@ export class GameWorld {
     this.camera.remove(this.fpGun);
     disposeObject(this.fpGun);
     disposeObject(this.mapGroup);
+    for (const texture of this.imageTextures.values()) texture.dispose();
+    this.imageTextures.clear();
     this.renderer.dispose();
   }
 }

@@ -19,6 +19,9 @@ function B(
     h,
     d,
     color,
+    shape: extra.shape,
+    prop: extra.prop,
+    rotation: extra.rotation,
     pattern: extra.pattern,
     texture: extra.texture,
     colors: extra.colors,
@@ -76,27 +79,27 @@ const mansion: GameMap = {
     B(10, 11, 0.2, 8, "#6b3a2a", { h: 2.9, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
     B(20, 9, 9, 0.2, "#1f4d6e", { h: 2.5, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
     B(33, 12, 0.2, 7, "#6a8f6a", { h: 2.7, collide: true, pattern: "leaves" }),
-    B(5, 8, 2.6, 1.1, "#a32638", { h: 0.85, texture: "/textures/velvet-ruby-v1.png" }),
+    B(5, 8, 2.6, 1.1, "#a32638", { h: 0.95, collide: true, prop: "sofa", texture: "/textures/velvet-ruby-v1.png" }),
     B(26, 14, 2.4, 0.5, "#5c2e12", { h: 2.35, pattern: books, colors: bookColors }),
-    B(2.4, 3.2, 3.4, 1.1, "#a32638", { h: 0.85, texture: "/textures/velvet-ruby-v1.png" }),
+    B(2.4, 3.2, 3.4, 1.1, "#a32638", { h: 0.95, collide: true, prop: "sofa", texture: "/textures/velvet-ruby-v1.png", rotation: Math.PI / 2 }),
     B(7, 3.4, 2.8, 0.5, "#5c2e12", { h: 2.5, pattern: books, colors: bookColors }),
-    B(18, 3.5, 1.4, 1.4, "#2c6e4a", { h: 1.5, pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"], shape: "sphere" }),
+    B(18, 3.5, 1.4, 1.4, "#2c6e4a", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"], shape: "sphere" }),
     B(22, 3.2, 3.2, 2.0, "#9b2a2a", { h: 0.08, pattern: "dots", colors: ["#9b2a2a", "#c0392b"] }),
     B(30, 3.4, 4.2, 0.5, "#5b3a28", { h: 2.6, pattern: books, colors: bookColors }),
     B(38, 3.6, 2.2, 1.6, "#e8d5a3", { h: 1.4, y: 0.9, pattern: "stripes", colors: ["#e8d5a3", "#c9a66b"] }),
-    B(23.4, 16, 1.1, 1.1, "#d9c9a5", { h: 3.4, collide: true, pattern: "bricks", shape: "cylinder" }),
+    B(23.4, 16, 1.1, 1.1, "#d9c9a5", { h: 3.4, collide: true, prop: "floorLamp", pattern: "bricks", shape: "cylinder" }),
     B(6, 18, 3.6, 2.2, "#d9c4a0", { h: 0.06, texture: "/textures/rug-persian-v1.png" }),
-    B(8, 20, 1.6, 1.4, "#8b4513", { h: 0.7, pattern: "wood" }),
-    B(14, 22, 2.2, 1.2, "#7a3426", { h: 0.9 }),
+    B(8, 20, 1.6, 1.4, "#8b4513", { h: 0.7, collide: true, prop: "coffeeTable", pattern: "wood" }),
+    B(14, 22, 2.2, 1.2, "#7a3426", { h: 0.95, collide: true, prop: "armchair", texture: "/textures/velvet-ruby-v1.png" }),
     B(32, 18, 4.0, 3.2, "#d8cfc0", { h: 0.05, pattern: "tiles", colors: ["#efe8dc", "#d2c4b0"] }),
-    B(33, 20, 1.6, 0.8, "#c45c26", { h: 0.9 }),
-    B(36, 20, 1.6, 0.8, "#c45c26", { h: 0.9 }),
+    B(33, 20, 1.6, 0.8, "#c45c26", { h: 0.9, collide: true, prop: "chair" }),
+    B(36, 20, 1.6, 0.8, "#c45c26", { h: 0.9, collide: true, prop: "chair" }),
     B(38, 24, 5.5, 6, "#d5e4e2", { h: 0.05, pattern: "tiles", colors: ["#d5e4e2", "#b9cdc9"] }),
     B(40, 26, 1.6, 1.8, "#eef6f4", { h: 1.6, pattern: "tiles" }),
     B(43, 26, 1.6, 1.8, "#9ec5c1", { h: 0.55, pattern: "tiles" }),
-    B(4, 28, 2.4, 2.4, "#2f4f3a", { h: 1.3, pattern: "leaves", shape: "sphere" }),
-    B(15, 8, 1.8, 0.08, "#d4b483", { h: 1.3, y: 1.1, collide: true, pattern: "stripes", colors: ["#d4b483", "#6b3a2a"] }),
-    B(34, 7, 1.6, 0.08, "#2e6a8f", { h: 1.2, y: 1.2, collide: true, pattern: "dots", colors: ["#2e6a8f", "#f3f1ea"] }),
+    B(4, 28, 2.4, 2.4, "#2f4f3a", { h: 1.3, collide: true, prop: "plant", pattern: "leaves", shape: "sphere" }),
+    B(15, 8, 1.8, 0.08, "#d4b483", { h: 1.3, y: 1.1, collide: true, prop: "painting", pattern: "stripes", colors: ["#d4b483", "#6b3a2a"] }),
+    B(34, 7, 1.6, 0.08, "#2e6a8f", { h: 1.2, y: 1.2, collide: true, prop: "painting", pattern: "dots", colors: ["#2e6a8f", "#f3f1ea"] }),
     B(9, 15, 0.9, 0.9, "#c9a66b", { h: 1.1, collide: true, pattern: "wood" }),
     wall(0, 0, 48, 0.4),
     wall(0, 35.6, 20, 0.4),
@@ -307,7 +310,7 @@ function alcove(x: number, z: number, color: string, pattern: Pattern, colors?: 
 function cluster(theme: string, x: number, z: number, kind: number, rnd: () => number): BoxDef[] {
   const j = () => (rnd() - 0.5) * 1.1;
   if (theme === "backrooms") {
-    if (kind === 0) return [B(x, z, 1.5, 0.7, "#6d5c3a", { h: 0.9, collide: true, pattern: "wood" })];
+    if (kind === 0) return [B(x, z, 1.5, 0.7, "#6d5c3a", { h: 0.9, collide: true, prop: "chair", pattern: "wood" })];
     if (kind === 1) return [B(x, z, 0.55, 0.55, "#222", { h: 1.05, collide: true, shape: "cylinder" })];
     if (kind === 2) return nook(x, z, "#e2d36a", "wallpaper", ["#e2d36a", "#c9b84a"], 2.4);
     if (kind === 3)
@@ -318,7 +321,7 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
     return [B(x, z, 1.3, 0.9, "#3a3a3a", { h: 1.15, collide: true })];
   }
   if (theme === "farm") {
-    if (kind === 0) return [B(x, z, 1.8, 1.3, "#e39b2d", { h: 1.05, collide: true, pattern: "hay" })];
+    if (kind === 0) return [B(x, z, 1.8, 1.3, "#e39b2d", { h: 1.05, collide: true, shape: "cylinder", pattern: "hay" })];
     if (kind === 1)
       return [
         B(x, z, 1.2, 1.2, "#c47a3a", { h: 1.15, collide: true, pattern: "wood" }),
@@ -344,9 +347,9 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
     if (kind === 0) return [B(x, z, 1.15, 1.15, "#b03a2e", { h: 1.25, collide: true })];
     if (kind === 1)
       return [
-        B(x, z, 1.2, 1.2, "#922b21", { h: 1.2, collide: true, shape: "cylinder" }),
-        B(x + 1.3, z + j(), 1.15, 1.15, "#c0392b", { h: 1.15, collide: true, shape: "cylinder" }),
-        B(x + 0.4, z + 1.4, 1.1, 1.1, "#b03a2e", { h: 0.85, collide: true, shape: "cylinder" }),
+        B(x, z, 1.2, 1.2, "#922b21", { h: 1.2, collide: true, prop: "barrel", shape: "cylinder" }),
+        B(x + 1.3, z + j(), 1.15, 1.15, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
+        B(x + 0.4, z + 1.4, 1.1, 1.1, "#b03a2e", { h: 0.85, collide: true, prop: "barrel", shape: "cylinder" }),
       ];
     if (kind === 2) return [B(x, z, 0.9, 0.9, "#c47a3a", { h: 3.2, collide: true, pattern: "pipes" })];
     if (kind === 3)
@@ -357,9 +360,9 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
       return [B(x, z, 0.22, 2.8, "#c47a3a", { h: 2.5, collide: true, pattern: "pipes" })];
     return [B(x, z, 1.8, 1.3, "#f1c40f", { h: 1.1, collide: true, pattern: "stripes", colors: ["#f1c40f", "#111"] })];
   }
-  if (kind === 0) return [B(x, z, 2.6, 1.05, "#a32638", { h: 0.88, collide: true })];
+  if (kind === 0) return [B(x, z, 2.6, 1.05, "#a32638", { h: 0.95, collide: true, prop: "sofa", texture: "/textures/velvet-ruby-v1.png" })];
   if (kind === 1)
-    return [B(x, z, 2.4, 0.55, "#5c2e12", { h: 2.35, collide: true, pattern: books, colors: bookColors })];
+    return [B(x, z, 2.4, 0.55, "#5c2e12", { h: 2.35, collide: true, prop: "bookshelf", pattern: books, colors: bookColors })];
   if (kind === 2)
     return [
       B(x, z, 1.15, 1.15, "#8b5a2b", { h: 1.1, collide: true, pattern: "wood" }),
@@ -368,14 +371,14 @@ function cluster(theme: string, x: number, z: number, kind: number, rnd: () => n
   if (kind === 3) return [B(x, z, 0.9, 0.9, "#d9c9a5", { h: 3.3, collide: true, pattern: "bricks" })];
   if (kind === 4)
     return [
-      B(x, z, 1.2, 1.2, "#2c6e4a", { h: 1.45, collide: true, pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"], shape: "sphere" }),
+      B(x, z, 1.2, 1.2, "#2c6e4a", { h: 1.45, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"], shape: "sphere" }),
       B(x + 1.5, z + j(), 1.1, 1.1, "#6d4c2a", { h: 0.95, collide: true, pattern: "wood", shape: "cylinder" }),
     ];
   if (kind === 5) return nook(x, z, "#6b3a2a", "wallpaper", ["#6b3a2a", "#8a5040"], 2.6);
   if (kind === 6) return alcove(x, z, "#1f4d6e", "wallpaper", ["#1f4d6e", "#2e6a8f"]);
   if (kind === 7)
     return [
-      B(x, z, 1.8, 1.5, "#c45c26", { h: 0.9, collide: true }),
+      B(x, z, 1.8, 1.5, "#c45c26", { h: 0.9, collide: true, prop: "armchair" }),
       B(x + 1.7, z + 0.2, 0.9, 0.9, "#f4f0e6", { h: 1.35, collide: true }),
       B(x - 0.2, z + 1.5, 2.2, 0.7, "#d9c4a0", { h: 0.45, collide: true, pattern: "wood" }),
     ];

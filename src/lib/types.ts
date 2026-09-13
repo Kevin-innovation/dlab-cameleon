@@ -25,6 +25,17 @@ export type Pattern =
 
 export type BodyPart = "head" | "torso" | "armL" | "armR" | "legL" | "legR";
 
+export type PropKind =
+  | "sofa"
+  | "armchair"
+  | "coffeeTable"
+  | "chair"
+  | "plant"
+  | "floorLamp"
+  | "painting"
+  | "barrel"
+  | "bookshelf";
+
 export const BODY_PARTS: BodyPart[] = ["head", "torso", "armL", "armR", "legL", "legR"];
 
 export type PaintBlob = {
@@ -46,6 +57,8 @@ export type BoxDef = {
   d: number;
   color: string;
   shape?: "box" | "cylinder" | "sphere";
+  prop?: PropKind;
+  rotation?: number;
   pattern?: Pattern;
   texture?: string;
   colors?: string[];
