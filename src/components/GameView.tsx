@@ -111,8 +111,8 @@ export function GameView({
   const [nowTick, setNowTick] = useState(0);
   const [atDoor, setAtDoor] = useState(false);
   const [tabOpen, setTabOpen] = useState(false);
-  const [socialOpen, setSocialOpen] = useState(() => session.getRoom().phase === "lobby");
-  const socialVisible = socialOpen && hud.phase === "lobby";
+  const [socialOpen, setSocialOpen] = useState(false);
+  const socialVisible = socialOpen;
   const paintOpenRef = useRef(false);
   const viewActiveRef = useRef(false);
   const watchingRef = useRef(false);
@@ -1299,15 +1299,13 @@ export function GameView({
         />
       )}
 
-      {hud.phase === "lobby" && (
-        <RoomSocialPanel
-          session={session}
-          room={hud}
-          people={people}
-          open={socialVisible}
-          onToggle={() => setSocialOpen((value) => !value)}
-        />
-      )}
+      <RoomSocialPanel
+        session={session}
+        room={hud}
+        people={people}
+        open={socialVisible}
+        onToggle={() => setSocialOpen((value) => !value)}
+      />
 
       {help && (
         <AccessibleModal titleId="game-help-title" onClose={() => setHelp(false)} panelClassName="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-[#17241c] p-6 shadow-2xl">
@@ -1320,6 +1318,7 @@ export function GameView({
             <li>술래는 1인칭으로 맵을 수색합니다. 우클릭으로 3인칭을 전환하고, 가까이 조준해 맞히면 상대를 발견합니다. 탄약 제한은 방 옵션입니다.</li>
             <li>기본 숨바꼭질에서는 발견된 Hider가 관전 상태가 됩니다. 감염은 별도 커스텀 모드입니다.</li>
             <li>Tab을 누르면 참여자·생존자·탈락자와 점수가 나옵니다. 발견 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
+            <li>우측 접속자 패널에서 현재 참여자와 방 채팅을 대기실·라운드 중 모두 확인할 수 있습니다.</li>
           </ol>
           <button
             type="button"
