@@ -646,7 +646,10 @@ export class GameWorld {
           : p.yaw;
       const prevX = rig.group.position.x;
       const prevZ = rig.group.position.z;
-      if (p.id === myId) {
+      // A clinging pose is a surface contact state. Interpolating its network
+      // position leaves a visible gap while the remote proxy catches up to the
+      // wall, so snap it when the pose arrives instead of smoothing it.
+      if (p.id === myId || p.pose === "stick") {
         rig.group.position.set(x, y, z);
         rig.group.rotation.y = yaw;
       } else {
