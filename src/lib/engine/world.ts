@@ -1011,9 +1011,9 @@ function clingPad() {
 
 function clingVisualFace(box: Collider, axis: "x" | "z", sign: number) {
   const face = axis === "x" ? (sign > 0 ? box.maxX : box.minX) : sign > 0 ? box.maxZ : box.minZ;
-  // Colliders are inset by BOX_COLLIDE_OUTSET for normal movement. Clinging
-  // needs the rendered mesh face, so restore that inset before positioning.
-  return face + sign * BOX_COLLIDE_OUTSET;
+  // Normal-movement colliders extend beyond the rendered mesh by this amount.
+  // Clinging must use the actual mesh face so the flattened body touches it.
+  return face - sign * BOX_COLLIDE_OUTSET;
 }
 
 function makeDoor(def: DoorDef) {
