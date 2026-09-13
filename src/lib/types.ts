@@ -59,6 +59,7 @@ export type BoxDef = {
   shape?: "box" | "cylinder" | "sphere";
   prop?: PropKind;
   rotation?: number;
+  modelUrl?: string;
   pattern?: Pattern;
   texture?: string;
   colors?: string[];

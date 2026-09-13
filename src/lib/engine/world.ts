@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, SNEAK_SPEED, WHITE } from "../config";
 import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
 import type { BodyPart, BoxDef, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, PropKind, RoomState } from "../types";
@@ -30,6 +31,10 @@ import {
 } from "./character";
 import { makePatternCanvas, rgbToHex } from "./textures";
 import { hunterVisibility } from "../camouflage";
+
+const LOCAL_PROP_MODELS: Partial<Record<PropKind, string>> = {
+  sofa: "/models/lobby-sofa-cc0.glb",
+};
 
 export type WorldInput = {
   keys: Set<string>;
@@ -99,6 +104,8 @@ export class GameWorld {
   private reducedMotion = false;
   private textureLoader = new THREE.TextureLoader();
   private imageTextures = new Map<string, THREE.Texture>();
+  private modelLoader = new GLTFLoader();
+  private modelTemplates = new Map<string, Promise<THREE.Group>>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -196,6 +203,8 @@ export class GameWorld {
         const prop = this.createPropVisual(b);
         this.mapGroup.add(prop);
         if (b.collide || b.h >= 0.28) this.addMeshBlockers(prop);
+        const modelUrl = b.modelUrl ?? LOCAL_PROP_MODELS[b.prop];
+        if (modelUrl) void this.loadPropModel(b, prop, modelUrl);
         continue;
       }
       const geo =
@@ -435,6 +444,72 @@ export class GameWorld {
     object.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) this.camBlockers.push(child);
     });
+  }
+
+  private removeMeshBlockers(object: THREE.Object3D) {
+    const meshes = new Set<THREE.Object3D>();
+    object.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) meshes.add(child);
+    });
+    this.camBlockers = this.camBlockers.filter((blocker) => !meshes.has(blocker));
+  }
+
+  private getModelTemplate(url: string) {
+    const cached = this.modelTemplates.get(url);
+    if (cached) return cached;
+    const promise = this.modelLoader.loadAsync(url).then((gltf) => gltf.scene);
+    this.modelTemplates.set(url, promise);
+    return promise;
+  }
+
+  private async loadPropModel(def: BoxDef, fallback: THREE.Group, url: string) {
+    try {
+      const template = await this.getModelTemplate(url);
+      const model = cloneStaticModel(template);
+      model.rotation.y = def.rotation ?? 0;
+      model.updateMatrixWorld(true);
+      const sourceBox = new THREE.Box3().setFromObject(model);
+      const sourceSize = sourceBox.getSize(new THREE.Vector3());
+      const scale = Math.min(
+        def.w / Math.max(0.001, sourceSize.x),
+        def.h / Math.max(0.001, sourceSize.y),
+        def.d / Math.max(0.001, sourceSize.z),
+      );
+      model.scale.setScalar(Math.max(0.001, scale));
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.set(
+        def.x - center.x,
+        def.y - def.h / 2 - box.min.y,
+        def.z - center.z,
+      );
+      model.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        const firstMaterial = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        const materialColor = firstMaterial && "color" in firstMaterial
+          ? (firstMaterial as THREE.MeshStandardMaterial).color.getHexString()
+          : undefined;
+        mesh.userData.color = materialColor ? `#${materialColor}` : def.color;
+        mesh.userData.prop = def.prop;
+        mesh.userData.modelUrl = url;
+      });
+      const parent = fallback.parent;
+      if (!parent) {
+        disposeObject(model);
+        return;
+      }
+      parent.add(model);
+      this.removeMeshBlockers(fallback);
+      if (def.collide || def.h >= 0.28) this.addMeshBlockers(model);
+      parent.remove(fallback);
+      disposeObject(fallback);
+    } catch {
+      // The procedural prop remains visible when an optional model cannot load.
+    }
   }
 
   syncDoors(open: Record<string, boolean>) {
@@ -1323,6 +1398,18 @@ function disposeObject(obj: THREE.Object3D) {
     if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
     else mat?.dispose();
   });
+}
+
+function cloneStaticModel(template: THREE.Group) {
+  const clone = template.clone(true);
+  clone.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry = mesh.geometry.clone();
+    if (Array.isArray(mesh.material)) mesh.material = mesh.material.map((material) => material.clone());
+    else mesh.material = mesh.material.clone();
+  });
+  return clone;
 }
 
 function canSee(room: RoomState, self: PlayerSnap | undefined, other: PlayerSnap) {

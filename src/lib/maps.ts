@@ -22,6 +22,7 @@ function B(
     shape: extra.shape,
     prop: extra.prop,
     rotation: extra.rotation,
+    modelUrl: extra.modelUrl,
     pattern: extra.pattern,
     texture: extra.texture,
     colors: extra.colors,
