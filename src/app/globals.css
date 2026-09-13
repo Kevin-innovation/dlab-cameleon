@@ -119,7 +119,13 @@ label:has(> select:focus-visible) {
 }
 
 .mobile-touch-controls {
-  display: none;
+  display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mobile-touch-controls {
+    display: none;
+  }
 }
 
 @media (max-width: 767px), (pointer: coarse) and (hover: none) {
@@ -169,10 +175,6 @@ label:has(> select:focus-visible) {
 }
 
 @media (max-width: 767px) and (orientation: landscape), (pointer: coarse) and (hover: none) and (orientation: landscape) {
-  .mobile-touch-controls {
-    display: block;
-  }
-
   .game-shell {
     flex-direction: row;
   }

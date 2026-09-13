@@ -2,6 +2,21 @@ export const MOBILE_DEVICE_QUERY = "(max-width: 767px), (pointer: coarse) and (h
 export const MOBILE_PORTRAIT_QUERY =
   "(max-width: 767px) and (orientation: portrait), (pointer: coarse) and (hover: none) and (orientation: portrait)";
 
+export function joystickInput(deltaX: number, deltaY: number, max: number) {
+  const safeMax = Math.max(1, max);
+  const length = Math.hypot(deltaX, deltaY) || 1;
+  const scale = Math.min(1, safeMax / length);
+  const x = deltaX * scale;
+  const y = deltaY * scale;
+  const threshold = safeMax * 0.24;
+  const keys: string[] = [];
+  if (y < -threshold) keys.push("w");
+  if (y > threshold) keys.push("s");
+  if (x < -threshold) keys.push("a");
+  if (x > threshold) keys.push("d");
+  return { x, y, keys };
+}
+
 export async function requestMobileLandscape() {
   if (typeof window === "undefined") return false;
   if (!window.matchMedia(MOBILE_DEVICE_QUERY).matches) return true;

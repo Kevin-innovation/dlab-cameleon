@@ -25,7 +25,7 @@ import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
 import { camouflageMeter, tagRangeForCamouflage } from "@/lib/camouflage";
 import { getMap, MAPS } from "@/lib/maps";
-import { MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
+import { joystickInput, MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
 import {
   beginRound,
   hiderAlive,
@@ -1379,48 +1379,71 @@ function TouchControls({
   onJoystickEnd: () => void;
 }) {
   const joystickKnobRef = useRef<HTMLSpanElement>(null);
+  const joystickRef = useRef<HTMLDivElement>(null);
   const joystickPointerRef = useRef(-1);
+  const onJoystickChangeRef = useRef(onJoystickChange);
+  const onJoystickEndRef = useRef(onJoystickEnd);
 
-  const updateJoystick = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
+  onJoystickChangeRef.current = onJoystickChange;
+  onJoystickEndRef.current = onJoystickEnd;
+
+  const updateJoystickAt = (clientX: number, clientY: number) => {
+    const rect = joystickRef.current?.getBoundingClientRect();
+    if (!rect) return;
     const max = Math.max(1, Math.min(rect.width, rect.height) / 2 - 25);
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    const length = Math.hypot(event.clientX - centerX, event.clientY - centerY) || 1;
-    const scale = Math.min(1, max / length);
-    const dx = (event.clientX - centerX) * scale;
-    const dy = (event.clientY - centerY) * scale;
+    const input = joystickInput(clientX - centerX, clientY - centerY, max);
     if (joystickKnobRef.current) {
-      joystickKnobRef.current.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      joystickKnobRef.current.style.transform = `translate(calc(-50% + ${input.x}px), calc(-50% + ${input.y}px))`;
     }
-    const threshold = max * 0.24;
-    const next: string[] = [];
-    if (dy < -threshold) next.push("w");
-    if (dy > threshold) next.push("s");
-    if (dx < -threshold) next.push("a");
-    if (dx > threshold) next.push("d");
-    onJoystickChange(next);
+    onJoystickChangeRef.current(input.keys);
   };
 
   const resetJoystick = () => {
     joystickPointerRef.current = -1;
     if (joystickKnobRef.current) joystickKnobRef.current.style.transform = "translate(-50%, -50%)";
-    onJoystickEnd();
+    onJoystickEndRef.current();
   };
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      if (joystickPointerRef.current !== event.pointerId) return;
+      event.preventDefault();
+      updateJoystickAt(event.clientX, event.clientY);
+    };
+    const end = (event: PointerEvent) => {
+      if (joystickPointerRef.current !== event.pointerId) return;
+      event.preventDefault();
+      resetJoystick();
+    };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", end, { passive: false });
+    window.addEventListener("pointercancel", end, { passive: false });
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  }, []);
 
   const joystickStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is optional on older mobile browsers; window listeners keep the drag alive.
+    }
     joystickPointerRef.current = event.pointerId;
-    updateJoystick(event);
+    updateJoystickAt(event.clientX, event.clientY);
   };
 
   const joystickMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (joystickPointerRef.current !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    updateJoystick(event);
+    updateJoystickAt(event.clientX, event.clientY);
   };
 
   const joystickEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1473,7 +1496,8 @@ function TouchControls({
   return (
     <div className="mobile-touch-controls pointer-events-none absolute inset-0 z-20 select-none" role="group" aria-label="터치 게임 조작">
       <div
-        className="mobile-joystick pointer-events-auto absolute bottom-3 left-3 h-32 w-32 rounded-full border border-white/20 bg-black/35 shadow-lg backdrop-blur-sm"
+        ref={joystickRef}
+        className="mobile-joystick pointer-events-auto absolute bottom-3 left-3 h-32 w-32 touch-none rounded-full border border-white/20 bg-black/35 shadow-lg backdrop-blur-sm"
         data-touch-control="true"
         role="group"
         tabIndex={0}
@@ -1492,7 +1516,7 @@ function TouchControls({
       </div>
 
       <div
-        className="mobile-look-pad pointer-events-auto absolute bottom-3 right-3 flex h-32 w-44 items-center justify-center rounded-2xl border border-white/15 bg-black/25 text-xs text-white/60 backdrop-blur-sm"
+        className="mobile-look-pad pointer-events-auto absolute bottom-3 right-3 flex h-32 w-44 touch-none items-center justify-center rounded-2xl border border-white/15 bg-black/25 text-xs text-white/60 backdrop-blur-sm"
         data-touch-control="true"
         tabIndex={0}
         aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
