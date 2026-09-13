@@ -163,6 +163,7 @@ export function GameView({
     const mobilePortrait = window.matchMedia(MOBILE_PORTRAIT_QUERY);
     let last = performance.now();
     let lastSync = 0;
+    let lastPresence = 0;
     let lastShot = 0;
     let lastTaunt = 0;
     let lastForced = Date.now();
@@ -621,6 +622,10 @@ export function GameView({
         session.me().set("y", world.localY, false);
         session.me().set("z", moved.z, false);
         session.me().set("yaw", world.yaw, false);
+        if (session.kind === "online" && t - lastPresence > 2000) {
+          lastPresence = t;
+          session.me().set("presenceAt", Date.now(), false);
+        }
       } else if (world.localY > 0.02) {
         session.me().set("y", world.localY, false);
       }
@@ -1303,6 +1308,7 @@ export function GameView({
         session={session}
         room={hud}
         people={people}
+        nowTick={nowTick}
         open={socialVisible}
         onToggle={() => setSocialOpen((value) => !value)}
       />
@@ -1805,12 +1811,14 @@ function RoomSocialPanel({
   session,
   room,
   people,
+  nowTick,
   open,
   onToggle,
 }: {
   session: Session;
   room: RoomState;
   people: PlayerSnap[];
+  nowTick: number;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -1854,7 +1862,7 @@ function RoomSocialPanel({
             <p className="mt-0.5 text-[11px] text-white/60">현재 접속 중인 플레이어</p>
             <ul className="mt-2 grid grid-cols-2 gap-1.5" aria-label="접속자 목록">
               {people.map((person) => {
-                const status = presenceStatus(room, person, session.myId());
+                const status = presenceStatus(room, person, session.myId(), nowTick, session.kind === "online");
                 return (
                   <li
                     key={person.id}
@@ -1925,8 +1933,9 @@ function RoomSocialPanel({
   );
 }
 
-function presenceStatus(room: RoomState, person: PlayerSnap, myId: string) {
+function presenceStatus(room: RoomState, person: PlayerSnap, myId: string, nowTick: number, checkConnection: boolean) {
   if (person.id === myId) return "나";
+  if (checkConnection && person.presenceAt && nowTick - person.presenceAt > 4500) return "응답 없음";
   if (room.phase === "lobby") return person.ready ? "준비" : "대기";
   if (room.phase === "reveal") return "공개됨";
   if (room.phase === "result") return "결과";

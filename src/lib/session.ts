@@ -47,6 +47,7 @@ function readSnap(p: SessionPlayer): PlayerSnap {
     fill: String(p.get("fill") ?? WHITE),
     blobs: (p.get("blobs") as PaintBlob[]) || [],
     camoScore: Number(p.get("camoScore") ?? 0),
+    presenceAt: Number(p.get("presenceAt") ?? 0),
     role: (p.get("role") as Role) || "spectator",
     alive: p.get("alive") !== false,
     shootSeq: Number(p.get("shootSeq") ?? 0),
@@ -88,6 +89,7 @@ export async function connectOnline(opts: {
       fill: WHITE,
       blobs: [],
       camoScore: 0,
+      presenceAt: 0,
       pose: "stand",
       alive: true,
       role: "spectator",
@@ -110,6 +112,7 @@ export async function connectOnline(opts: {
   me.setState("fill", WHITE, true);
   me.setState("blobs", [], true);
   me.setState("camoScore", 0, true);
+  me.setState("presenceAt", Date.now(), false);
   me.setState("pose", "stand", true);
   me.setState("x", 4.2, true);
   me.setState("y", 0, true);
@@ -213,6 +216,7 @@ function makeLocalPlayer(id: string, name: string, ox = 0, oz = 0): SessionPlaye
     fill: WHITE,
     blobs: [],
     camoScore: 0,
+    presenceAt: Date.now(),
     role: "hider",
     alive: true,
   };
