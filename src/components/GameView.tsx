@@ -315,6 +315,23 @@ export function GameView({
     };
     document.addEventListener("mousemove", onMouseMove);
 
+    const onTouchLookMove = (e: PointerEvent) => {
+      if (touchLookRef.current.pointerId !== e.pointerId) return;
+      e.preventDefault();
+      touchLookRef.current.dx += e.clientX - touchLookRef.current.x;
+      touchLookRef.current.dy += e.clientY - touchLookRef.current.y;
+      touchLookRef.current.x = e.clientX;
+      touchLookRef.current.y = e.clientY;
+    };
+    const onTouchLookEnd = (e: PointerEvent) => {
+      if (touchLookRef.current.pointerId !== e.pointerId) return;
+      e.preventDefault();
+      touchLookRef.current.pointerId = -1;
+    };
+    window.addEventListener("pointermove", onTouchLookMove, { passive: false });
+    window.addEventListener("pointerup", onTouchLookEnd, { passive: false });
+    window.addEventListener("pointercancel", onTouchLookEnd, { passive: false });
+
     let hadPointerLock = document.pointerLockElement === canvas;
     const onLock = () => {
       const isLocked = document.pointerLockElement === canvas;
@@ -706,6 +723,9 @@ export function GameView({
       window.removeEventListener("keyup", ku);
       window.removeEventListener("blur", onBlur);
       document.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("pointermove", onTouchLookMove);
+      window.removeEventListener("pointerup", onTouchLookEnd);
+      window.removeEventListener("pointercancel", onTouchLookEnd);
       window.removeEventListener("resize", resize);
       document.removeEventListener("pointerlockchange", onLock);
       canvas.parentElement?.removeEventListener("pointerdown", onPointerDown);
@@ -842,18 +862,12 @@ export function GameView({
   const touchLookStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is optional on older mobile browsers; window listeners keep the drag alive.
+    }
     touchLookRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0 };
-  };
-
-  const touchLookMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (touchLookRef.current.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    touchLookRef.current.dx += event.clientX - touchLookRef.current.x;
-    touchLookRef.current.dy += event.clientY - touchLookRef.current.y;
-    touchLookRef.current.x = event.clientX;
-    touchLookRef.current.y = event.clientY;
   };
 
   const touchLookEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1159,7 +1173,6 @@ export function GameView({
             onKeyboardPress={touchKeyboardPress}
             onKeyboardRelease={touchKeyboardRelease}
             onLookStart={touchLookStart}
-            onLookMove={touchLookMove}
             onLookEnd={touchLookEnd}
             onLookKey={touchLookKey}
           />
@@ -1352,7 +1365,6 @@ function TouchControls({
   onKeyboardPress,
   onKeyboardRelease,
   onLookStart,
-  onLookMove,
   onLookEnd,
   onLookKey,
   onFire,
@@ -1371,7 +1383,6 @@ function TouchControls({
   onKeyboardPress: (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onKeyboardRelease: (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onLookStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onLookMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookEnd: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookKey: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   onFire: () => void;
@@ -1521,7 +1532,6 @@ function TouchControls({
         tabIndex={0}
         aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
         onPointerDown={onLookStart}
-        onPointerMove={onLookMove}
         onPointerUp={onLookEnd}
         onPointerCancel={onLookEnd}
         onLostPointerCapture={onLookEnd}
