@@ -50,11 +50,16 @@ export function hunterCountFor(n: number, requested: number) {
   return Math.max(1, Math.min(requested, Math.max(1, Math.floor(n / 4)), n - 1));
 }
 
+export function canStartRound(room: RoomState, players: PlayerSnap[]) {
+  return room.phase === "lobby" && players.length >= 2 && players.every((player) => player.ready);
+}
+
 export function beginRound(
   prev: RoomState,
   playerIds: string[],
   now: number,
 ): RoomState {
+  if (playerIds.length < 2) return prev;
   const ids = shuffle(playerIds);
   const hc = hunterCountFor(ids.length, prev.hunterCount || 1);
   let hunterIds = ids.slice(0, hc);

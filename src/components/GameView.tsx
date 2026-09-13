@@ -29,6 +29,7 @@ import { getMap, MAPS } from "@/lib/maps";
 import { joystickInput, MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
 import {
   beginRound,
+  canStartRound,
   hiderAlive,
   isHunter,
   remaining,
@@ -847,9 +848,11 @@ export function GameView({
   const startRound = (force = false) => {
     if (!session.isHost()) return;
     const players = snapsFrom(session);
-    if (players.length < 1) return;
-    if (!force && players.some((p) => !p.ready)) return;
-    session.setRoom(beginRound(session.getRoom(), players.map((p) => p.id), Date.now()));
+    const room = session.getRoom();
+    if (!force && !canStartRound(room, players)) return;
+    if (force && !["lobby", "result"].includes(room.phase)) return;
+    if (players.length < 2) return;
+    session.setRoom(beginRound(room, players.map((p) => p.id), Date.now()));
     setTargetColor("");
   };
 
