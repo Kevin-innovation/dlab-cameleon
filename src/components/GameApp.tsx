@@ -238,6 +238,9 @@ function HowTo({ onClose }: { onClose: () => void }) {
         <p>
           <b>4. 승리</b> — 제한 시간 안에 전원 발견이면 술래 승. 한 명이라도 남으면 카멜레온 승.
         </p>
+        <p>
+          <b>조작</b> — PC는 WASD·마우스, 자세는 1~7, 페인트는 F, 도발은 T, 관전은 V입니다. 모바일은 가로 화면에서 왼쪽 조이스틱과 오른쪽 시야 패드를 사용하세요.
+        </p>
         <p>맵: {MAPS.map((m) => m.name).join(" / ")}</p>
       </div>
       <button type="button" onClick={onClose} className="mt-6 w-full rounded-full bg-lime py-2 font-display text-black">

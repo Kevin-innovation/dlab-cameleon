@@ -90,6 +90,34 @@ label:has(> select:focus-visible) {
   text-wrap: balance;
 }
 
+.shortcut-control {
+  position: relative;
+}
+
+.shortcut-key-badge {
+  position: absolute;
+  top: -0.6rem;
+  left: 50%;
+  display: grid;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  padding: 0 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--lime) 65%, transparent);
+  border-radius: 0.4rem;
+  background: #0b100d;
+  color: var(--lime);
+  font-family: var(--font-noto), system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  transform: translateX(-50%);
+}
+
+.pose-action-row {
+  row-gap: 0.65rem;
+}
+
 .mobile-touch-controls {
   display: none;
 }

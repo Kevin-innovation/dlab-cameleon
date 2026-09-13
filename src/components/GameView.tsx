@@ -76,6 +76,11 @@ const KEY_BY_CODE: Record<string, string> = {
   Digit8: "8",
 };
 
+const CHAT_TIME_FORMAT = new Intl.DateTimeFormat("ko-KR", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function normalizeKey(e: KeyboardEvent) {
   return KEY_BY_CODE[e.code] ?? e.key.toLowerCase();
 }
@@ -222,9 +227,8 @@ export function GameView({
         }
         if (k === "h" || k === "?") setHelp((v) => !v);
         if (k === "r") cyclePose(session, world, 1);
-        if (k === "1") tryTaunt();
-        if ((k >= "2" && k <= "4") || (k >= "6" && k <= "8")) {
-          const pose = POSES[k === "6" ? 4 : k === "7" ? 5 : k === "8" ? 6 : Number(k) - 2]?.id;
+        if (/^[1-7]$/.test(k)) {
+          const pose = POSES[Number(k) - 1]?.id;
           if (pose) applyPosePick(session, world, pose);
         }
         if (k === "c" && !watchingRef.current) {
@@ -255,7 +259,7 @@ export function GameView({
             setTool("dropper");
           }
         }
-        if (k === "v" || k === "5") {
+        if (k === "v") {
           const room = session.getRoom();
           const snap = snapsFrom(session).find((p) => p.id === session.myId());
           const canWatch =
@@ -826,6 +830,20 @@ export function GameView({
     touchLookRef.current.pointerId = -1;
   };
 
+  const touchLookKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const delta = {
+      ArrowLeft: [-12, 0],
+      ArrowRight: [12, 0],
+      ArrowUp: [0, -12],
+      ArrowDown: [0, 12],
+    }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    event.stopPropagation();
+    touchLookRef.current.dx += delta[0];
+    touchLookRef.current.dy += delta[1];
+  };
+
   return (
     <main id="main-content" aria-label="카멜레온 게임" className="game-shell safe-screen relative flex h-dvh w-full flex-col overflow-hidden bg-[#0b100d] text-paper md:flex-row">
       <a
@@ -836,7 +854,7 @@ export function GameView({
       </a>
       <h1 className="sr-only">카멜레온 게임</h1>
       <p id="game-accessibility-help" className="sr-only">
-        게임 화면에 포커스를 둔 뒤 WASD로 이동하고 마우스로 시점을 조작합니다. Tab으로 현황을 확인하고 Escape로 열린 패널을 닫습니다.
+        게임 화면에 포커스를 둔 뒤 WASD로 이동하고 마우스로 시점을 조작합니다. 1부터 7까지의 숫자 키로 자세를 고르고, T로 도발, V로 관전, Tab으로 현황을 확인하고 Escape로 열린 패널을 닫습니다.
       </p>
       {hud.phase === "lobby" && (
         <Lobby
@@ -855,7 +873,7 @@ export function GameView({
           tabIndex={0}
           aria-label="3D 게임 화면"
           aria-describedby="game-accessibility-help"
-          aria-keyshortcuts="W A S D Tab Escape"
+          aria-keyshortcuts="W A S D 1 2 3 4 5 6 7 T V Tab Escape"
           className={`absolute inset-0 h-full w-full touch-none ${paintOpen ? "cursor-crosshair" : locked ? "cursor-none" : "cursor-default"}`}
         />
 
@@ -897,7 +915,7 @@ export function GameView({
               {session.kind === "practice" ? " · AI 매치" : ""} · Three.js
             </div>
             <div className="font-display text-lg leading-none">
-              {hud.phase === "lobby" && "대기실 — WASD로 걸어보세요"}
+              {hud.phase === "lobby" && "대기실 — WASD·조이스틱으로 이동"}
               {hud.phase === "hide" && "위장 시간"}
               {hud.phase === "hunt" && "수색 중"}
               {hud.phase === "reveal" && "검증 라운드"}
@@ -1029,31 +1047,42 @@ export function GameView({
             ) : (
               <>
                 <div>WASD 걷기 · Shift 달리기 · Space 점프/벽오르기 · Ctrl 내려가기</div>
-                <div>F 페인트 · 1 도발 · 5 관전 · E 문(통과 시 닫힘) · Tab 현황</div>
+                <div>1~7 자세 · F 페인트 · T 도발 · V 관전 · E 문 · Tab 현황</div>
               </>
             )}
           </div>
         )}
 
-        <div className="game-action-controls absolute bottom-3 right-3 z-10 flex flex-col items-end gap-2">
-          <button type="button" className="rounded-full bg-black/50 px-3 py-1 text-sm" onClick={() => setHelp(true)}>
+        <div className="game-action-controls absolute bottom-3 right-3 z-10 flex flex-col items-end gap-2" role="toolbar" aria-label="게임 조작">
+          <button
+            type="button"
+            aria-keyshortcuts="H"
+            className="shortcut-control rounded-full bg-black/50 px-3 py-1 text-sm"
+            onClick={() => setHelp(true)}
+          >
+            <span className="shortcut-key-badge" aria-hidden="true">H</span>
             도움말
           </button>
           {myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
             <button
               type="button"
-              className={`rounded-full px-4 py-2 font-display ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
+              aria-keyshortcuts="F"
+              className={`shortcut-control rounded-full px-4 py-2 font-display ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
               onClick={() => setPaintOpen((v) => !v)}
             >
+              <span className="shortcut-key-badge" aria-hidden="true">F</span>
               {paintOpen ? "페인트 ON" : "페인트"}
             </button>
           )}
           {hud.phase !== "reveal" && !(myRole === "hunter" && hud.phase === "hunt") && (
-            <div className="flex flex-wrap justify-end gap-1">
-              {POSES.map((p) => (
+            <div className="pose-action-row flex flex-wrap justify-end gap-1.5 pt-2" role="group" aria-label="자세 선택. 1번부터 7번 키로 선택합니다.">
+              {POSES.map((p, index) => (
                 <button
                   key={p.id}
                   type="button"
+                  aria-keyshortcuts={String(index + 1)}
+                  aria-label={`${p.label}, ${index + 1}번 키`}
+                  title={`${p.hint} · ${index + 1}번 키`}
                   onClick={() => {
                     const w = worldRef.current;
                     if (!w) {
@@ -1062,8 +1091,9 @@ export function GameView({
                     }
                     applyPosePick(session, w, p.id);
                   }}
-                  className={`rounded-lg px-2 py-1 text-[11px] ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
+                  className={`shortcut-control rounded-lg px-2 py-1 text-[11px] ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
                 >
+                  <span className="shortcut-key-badge" aria-hidden="true">{index + 1}</span>
                   {p.label}
                 </button>
               ))}
@@ -1090,6 +1120,7 @@ export function GameView({
             onLookStart={touchLookStart}
             onLookMove={touchLookMove}
             onLookEnd={touchLookEnd}
+            onLookKey={touchLookKey}
           />
         )}
 
@@ -1186,13 +1217,15 @@ export function GameView({
         />
       )}
 
-      <RoomSocialPanel
-        session={session}
-        room={hud}
-        people={people}
-        open={socialVisible}
-        onToggle={() => setSocialOpen((value) => !value)}
-      />
+      {hud.phase === "lobby" && (
+        <RoomSocialPanel
+          session={session}
+          room={hud}
+          people={people}
+          open={socialVisible}
+          onToggle={() => setSocialOpen((value) => !value)}
+        />
+      )}
 
       {help && (
         <AccessibleModal titleId="game-help-title" onClose={() => setHelp(false)} panelClassName="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-[#17241c] p-6 shadow-2xl">
@@ -1200,7 +1233,7 @@ export function GameView({
           <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
             <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
             <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
-            <li>F 페인트, Space로 벽 색을 빨아 칠하고, 1로 휘파람, 5로 대기실·숨은 채 관전, E로 문. 열고 지나가면 닫힙니다.</li>
+            <li>1~7로 자세를 고르고, F로 페인트를 엽니다. Space로 벽 색을 빨아 칠하고, T로 휘파람, V로 대기실·숨은 채 관전, E로 문을 엽니다. 열고 지나가면 닫힙니다.</li>
             <li>술래는 1인칭 총. 우클릭으로 3인칭. 맞히면 탄이 돌아오고, 빗나가야 탄이 줄어듭니다.</li>
             <li>감염(기본)은 잡히면 술래가 됩니다. 제한 시간까지 한 명이라도 남으면 카멜레온 승.</li>
             <li>Tab을 누르면 참여자·생존자·죽은자와 점수가 나옵니다. 처치 +{SCORE_TAG}, 생존 승리 +{SCORE_SURVIVE}, 술래 승리 +{SCORE_HUNT_WIN}.</li>
@@ -1233,6 +1266,7 @@ function TouchControls({
   onLookStart,
   onLookMove,
   onLookEnd,
+  onLookKey,
   onFire,
   onJoystickChange,
   onJoystickEnd,
@@ -1251,6 +1285,7 @@ function TouchControls({
   onLookStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookEnd: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onLookKey: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   onFire: () => void;
   onJoystickChange: (keys: string[]) => void;
   onJoystickEnd: () => void;
@@ -1335,7 +1370,7 @@ function TouchControls({
     <button
       type="button"
       aria-label={label}
-      className={`mobile-touch-button pointer-events-auto select-none rounded-xl border border-white/15 bg-black/65 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm ${className}`}
+      className={`mobile-touch-button pointer-events-auto min-h-11 select-none rounded-xl border border-white/15 bg-black/65 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm ${className}`}
       onPointerDown={(event) => onPress(key, event)}
       onPointerUp={(event) => onRelease(key, event)}
       onPointerCancel={(event) => onRelease(key, event)}
@@ -1348,7 +1383,7 @@ function TouchControls({
   );
 
   return (
-    <div className="mobile-touch-controls pointer-events-none absolute inset-0 z-20 select-none" aria-label="터치 게임 조작">
+    <div className="mobile-touch-controls pointer-events-none absolute inset-0 z-20 select-none" role="group" aria-label="터치 게임 조작">
       <div
         className="mobile-joystick pointer-events-auto absolute bottom-3 left-3 h-32 w-32 rounded-full border border-white/20 bg-black/35 shadow-lg backdrop-blur-sm"
         data-touch-control="true"
@@ -1371,11 +1406,14 @@ function TouchControls({
       <div
         className="mobile-look-pad pointer-events-auto absolute bottom-3 right-3 flex h-32 w-44 items-center justify-center rounded-2xl border border-white/15 bg-black/25 text-xs text-white/60 backdrop-blur-sm"
         data-touch-control="true"
+        tabIndex={0}
+        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
         onPointerDown={onLookStart}
         onPointerMove={onLookMove}
         onPointerUp={onLookEnd}
         onPointerCancel={onLookEnd}
         onLostPointerCapture={onLookEnd}
+        onKeyDown={onLookKey}
         aria-label="시야 조작 영역. 드래그해서 시점을 회전합니다."
         role="group"
       >
@@ -1388,7 +1426,7 @@ function TouchControls({
         {canFire && (
           <button
             type="button"
-            className="mobile-touch-button rounded-xl border border-pink/40 bg-pink px-3 py-2 text-xs font-semibold text-black shadow-lg backdrop-blur-sm"
+            className="mobile-touch-button min-h-11 rounded-xl border border-pink/40 bg-pink px-3 py-2 text-xs font-semibold text-black shadow-lg backdrop-blur-sm"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1402,7 +1440,7 @@ function TouchControls({
           <button
             type="button"
             aria-pressed={watching}
-            className={`mobile-touch-button rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${watching ? "bg-lime text-black" : "bg-black/65 text-white"}`}
+            className={`mobile-touch-button min-h-11 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${watching ? "bg-lime text-black" : "bg-black/65 text-white"}`}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1416,7 +1454,7 @@ function TouchControls({
           <button
             type="button"
             aria-pressed={paintOpen}
-            className={`mobile-touch-button rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${paintOpen ? "bg-lime text-black" : "bg-black/65 text-white"}`}
+            className={`mobile-touch-button min-h-11 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${paintOpen ? "bg-lime text-black" : "bg-black/65 text-white"}`}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1474,7 +1512,7 @@ function Lobby({
         {serverName} · {roomLabel}
       </p>
       <h2 className="text-wrap-balance font-display text-3xl">방 대기실</h2>
-      <p className="mt-1 text-sm text-white/65">오른쪽 맵에서 WASD로 걸어보세요. 전원 준비 완료 후에만 호스트가 시작할 수 있습니다.</p>
+      <p className="mt-1 text-sm text-white/65">맵에서 WASD 또는 가로 화면 조이스틱으로 이동해 보세요. 전원 준비 완료 후에만 호스트가 시작할 수 있습니다.</p>
       <ul className="mt-4 space-y-2">
         {people.map((p) => (
           <li key={p.id} className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
@@ -1741,7 +1779,7 @@ function RoomSocialPanel({
                       <div className="flex items-baseline gap-1.5">
                         <span className="font-semibold text-lime">{message.senderName}</span>
                         <time className="text-[10px] text-white/55" dateTime={new Date(message.at).toISOString()}>
-                          {new Date(message.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                          {CHAT_TIME_FORMAT.format(message.at)}
                         </time>
                       </div>
                       <p className="break-words text-white/80">{message.text}</p>
