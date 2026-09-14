@@ -110,6 +110,7 @@ export type GameMap = {
   ceiling: number;
   fog: string;
   floor: string;
+  floorTexture?: string;
   boxes: BoxDef[];
   doors: DoorDef[];
   spawns: { x: number; z: number }[];

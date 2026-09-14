@@ -193,15 +193,28 @@ export class GameWorld {
     sun.shadow.camera.bottom = -18;
     this.mapGroup.add(hemi, sun);
 
-    const floorTex = canvasTexture(
-      makePatternCanvas("wood", map.floor, [map.floor, "#b08950"], 11, this.isMobile ? 256 : 512),
-      this.isMobile ? 1 : 8,
-    );
-    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(map.w / 4, map.d / 4);
+    const accentColor = map.id === "sewer" ? "#65c8ba" : map.id === "backrooms" ? "#fff0a3" : "#ffd1a1";
+    const accentPoints = this.isMobile
+      ? [{ x: map.w * 0.5, z: map.d * 0.42 }]
+      : [
+          { x: map.w * 0.24, z: map.d * 0.28 },
+          { x: map.w * 0.76, z: map.d * 0.7 },
+        ];
+    for (const point of accentPoints) {
+      const accent = new THREE.PointLight(accentColor, this.isMobile ? 0.42 : 0.72, Math.max(map.w, map.d) * 0.62, 2);
+      accent.position.set(point.x, map.ceiling * 0.68, point.z);
+      this.mapGroup.add(accent);
+    }
+
+    const floorTex = map.floorTexture
+      ? this.loadImageTexture(map.floorTexture, map.w / 4, map.d / 4)
+      : canvasTexture(
+          makePatternCanvas("wood", map.floor, [map.floor, "#b08950"], 11, this.isMobile ? 256 : 512),
+          this.isMobile ? 1 : 8,
+        );
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(map.w, map.d),
-      new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9 }),
+      new THREE.MeshStandardMaterial({ map: floorTex, color: map.floor, roughness: 0.88 }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(map.w / 2, 0, map.d / 2);
@@ -243,7 +256,15 @@ export class GameWorld {
           ? new THREE.CylinderGeometry(Math.min(b.w, b.d) / 2, Math.min(b.w, b.d) / 2, b.h, 12)
           : b.shape === "sphere"
             ? new THREE.SphereGeometry(Math.min(b.w, b.h, b.d) / 2, 16, 10)
-            : new THREE.BoxGeometry(b.w, b.h, b.d);
+            : b.collide && b.w > 0.25 && b.h > 0.25 && b.d > 0.25
+              ? new RoundedBoxGeometry(
+                  b.w,
+                  b.h,
+                  b.d,
+                  2,
+                  Math.min(0.08, b.w / 4, b.h / 4, b.d / 4),
+                )
+              : new THREE.BoxGeometry(b.w, b.h, b.d);
       const orientPipe = (mesh: THREE.Mesh) => {
         if (!isPipe) return;
         if (b.w >= b.d) mesh.rotation.z = Math.PI / 2;
@@ -315,6 +336,7 @@ export class GameWorld {
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
       texture.repeat.set(repeatX, repeatY);
+      texture.anisotropy = Math.min(this.isMobile ? 2 : 8, this.renderer.capabilities.getMaxAnisotropy());
       this.imageTextures.set(key, texture);
     }
     texture.needsUpdate = true;

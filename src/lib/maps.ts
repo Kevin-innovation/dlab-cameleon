@@ -57,6 +57,7 @@ const mansion: GameMap = {
   ceiling: 4.2,
   fog: "#241810",
   floor: "#c4a06a",
+  floorTexture: "/textures/oak-floor-v1.png",
   doors: [],
   hunterSpawns: [{ x: 24, z: 33.5 }],
   spawns: [
@@ -123,6 +124,7 @@ const farm: GameMap = {
   ceiling: 6,
   fog: "#2a2214",
   floor: "#c2a05a",
+  floorTexture: "/textures/oak-floor-v1.png",
   doors: [],
   hunterSpawns: [{ x: 26, z: 35 }],
   spawns: [
@@ -184,6 +186,7 @@ const sewer: GameMap = {
   ceiling: 4.4,
   fog: "#101816",
   floor: "#3d4a43",
+  floorTexture: "/textures/sewer-concrete-v1.png",
   doors: [],
   hunterSpawns: [{ x: 23, z: 31.5 }],
   spawns: [
