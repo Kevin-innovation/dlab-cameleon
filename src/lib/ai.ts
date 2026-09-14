@@ -1,6 +1,6 @@
 import { SHOT_COOLDOWN, TAG_RANGE, WHITE } from "./config";
 import { colorMatch, hunterVisibility } from "./camouflage";
-import { moveWithSlide, poseRadius } from "./engine/collision";
+import { blocked, moveWithSlide, poseRadius } from "./engine/collision";
 import { doorColliders, mapColliders } from "./maps";
 import { hiderAlive, isHunter, roleOf } from "./round";
 import type { Session, SessionPlayer } from "./session";
@@ -14,6 +14,10 @@ type HideSpot = {
   palette: string[];
   quality: number;
 };
+
+type Point = { x: number; z: number };
+
+type BrainBehavior = "scouting" | "fleeing" | "hiding" | "searching" | "patrolling";
 
 type Brain = {
   tx: number;
@@ -32,6 +36,17 @@ type Brain = {
   pauseUntil: number;
   paintStartedAt: number;
   paintDuration: number;
+  route: Point[];
+  routeIndex: number;
+  routeKey: string;
+  routeReadyAt: number;
+  behavior: BrainBehavior;
+  huntStartedAt: number;
+  lastSeenX: number;
+  lastSeenZ: number;
+  lastSeenAt: number;
+  nextDecisionAt: number;
+  stuckSince: number;
 };
 
 const brains = new Map<string, Brain>();
@@ -72,6 +87,183 @@ function clearSight(ax: number, az: number, bx: number, bz: number, boxes: Colli
     }
   }
   return true;
+}
+
+function clearPath(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  radius: number,
+  boxes: Collider[],
+  bounds: { w: number; d: number },
+) {
+  const distance = Math.hypot(bx - ax, bz - az);
+  const steps = Math.max(1, Math.ceil(distance / 0.22));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    if (blocked(ax + (bx - ax) * t, az + (bz - az) * t, radius, boxes, bounds)) return false;
+  }
+  return true;
+}
+
+function uniquePoints(points: Point[]) {
+  const seen = new Set<string>();
+  return points.filter((point) => {
+    const key = `${point.x.toFixed(1)}:${point.z.toFixed(1)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function routeNodes(
+  cols: Collider[],
+  anchors: Point[],
+  bounds: { w: number; d: number },
+  radius: number,
+) {
+  const margin = radius + 0.34;
+  const corners = cols.flatMap((box) => [
+    { x: box.minX - margin, z: box.minZ - margin },
+    { x: box.maxX + margin, z: box.minZ - margin },
+    { x: box.minX - margin, z: box.maxZ + margin },
+    { x: box.maxX + margin, z: box.maxZ + margin },
+  ]);
+  const valid = [...anchors, ...corners].filter(
+    (point) =>
+      point.x > radius + 0.12 &&
+      point.z > radius + 0.12 &&
+      point.x < bounds.w - radius - 0.12 &&
+      point.z < bounds.d - radius - 0.12 &&
+      !blocked(point.x, point.z, radius, cols, bounds),
+  );
+  return uniquePoints(valid);
+}
+
+function buildRoute(
+  start: Point,
+  target: Point,
+  cols: Collider[],
+  anchors: Point[],
+  bounds: { w: number; d: number },
+  radius: number,
+) {
+  if (clearPath(start.x, start.z, target.x, target.z, radius, cols, bounds)) return [target];
+
+  const candidates = routeNodes(cols, anchors, bounds, radius)
+    .sort(
+      (left, right) =>
+        Math.hypot(left.x - start.x, left.z - start.z) + Math.hypot(left.x - target.x, left.z - target.z) -
+        (Math.hypot(right.x - start.x, right.z - start.z) + Math.hypot(right.x - target.x, right.z - target.z)),
+    )
+    .slice(0, 72);
+  const nodes = uniquePoints([start, target, ...candidates]);
+  const targetIndex = 1;
+  const costs = nodes.map(() => Number.POSITIVE_INFINITY);
+  const previous = nodes.map(() => -1);
+  const open = new Set<number>([0]);
+  costs[0] = 0;
+
+  while (open.size) {
+    let current = -1;
+    for (const index of open) {
+      if (current < 0 || costs[index] + Math.hypot(nodes[index].x - target.x, nodes[index].z - target.z) < costs[current] + Math.hypot(nodes[current].x - target.x, nodes[current].z - target.z)) {
+        current = index;
+      }
+    }
+    if (current < 0) break;
+    open.delete(current);
+    if (current === targetIndex) break;
+
+    for (let next = 1; next < nodes.length; next++) {
+      if (next === current || !clearPath(nodes[current].x, nodes[current].z, nodes[next].x, nodes[next].z, radius, cols, bounds)) continue;
+      const cost = costs[current] + Math.hypot(nodes[next].x - nodes[current].x, nodes[next].z - nodes[current].z);
+      if (cost < costs[next]) {
+        costs[next] = cost;
+        previous[next] = current;
+        open.add(next);
+      }
+    }
+  }
+
+  if (previous[targetIndex] < 0) return [target];
+  const path: Point[] = [];
+  for (let index = targetIndex; index >= 0; index = previous[index]) {
+    path.unshift(nodes[index]);
+    if (index === 0) break;
+  }
+  return path.slice(1);
+}
+
+function followGoal(
+  br: Brain,
+  x: number,
+  z: number,
+  goal: Point,
+  dt: number,
+  speed: number,
+  radius: number,
+  cols: Collider[],
+  anchors: Point[],
+  bounds: { w: number; d: number },
+  now: number,
+) {
+  const goalKey = `${Math.round(goal.x * 2)}:${Math.round(goal.z * 2)}`;
+  const needsRoute =
+    br.route.length === 0 ||
+    br.routeIndex >= br.route.length ||
+    (br.routeKey !== goalKey && now >= br.routeReadyAt);
+  if (needsRoute) {
+    br.route = buildRoute({ x, z }, goal, cols, anchors, bounds, radius);
+    br.routeIndex = 0;
+    br.routeKey = goalKey;
+    br.routeReadyAt = now + 620;
+  }
+
+  let waypoint = br.route[br.routeIndex] ?? goal;
+  if (Math.hypot(waypoint.x - x, waypoint.z - z) < 0.3 && br.routeIndex < br.route.length - 1) {
+    br.routeIndex += 1;
+    waypoint = br.route[br.routeIndex] ?? goal;
+  }
+  const dx = waypoint.x - x;
+  const dz = waypoint.z - z;
+  const distance = Math.hypot(dx, dz);
+  if (distance < 0.04) {
+    return {
+      x,
+      z,
+      yaw: Math.atan2(-(goal.x - x), -(goal.z - z)) || 0,
+      arrived: Math.hypot(goal.x - x, goal.z - z) < 0.38,
+    };
+  }
+
+  const heading = Math.atan2(-(dx / distance), -(dz / distance));
+  const angles = [0, 0.5, -0.5, 1.0, -1.0, 1.57, -1.57, 2.2, -2.2];
+  const step = Math.min(speed * dt, distance);
+  let best = { x, z, score: Math.hypot(goal.x - x, goal.z - z) };
+  for (const offset of angles) {
+    const angle = heading + offset;
+    const moved = moveWithSlide(x, z, -Math.sin(angle) * step, -Math.cos(angle) * step, radius, cols, bounds);
+    const score = Math.hypot(goal.x - moved.x, goal.z - moved.z);
+    if (score < best.score - 0.002) best = { ...moved, score };
+  }
+  if (best.score >= Math.hypot(goal.x - x, goal.z - z) - 0.001) {
+    br.stuckSince ||= now;
+    if (now - br.stuckSince > 700) {
+      br.route = [];
+      br.routeKey = "";
+      br.routeReadyAt = 0;
+    }
+  } else {
+    br.stuckSince = 0;
+  }
+  return {
+    x: best.x,
+    z: best.z,
+    yaw: heading,
+    arrived: Math.hypot(goal.x - best.x, goal.z - best.z) < 0.38,
+  };
 }
 
 function hideSpot(map: GameMap, i: number, round: number): HideSpot {
@@ -191,10 +383,7 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
     if (p.id === session.myId()) continue;
     const i = Number(String(p.id).replace("bot-", "")) || 0;
     const role = roleOf(room, p.id);
-    const candidates =
-      role === "hunter"
-        ? []
-        : [hideSpot(map, i, room.round), hideSpot(map, i + 13, room.round), hideSpot(map, i + 29, room.round)];
+    const candidates = [hideSpot(map, i, room.round), hideSpot(map, i + 13, room.round), hideSpot(map, i + 29, room.round)];
     const finalSpot = candidates.reduce<HideSpot | undefined>(
       (best, spot) => (!best || spot.quality > best.quality ? spot : best),
       undefined,
@@ -232,6 +421,17 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
       pauseUntil: 0,
       paintStartedAt: 0,
       paintDuration: 2200 + (i % 3) * 450,
+      route: [],
+      routeIndex: 0,
+      routeKey: "",
+      routeReadyAt: 0,
+      behavior: role === "hunter" ? "patrolling" : "scouting",
+      huntStartedAt: 0,
+      lastSeenX: sp.x,
+      lastSeenZ: sp.z,
+      lastSeenAt: 0,
+      nextDecisionAt: 0,
+      stuckSince: 0,
     });
   }
 }
@@ -250,6 +450,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
     yaw: Number(p.get("yaw") ?? 0),
     fill: String(p.get("fill") ?? WHITE),
     camoScore: Number(p.get("camoScore") ?? 0),
+    pose: (p.get("pose") as Pose) || "stand",
     hunter: isHunter(room, p.id),
     alive: hiderAlive(room, p.id),
   }));
@@ -282,13 +483,13 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
 
     if (hunter && room.phase === "hunt") {
       const hiders = snaps.filter((s) => s.alive && !s.hunter && s.id !== p.id);
-      let best = hiders[0];
+      let best: (typeof hiders)[number] | undefined;
       let bestScore = -1;
       for (const h of hiders) {
         if (!clearSight(x, z, h.x, h.z, cols)) continue;
         const dist = Math.hypot(h.x - x, h.z - z);
-        const see = hunterVisibility(h.camoScore, dist);
-        const score = see * (18 - Math.min(18, dist));
+        const see = hunterVisibility(h.camoScore, dist, h.pose);
+        const score = see * (18 - Math.min(18, dist)) + (dist < 2.4 ? 2.5 : 0);
         if (score > bestScore) {
           bestScore = score;
           best = h;
@@ -297,15 +498,31 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
       if (best && bestScore > 2.2) {
         br.tx = best.x;
         br.tz = best.z;
+        br.lastSeenX = best.x;
+        br.lastSeenZ = best.z;
+        br.lastSeenAt = now;
+        br.behavior = "searching";
+      } else if (br.lastSeenAt > 0 && now - br.lastSeenAt < 7000) {
+        br.tx = br.lastSeenX;
+        br.tz = br.lastSeenZ;
+        br.behavior = "searching";
       } else {
         br.turn += dt;
-        if (br.turn > 2.4) {
+        if (br.turn > 2.4 || now >= br.nextDecisionAt) {
           br.turn = 0;
           br.patrol = (br.patrol + 1) % patrolPts.length;
+          br.nextDecisionAt = now + 2600;
+          if (br.searchSpots.length && br.patrol % 2 === 0) {
+            br.searchSpotIndex = (br.searchSpotIndex + 1) % br.searchSpots.length;
+            br.tx = br.searchSpots[br.searchSpotIndex].x;
+            br.tz = br.searchSpots[br.searchSpotIndex].z;
+          } else {
+            const pt = patrolPts[br.patrol % patrolPts.length];
+            br.tx = pt.x;
+            br.tz = pt.z;
+          }
         }
-        const pt = patrolPts[br.patrol % patrolPts.length];
-        br.tx = pt.x;
-        br.tz = pt.z;
+        br.behavior = "patrolling";
       }
       const door = (map.doors ?? []).find((d) => !room.doors?.[d.id] && Math.hypot(d.x - x, d.z - z) < 2.4);
       if (door && now > br.doorAt) {
@@ -313,20 +530,30 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         session.callDoor(door.id);
       }
 
-      const speed = 6.6;
-      const dx = br.tx - x;
-      const dz = br.tz - z;
-      const len = Math.hypot(dx, dz) || 1;
-      const step = Math.min(speed * dt, len);
-      const moved = moveWithSlide(x, z, (dx / len) * step, (dz / len) * step, poseRadius("stand"), cols, bounds);
+      const moved = followGoal(
+        br,
+        x,
+        z,
+        { x: br.tx, z: br.tz },
+        dt,
+        6.6,
+        poseRadius("stand"),
+        cols,
+        [...patrolPts, ...br.searchSpots],
+        bounds,
+        now,
+      );
       x = moved.x;
       z = moved.z;
-      yaw = Math.atan2(-(dx / len), -(dz / len));
+      yaw = moved.yaw;
       p.set("x", x);
       p.set("z", z);
       p.set("y", 0);
       p.set("yaw", yaw);
       p.set("pose", "stand");
+      p.set("fill", WHITE);
+      p.set("blobs", []);
+      p.set("camoScore", 0);
 
       if (best && now > br.shootAt) {
         const dist = Math.hypot(best.x - x, best.z - z);
@@ -334,7 +561,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         const fz = -Math.cos(yaw);
         const inv = 1 / Math.max(0.001, dist);
         const dot = fx * (best.x - x) * inv + fz * (best.z - z) * inv;
-        const visibility = hunterVisibility(best.camoScore, dist, "stand", true);
+        const visibility = hunterVisibility(best.camoScore, dist, best.pose, true);
         const canSee = visibility > 0.46 && dot > 0.62 && clearSight(x, z, best.x, best.z, cols);
         if (canSee && dist <= TAG_RANGE + 0.6) {
           br.shootAt = now + SHOT_COOLDOWN + 180;
@@ -349,29 +576,99 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
     if (!hunter) {
       const finalIndex = br.searchSpots.length - 1;
       const finalSpot = br.searchSpots[finalIndex];
-      if (room.phase === "hunt" && !br.settled && finalSpot) {
+      if (!finalSpot) continue;
+      if (room.phase === "hunt") {
+        br.huntStartedAt ||= now;
+        if (!br.settled && br.behavior === "scouting") {
+          br.searchSpotIndex = finalIndex;
+          br.tx = finalSpot.x;
+          br.tz = finalSpot.z;
+          br.pose = finalSpot.pose;
+          br.route = [];
+          br.routeKey = "";
+        }
+        const threats = snaps
+          .filter((s) => s.hunter && s.alive && s.id !== p.id)
+          .map((hunterSnap) => ({
+            hunter: hunterSnap,
+            distance: Math.hypot(hunterSnap.x - x, hunterSnap.z - z),
+            visible: clearSight(hunterSnap.x, hunterSnap.z, x, z, cols),
+          }))
+          .sort((left, right) => left.distance - right.distance);
+        const threat = threats[0];
+        const exposed =
+          threat &&
+          (threat.distance < 3.6 ||
+            (threat.visible && hunterVisibility(Number(p.get("camoScore") ?? 0), threat.distance, br.pose) > 0.58 && threat.distance < 7));
+        if (br.settled && exposed && now >= br.nextDecisionAt && now - br.huntStartedAt > 4500) {
+          const choices = br.searchSpots
+            .map((spot, index) => {
+              if (index === br.searchSpotIndex) return null;
+              const distanceFromHunter = threat ? Math.hypot(spot.x - threat.hunter.x, spot.z - threat.hunter.z) : 0;
+              const hiddenFromHunter = threat ? !clearSight(threat.hunter.x, threat.hunter.z, spot.x, spot.z, cols) : true;
+              return {
+                spot,
+                index,
+                score: spot.quality + distanceFromHunter * 3 + (hiddenFromHunter ? 24 : -18) - Math.hypot(spot.x - x, spot.z - z) * 0.35,
+              };
+            })
+            .filter((choice): choice is { spot: HideSpot; index: number; score: number } => choice !== null)
+            .sort((left, right) => right.score - left.score);
+          const escape = choices[0];
+          if (escape) {
+            br.searchSpotIndex = escape.index;
+            br.tx = escape.spot.x;
+            br.tz = escape.spot.z;
+            br.pose = escape.spot.pose;
+            br.settled = false;
+            br.behavior = "fleeing";
+            br.paintStartedAt = 0;
+            br.route = [];
+            br.routeKey = "";
+            br.nextDecisionAt = now + 6500;
+          }
+        }
+      } else {
+        br.huntStartedAt = 0;
+        br.behavior = "scouting";
+      }
+      if (room.phase === "hunt" && !br.settled && br.behavior !== "fleeing") {
         br.searchSpotIndex = finalIndex;
         br.tx = finalSpot.x;
         br.tz = finalSpot.z;
         br.pose = finalSpot.pose;
-        br.settled = true;
-        br.paintStartedAt = now - br.paintDuration;
       }
       const target = br.searchSpots[br.searchSpotIndex];
       if (target) {
         br.tx = target.x;
         br.tz = target.z;
       }
-      const dx = br.tx - x;
-      const dz = br.tz - z;
-      const dist = Math.hypot(dx, dz);
-      if (room.phase === "hide" && dist > 0.35 && !br.settled) {
-        const speed = 5.8;
-        const step = Math.min(speed * dt, dist);
-        const moved = moveWithSlide(x, z, (dx / dist) * step, (dz / dist) * step, poseRadius(br.pose), cols, bounds);
-        x = moved.x;
-        z = moved.z;
-        yaw = Math.atan2(-(dx / dist), -(dz / dist));
+      const moved = followGoal(
+        br,
+        x,
+        z,
+        { x: br.tx, z: br.tz },
+        dt,
+        br.behavior === "fleeing" ? 6.4 : 5.8,
+        poseRadius(br.pose),
+        cols,
+        [...patrolPts, ...br.searchSpots],
+        bounds,
+        now,
+      );
+      x = moved.x;
+      z = moved.z;
+      yaw = moved.yaw;
+      if (!moved.arrived || !br.settled) {
+        const arrivedAtSpot = moved.arrived;
+        if (arrivedAtSpot && room.phase === "hunt") {
+          br.settled = true;
+          br.behavior = "hiding";
+          br.pauseUntil = 0;
+        }
+        if (room.phase === "hide" && !arrivedAtSpot) {
+          br.settled = false;
+        }
         p.set("x", x);
         p.set("z", z);
         p.set("yaw", yaw);
@@ -379,7 +676,9 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         p.set("fill", WHITE);
         p.set("blobs", []);
         p.set("camoScore", 0);
-      } else {
+        if (!arrivedAtSpot || room.phase === "hunt") br.paintStartedAt = 0;
+      }
+      if (moved.arrived) {
         if (!br.settled && room.phase === "hide") {
           br.pauseUntil ||= now + 950 + ((br.patrol + br.searchSpotIndex) % 3) * 350;
           const finalWindow = Math.max(8000, Math.min(14000, room.hideTime * 250));
@@ -387,6 +686,8 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
           if (!lastSpot && now >= br.pauseUntil && now < room.phaseEndsAt - finalWindow) {
             br.searchSpotIndex += 1;
             br.pauseUntil = 0;
+            br.route = [];
+            br.routeKey = "";
             continue;
           }
           if (!lastSpot && now >= room.phaseEndsAt - finalWindow && finalSpot) {
@@ -395,6 +696,8 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
             br.tz = finalSpot.z;
             br.pose = finalSpot.pose;
             br.pauseUntil = 0;
+            br.route = [];
+            br.routeKey = "";
             continue;
           }
           br.settled = lastSpot;
@@ -410,10 +713,6 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         p.set("z", br.tz);
         const painted = applyBotPaint(p, br, now);
         p.set("pose", painted ? br.pose : "crouch");
-        if (room.phase === "hunt" && Math.random() < 0.0009) {
-          p.set("x", br.tx + (Math.random() - 0.5) * 0.18);
-          p.set("z", br.tz + (Math.random() - 0.5) * 0.18);
-        }
       }
     }
   }
