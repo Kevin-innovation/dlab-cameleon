@@ -120,6 +120,7 @@ label:has(> select:focus-visible) {
 
 .mobile-touch-controls {
   display: block;
+  isolation: isolate;
 }
 
 .room-social-shell {
@@ -221,9 +222,20 @@ label:has(> select:focus-visible) {
 
   .mobile-touch-actions {
     bottom: calc(0.75rem + env(safe-area-inset-bottom));
-    max-width: calc(100vw - 18rem);
+    left: calc(8.75rem + env(safe-area-inset-left));
+    right: calc(min(42vw, 11rem) + 0.75rem + env(safe-area-inset-right));
+    max-width: none;
+    transform: none;
+    justify-content: center;
     overflow-x: auto;
+    padding: 0.15rem 0;
+    pointer-events: none;
     scrollbar-width: none;
+  }
+
+  .mobile-touch-actions > .mobile-touch-button {
+    pointer-events: auto;
+    flex: 0 0 auto;
   }
 
   .mobile-touch-actions::-webkit-scrollbar {

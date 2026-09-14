@@ -354,6 +354,12 @@ export function GameView({
 
     const onTouchLookMove = (e: PointerEvent) => {
       if (input.touchLook.pointerId !== e.pointerId) return;
+      if (mobilePortraitRef.current || paintOpenRef.current || helpRef.current || watchingRef.current) {
+        input.touchLook.pointerId = -1;
+        input.touchLook.dx = 0;
+        input.touchLook.dy = 0;
+        return;
+      }
       e.preventDefault();
       input.touchLook.dx += e.clientX - input.touchLook.x;
       input.touchLook.dy += e.clientY - input.touchLook.y;
@@ -364,6 +370,8 @@ export function GameView({
       if (input.touchLook.pointerId !== e.pointerId) return;
       e.preventDefault();
       input.touchLook.pointerId = -1;
+      input.touchLook.dx = 0;
+      input.touchLook.dy = 0;
     };
     window.addEventListener("pointermove", onTouchLookMove, { passive: false });
     window.addEventListener("pointerup", onTouchLookEnd, { passive: false });
@@ -922,6 +930,7 @@ export function GameView({
   };
 
   const touchLookStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (mobilePortraitRef.current || paintOpenRef.current || helpRef.current || watchingRef.current) return;
     event.preventDefault();
     event.stopPropagation();
     try {
@@ -938,11 +947,30 @@ export function GameView({
     });
   };
 
+  const touchLookMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const look = inputRef.current.touchLook;
+    if (look.pointerId !== event.pointerId) return;
+    if (mobilePortraitRef.current || paintOpenRef.current || helpRef.current || watchingRef.current) {
+      look.pointerId = -1;
+      look.dx = 0;
+      look.dy = 0;
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    look.dx += event.clientX - look.x;
+    look.dy += event.clientY - look.y;
+    look.x = event.clientX;
+    look.y = event.clientY;
+  };
+
   const touchLookEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (inputRef.current.touchLook.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
     inputRef.current.touchLook.pointerId = -1;
+    inputRef.current.touchLook.dx = 0;
+    inputRef.current.touchLook.dy = 0;
   };
 
   const touchLookKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1262,6 +1290,7 @@ export function GameView({
             onKeyboardPress={touchKeyboardPress}
             onKeyboardRelease={touchKeyboardRelease}
             onLookStart={touchLookStart}
+            onLookMove={touchLookMove}
             onLookEnd={touchLookEnd}
             onLookKey={touchLookKey}
           />
@@ -1456,6 +1485,7 @@ function TouchControls({
   onKeyboardPress,
   onKeyboardRelease,
   onLookStart,
+  onLookMove,
   onLookEnd,
   onLookKey,
   onFire,
@@ -1476,6 +1506,7 @@ function TouchControls({
   onKeyboardPress: (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onKeyboardRelease: (key: string, event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   onLookStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onLookMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookEnd: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLookKey: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
   onFire: () => void;
@@ -1585,6 +1616,7 @@ function TouchControls({
     <button
       type="button"
       aria-label={label}
+      data-touch-control="true"
       className={`mobile-touch-button pointer-events-auto min-h-11 select-none rounded-xl border border-white/15 bg-black/65 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm ${className}`}
       onPointerDown={(event) => onPress(key, event)}
       onPointerUp={(event) => onRelease(key, event)}
@@ -1625,6 +1657,7 @@ function TouchControls({
         tabIndex={0}
         aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
         onPointerDown={onLookStart}
+        onPointerMove={onLookMove}
         onPointerUp={onLookEnd}
         onPointerCancel={onLookEnd}
         onLostPointerCapture={onLookEnd}
@@ -1656,6 +1689,7 @@ function TouchControls({
         {canFire && (
           <button
             type="button"
+            data-touch-control="true"
             className="mobile-touch-button min-h-11 rounded-xl border border-pink/40 bg-pink px-3 py-2 text-xs font-semibold text-black shadow-lg backdrop-blur-sm"
             onClick={(event) => {
               event.preventDefault();
@@ -1669,6 +1703,7 @@ function TouchControls({
         {canWatch && (
           <button
             type="button"
+            data-touch-control="true"
             aria-pressed={watching}
             className={`mobile-touch-button min-h-11 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${watching ? "bg-lime text-black" : "bg-black/65 text-white"}`}
             onClick={(event) => {
@@ -1683,6 +1718,7 @@ function TouchControls({
         {!watching && canPaint && (
           <button
             type="button"
+            data-touch-control="true"
             aria-pressed={paintOpen}
             className={`mobile-touch-button min-h-11 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${paintOpen ? "bg-lime text-black" : "bg-black/65 text-white"}`}
             onClick={(event) => {
