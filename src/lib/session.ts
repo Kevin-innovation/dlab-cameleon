@@ -8,7 +8,7 @@ import {
   getState,
   getParticipants,
 } from "playroomkit";
-import { BOT_NAMES, MAX_PLAYERS, WHITE } from "./config";
+import { BOT_NAMES, MAX_PLAYERS, SHOT_COOLDOWN, WHITE } from "./config";
 import { emptyRoom, patchRoom, sanitizeRoom, type RoomConfigPatch } from "./round";
 import type { ChatMessage, PaintBlob, PlayerSnap, Pose, Role, RoomState } from "./types";
 
@@ -30,7 +30,7 @@ export type Session = {
   callShot: (targetId: string, hunterId?: string, shotSeq?: number) => void;
   onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
   callDoor: (id: string) => void;
-  onDoor: (cb: (id: string) => void) => () => void;
+  onDoor: (cb: (id: string, actorId?: string) => void) => () => void;
   sendChat: (text: string) => void;
   leave: () => void;
 };
@@ -125,32 +125,45 @@ export async function connectOnline(opts: {
   }
 
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
-  const doorListeners = new Set<(id: string) => void>();
+  const doorListeners = new Set<(id: string, actorId?: string) => void>();
   const lastShotSeq = new Map<string, number>();
+  const lastShotAt = new Map<string, number>();
+  const lastDoorAt = new Map<string, number>();
+  const chatWindows = new Map<string, number[]>();
   RPC.register("shot", async (payload, sender) => {
-    const targetId = String(payload?.targetId ?? "");
+    const targetId = String(payload?.targetId ?? "").slice(0, 80);
     const sequence = Number(payload?.sequence ?? 0);
     if (!Number.isSafeInteger(sequence) || sequence < 1) return;
     const previous = lastShotSeq.get(sender.id) ?? 0;
     if (isHost() && sequence <= previous) return;
+    const now = Date.now();
+    if (isHost() && now - (lastShotAt.get(sender.id) ?? 0) < SHOT_COOLDOWN - 80) return;
     lastShotSeq.set(sender.id, sequence);
+    lastShotAt.set(sender.id, now);
     shotListeners.forEach((cb) => cb(sender.id, targetId));
   });
-  RPC.register("door", async (payload) => {
-    const id = String(payload?.id ?? "");
+  RPC.register("door", async (payload, sender) => {
+    const id = String(payload?.id ?? "").slice(0, 80);
     if (!id) return;
-    doorListeners.forEach((cb) => cb(id));
+    const now = Date.now();
+    if (isHost() && now - (lastDoorAt.get(sender.id) ?? 0) < 260) return;
+    lastDoorAt.set(sender.id, now);
+    doorListeners.forEach((cb) => cb(id, sender.id));
   });
   RPC.register("chat", async (payload, sender) => {
     if (!isHost()) return;
     const text = String(payload?.text ?? "").trim().slice(0, 120);
     if (!text) return;
+    const now = Date.now();
+    const recent = (chatWindows.get(sender.id) ?? []).filter((at) => now - at < 5000);
+    if (recent.length >= 6) return;
+    chatWindows.set(sender.id, [...recent, now]);
     const message: ChatMessage = {
-      id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: `chat-${now}-${Math.random().toString(36).slice(2, 8)}`,
       senderId: sender.id,
       senderName: String(sender.getState("name") ?? "손님").trim().slice(0, 12) || "손님",
       text,
-      at: Date.now(),
+      at: now,
     };
     const room = sanitizeRoom((getState("room") as RoomState) || emptyRoom());
     setState("room", sanitizeRoom({ ...room, chat: [...(room.chat ?? []), message].slice(-60) }), true);
@@ -256,8 +269,9 @@ export function createPractice(nickname: string): Session {
   room.hunterMode = "ai";
   room.hunterPlayerId = id;
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
-  const doorListeners = new Set<(doorId: string) => void>();
+  const doorListeners = new Set<(doorId: string, actorId?: string) => void>();
   const lastShotSeq = new Map<string, number>();
+  const lastShotAt = new Map<string, number>();
   return {
     kind: "practice",
     myId: () => id,
@@ -272,11 +286,14 @@ export function createPractice(nickname: string): Session {
     players: () => everyone,
     me: () => me,
     callShot: (targetId, hunterId, shotSeq) => {
+      const now = Date.now();
       if (shotSeq !== undefined) {
         const sourceId = hunterId ?? id;
         const previous = lastShotSeq.get(sourceId) ?? 0;
         if (!Number.isSafeInteger(shotSeq) || shotSeq <= previous) return;
+        if (now - (lastShotAt.get(sourceId) ?? 0) < SHOT_COOLDOWN - 80) return;
         lastShotSeq.set(sourceId, shotSeq);
+        lastShotAt.set(sourceId, now);
       }
       shotListeners.forEach((cb) => cb(hunterId ?? id, targetId));
     },
@@ -284,7 +301,7 @@ export function createPractice(nickname: string): Session {
       shotListeners.add(cb);
       return () => shotListeners.delete(cb);
     },
-    callDoor: (doorId) => doorListeners.forEach((cb) => cb(doorId)),
+    callDoor: (doorId) => doorListeners.forEach((cb) => cb(doorId, id)),
     onDoor: (cb) => {
       doorListeners.add(cb);
       return () => doorListeners.delete(cb);

@@ -34,6 +34,7 @@ import {
   hiderAlive,
   isHunter,
   remaining,
+  reconcileRoomPlayers,
   roleOf,
   tickRoom,
   processFire,
@@ -542,9 +543,15 @@ export function GameView({
       );
       session.setRoom(result.room);
     });
-    const undoor = session.onDoor((id) => {
+    const undoor = session.onDoor((id, actorId) => {
       if (!session.isHost()) return;
       const room = session.getRoom();
+      if (room.phase !== "prepare" && room.phase !== "hide" && room.phase !== "hunt") return;
+      const door = getMap(room.mapId).doors.find((candidate) => candidate.id === id);
+      const actor = actorId ? snapsFrom(session).find((player) => player.id === actorId) : undefined;
+      if (!door || !actor || roleOf(room, actor.id) === "spectator") return;
+      if (!Number.isFinite(actor.x) || !Number.isFinite(actor.z)) return;
+      if (Math.hypot(actor.x - door.x, actor.z - door.z) > 3.05) return;
       const doors = { ...(room.doors ?? {}) };
       doors[id] = !doors[id];
       session.setRoom({ ...room, doors });
@@ -694,7 +701,9 @@ export function GameView({
       }
 
       if (session.isHost()) {
-        let next = tickRoom(room, snapsFrom(session), Date.now());
+        const livePlayers = snapsFrom(session);
+        const reconciled = reconcileRoomPlayers(room, livePlayers);
+        let next = tickRoom(reconciled, livePlayers, Date.now());
         for (const p of session.players()) {
           const seq = Number(p.get("tauntSeq") ?? 0);
           const prev = hostTauntSeq.get(p.id) ?? 0;
@@ -728,6 +737,8 @@ export function GameView({
           next.phase !== room.phase ||
           next.phaseEndsAt !== room.phaseEndsAt ||
           next.caughtIds.length !== room.caughtIds.length ||
+          JSON.stringify(next.hunterIds) !== JSON.stringify(room.hunterIds) ||
+          JSON.stringify(next.caughtIds) !== JSON.stringify(room.caughtIds) ||
           next.taunts.length !== room.taunts.length ||
           next.winner !== room.winner ||
           next.round !== room.round ||

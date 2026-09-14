@@ -118,6 +118,21 @@ export function patchRoom(prev: RoomState, patch: RoomConfigPatch) {
   return sanitizeRoom({ ...prev, ...patch });
 }
 
+export function reconcileRoomPlayers(room: RoomState, players: PlayerSnap[]) {
+  const active = new Set(players.map((player) => player.id));
+  const hunterIds = room.hunterIds.filter((id) => active.has(id));
+  const caughtIds = room.caughtIds.filter((id) => active.has(id));
+  const ammo = Object.fromEntries(Object.entries(room.ammo ?? {}).filter(([id]) => active.has(id)));
+  if (
+    hunterIds.length === room.hunterIds.length &&
+    caughtIds.length === room.caughtIds.length &&
+    Object.keys(ammo).length === Object.keys(room.ammo ?? {}).length
+  ) {
+    return room;
+  }
+  return { ...room, hunterIds, caughtIds, ammo };
+}
+
 function shuffle<T>(arr: T[]) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -286,6 +301,9 @@ export function finishRound(
 }
 
 export function tickRoom(room: RoomState, players: PlayerSnap[], now: number): RoomState {
+  if ((room.phase === "prepare" || room.phase === "hide" || room.phase === "hunt") && !players.some((p) => isHunter(room, p.id))) {
+    return finishRound(room, "hiders", players, now);
+  }
   if (room.phase === "prepare" && now >= room.phaseEndsAt) {
     return { ...room, phase: "hide", phaseEndsAt: now + room.hideTime * 1000 };
   }
@@ -295,6 +313,9 @@ export function tickRoom(room: RoomState, players: PlayerSnap[], now: number): R
   if (room.phase === "hunt" && now >= room.phaseEndsAt) {
     const any = players.some((p) => hiderAlive(room, p.id));
     return finishRound(room, any ? "hiders" : "hunters", players, now);
+  }
+  if (room.phase === "hunt" && !players.some((p) => hiderAlive(room, p.id))) {
+    return finishRound(room, "hunters", players, now);
   }
   if (room.phase === "hunt" && !huntersHaveAmmo(room, players)) {
     const any = players.some((p) => hiderAlive(room, p.id));

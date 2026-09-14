@@ -339,7 +339,6 @@ export class GameWorld {
       texture.anisotropy = Math.min(this.isMobile ? 2 : 8, this.renderer.capabilities.getMaxAnisotropy());
       this.imageTextures.set(key, texture);
     }
-    texture.needsUpdate = true;
     return texture;
   }
 

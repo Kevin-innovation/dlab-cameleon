@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_NAME, DEFAULT_ROOM_CODE, MAX_PLAYERS, NICK_KEY, SERVERS } from "@/lib/config";
 import { MAPS } from "@/lib/maps";
 import { requestMobileLandscape } from "@/lib/mobile";
@@ -42,6 +42,11 @@ function storeNickname(name: string) {
   }
 }
 
+function hasRoomHash() {
+  if (typeof window === "undefined") return false;
+  return /^#r=R?[A-Za-z0-9_-]{4,32}$/.test(window.location.hash);
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   return new Promise<T>((resolve, reject) => {
     const timer = window.setTimeout(() => reject(new Error("CONNECT_TIMEOUT")), timeoutMs);
@@ -64,21 +69,16 @@ export default function GameApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState("");
   const [howto, setHowto] = useState(false);
+  const reconnectAttempted = useRef(false);
 
-  const joinGame = async () => {
-    const name = nick.trim().slice(0, 12);
-    if (name.length < 2) {
-      setError("닉네임은 2~12자로 입력해 주세요.");
-      return;
-    }
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      setError("인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
-      return;
-    }
-    storeNickname(name);
-    setNick(name);
+  const connectToRoom = useCallback(async (name: string) => {
     setError("");
     setScreen({ t: "connecting" });
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setError("인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
+      setScreen({ t: "home" });
+      return;
+    }
     void requestMobileLandscape().catch(() => false);
     try {
       const s = await withTimeout(
@@ -103,6 +103,25 @@ export default function GameApp() {
       );
       setScreen({ t: "home" });
     }
+  }, []);
+
+  useEffect(() => {
+    if (reconnectAttempted.current || !hasRoomHash()) return;
+    const saved = readStoredNickname().trim().slice(0, 12);
+    if (saved.length < 2) return;
+    reconnectAttempted.current = true;
+    window.setTimeout(() => void connectToRoom(saved), 0);
+  }, [connectToRoom]);
+
+  const joinGame = () => {
+    const name = nick.trim().slice(0, 12);
+    if (name.length < 2) {
+      setError("닉네임은 2~12자로 입력해 주세요.");
+      return;
+    }
+    storeNickname(name);
+    setNick(name);
+    void connectToRoom(name);
   };
 
   const startPractice = () => {
