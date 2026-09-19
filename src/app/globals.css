@@ -137,33 +137,6 @@ label:has(> select:focus-visible) {
 }
 
 
-/* Desktop: the pose bar owns the full bottom edge so eleven poses sit on one line;
-   the key hints and help/paint buttons stack above it instead of beside it. */
-@media (hover: hover) and (pointer: fine) and (min-width: 768px) {
-  .game-shell #game-instructions {
-    bottom: 3.6rem;
-  }
-
-  .game-action-controls {
-    left: 0.75rem;
-  }
-
-  .game-action-controls .pose-action-row {
-    width: 100%;
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-    gap: 0.3rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .game-action-controls .pose-action-row button {
-    flex: 1 1 0;
-    min-width: 0;
-    max-width: 4.6rem;
-  }
-}
-
 .mobile-touch-controls {
   display: block;
   isolation: isolate;
@@ -181,6 +154,11 @@ label:has(> select:focus-visible) {
 
 @media (max-width: 767px), (pointer: coarse) and (hover: none) {
   .game-shell #game-instructions {
+    display: none;
+  }
+
+  /* Touch controls already carry watch/taunt; hide the desktop duplicates. */
+  .desktop-only {
     display: none;
   }
 

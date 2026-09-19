@@ -149,6 +149,7 @@ export function GameView({
   const [graphicsError, setGraphicsError] = useState("");
   const socialVisible = socialOpen;
   const paintOpenRef = useRef(false);
+  const tauntRef = useRef<() => void>(() => {});
   const viewActiveRef = useRef(false);
   const watchingRef = useRef(false);
   const mobilePortraitRef = useRef(false);
@@ -310,7 +311,7 @@ export function GameView({
           return;
         }
         const poseIndex = (POSE_KEYS as readonly string[]).indexOf(k);
-        if (poseIndex >= 0 && !(k === "5" && session.getRoom().phase === "lobby")) {
+        if (poseIndex >= 0) {
           const pose = POSES[poseIndex]?.id;
           if (pose) applyPosePick(session, world, pose);
         }
@@ -342,7 +343,7 @@ export function GameView({
             toolRef.current = "brush";
           }
         }
-        if (k === "v" || (k === "5" && session.getRoom().phase === "lobby")) {
+        if (k === "v") {
           const room = session.getRoom();
           const snap = snapsFrom(session).find((p) => p.id === session.myId());
           // Turning watch off is always allowed; turning it on needs a non-hunter in a watchable phase.
@@ -470,6 +471,8 @@ export function GameView({
       session.me().set("tauntX", world.localX, true);
       session.me().set("tauntY", world.localZ, true);
     }
+
+    tauntRef.current = tryTaunt;
 
     let lastMx = window.innerWidth / 2;
     let lastMy = window.innerHeight / 2;
@@ -963,6 +966,11 @@ export function GameView({
 
   const me = people.find((p) => p.id === session.myId());
   const myRole = me ? roleOf(hud, me.id) : "spectator";
+  const canTaunt = hud.phase === "hunt" && myRole !== "hunter" && isParticipant(hud, me?.id ?? "");
+  const canWatch =
+    !!me &&
+    (watching || hud.phase === "lobby" || ((hud.phase === "hide" || hud.phase === "hunt") && (hiderAlive(hud, me.id) || myRole === "spectator")));
+  const showPoses = !watching && hud.phase !== "reveal" && hud.phase !== "result" && !(myRole === "hunter" && hud.phase === "hunt");
   const camouflage = camouflageMeter(
     me?.fill ?? WHITE,
     me?.blobs ?? [],
@@ -1255,14 +1263,6 @@ export function GameView({
           {myRole === "hunter" ? " · 술래" : myRole === "hider" ? " · 카멜레온" : " · 관전"}
         </div>
 
-        {!locked && !paintOpen && !hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
-          <div className="pointer-events-none absolute bottom-36 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-4 py-2 text-sm">
-            {myRole === "hunter" && hud.phase === "hunt"
-              ? "1인칭 수색 · 마우스 조준 · 좌클릭 발사"
-              : "게임 화면에서 마우스 이동 = 시점 · 좌클릭 = 조준 태그"}
-          </div>
-        )}
-
         {hud.phase === "hunt" && myRole === "hunter" && me && (
           <>
             <div
@@ -1372,7 +1372,7 @@ export function GameView({
         {hud.phase === "reveal" && <RevealPanel room={hud} timeLeft={timeLeft} />}
 
         {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
-          <div id="game-instructions" className="absolute bottom-3 left-3 z-10 max-w-[min(340px,calc(100%-11rem))] rounded-2xl bg-black/40 px-3 py-2 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
+          <div id="game-instructions" className="absolute left-3 top-[4.6rem] z-10 max-w-[360px] rounded-2xl bg-black/40 px-3 py-2 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
                 <div>술래 1인칭 · 우클릭 3인칭 · WASD · Shift 달리기 · Ctrl 숙이기</div>
@@ -1384,38 +1384,71 @@ export function GameView({
                 <div>화면 버튼으로 자세·페인트 · T 도발 · V 관전 · E 문 · Tab 현황</div>
               </>
             )}
+            {!locked && !paintOpen && (
+              <div className="mt-1 text-lime">
+                {myRole === "hunter" && hud.phase === "hunt" ? "화면 클릭 → 마우스 조준 · 좌클릭 발사" : "화면 클릭 → 마우스로 시점 이동"}
+              </div>
+            )}
           </div>
         )}
 
-        <div className="game-action-controls absolute bottom-3 right-3 z-10 flex flex-col items-end gap-2" role="toolbar" aria-label="게임 조작">
-          <button
-            type="button"
-            aria-keyshortcuts="H"
-            className="shortcut-control hud-button bg-black/50"
-            onClick={() => setHelp(true)}
-          >
-            <span className="shortcut-key-badge" aria-hidden="true">H</span>
-            도움말
-          </button>
-          {myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
+        <div className="game-action-controls absolute bottom-3 right-3 z-10 flex flex-col items-end gap-1.5" role="toolbar" aria-label="게임 조작">
+          <div className="flex gap-1.5" role="group" aria-label="행동">
             <button
               type="button"
-              aria-keyshortcuts="F"
-              className={`shortcut-control hud-button ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
-              onClick={() => setPaintOpen((v) => !v)}
+              aria-keyshortcuts="H"
+              className="shortcut-control hud-button bg-black/50"
+              onClick={() => setHelp(true)}
             >
-              <span className="shortcut-key-badge" aria-hidden="true">F</span>
-              {paintOpen ? "페인트 ON" : "페인트"}
+              <span className="shortcut-key-badge" aria-hidden="true">H</span>
+              도움말
             </button>
-          )}
-          {hud.phase !== "reveal" && !(myRole === "hunter" && hud.phase === "hunt") && (
-            <div className="pose-action-row flex flex-wrap justify-end gap-1.5 pt-2" role="group" aria-label="자세 선택">
+            {canTaunt && (
+              <button
+                type="button"
+                aria-keyshortcuts="T"
+                title="휘파람으로 술래를 유인합니다 (5초마다)"
+                className="shortcut-control hud-button desktop-only bg-black/50"
+                onClick={() => tauntRef.current()}
+              >
+                <span className="shortcut-key-badge" aria-hidden="true">T</span>
+                도발
+              </button>
+            )}
+            {canWatch && (
+              <button
+                type="button"
+                aria-keyshortcuts="V"
+                aria-pressed={watching}
+                className={`shortcut-control hud-button desktop-only ${watching ? "bg-lime text-black" : "bg-black/50"}`}
+                onClick={toggleWatching}
+              >
+                <span className="shortcut-key-badge" aria-hidden="true">V</span>
+                {watching ? "관전 중" : "관전"}
+              </button>
+            )}
+            {myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
+              <button
+                type="button"
+                aria-keyshortcuts="F"
+                aria-pressed={paintOpen}
+                className={`shortcut-control hud-button ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
+                onClick={() => setPaintOpen((v) => !v)}
+              >
+                <span className="shortcut-key-badge" aria-hidden="true">F</span>
+                페인트
+              </button>
+            )}
+          </div>
+          {showPoses && (
+            <div className="pose-action-row flex w-[29.5rem] max-w-full flex-wrap justify-end gap-1.5 pt-1.5" role="group" aria-label="자세 선택">
               {POSES.map((p, index) => (
                 <button
                   key={p.id}
                   type="button"
                   aria-keyshortcuts={POSE_KEYS[index]}
                   aria-label={p.label}
+                  aria-pressed={me?.pose === p.id}
                   title={`${p.hint} · ${POSE_KEYS[index]} 키`}
                   onClick={() => {
                     const w = worldRef.current;
