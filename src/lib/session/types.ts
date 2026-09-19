@@ -54,6 +54,8 @@ function readSnap(p: SessionPlayer): PlayerSnap {
     alive: p.get("alive") !== false,
     shootSeq: Number(p.get("shootSeq") ?? 0),
     moving: Boolean(p.get("moving")),
+    roughness: typeof p.get("roughness") === "number" ? (p.get("roughness") as number) : 0.7,
+    bodySize: (["petit", "normal", "plump"] as const).includes(p.get("bodySize") as never) ? (p.get("bodySize") as PlayerSnap["bodySize"]) : "normal",
   };
 }
 
@@ -66,7 +68,7 @@ export function hudSignature(snaps: PlayerSnap[]): string {
   return snaps
     .map(
       (p) =>
-        `${p.id}|${p.name}|${p.ready ? 1 : 0}|${p.pose}|${p.fill}|${p.camoScore ?? 0}|${p.presenceAt ?? 0}|${p.blobs.length}`,
+        `${p.id}|${p.name}|${p.ready ? 1 : 0}|${p.pose}|${p.fill}|${p.camoScore ?? 0}|${p.presenceAt ?? 0}|${p.blobs.length}|${p.bodySize ?? "normal"}`,
     )
     .join(";");
 }

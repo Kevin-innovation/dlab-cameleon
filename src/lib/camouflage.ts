@@ -46,7 +46,19 @@ function paintedColorMatch(fill: string, blobs: PaintBlob[], targetColor: string
   return Math.round((colorMatch(fill, targetColor) * baseWeight + strokeMatch * strokeWeight) / (baseWeight + strokeWeight));
 }
 
-export function camouflageMeter(fill: string, blobs: PaintBlob[], targetColor: string): CamouflageMeter {
+/** 0..1 how well the body's surface finish matches the sampled surface (undefined target = neutral). */
+export function materialMatch(roughness: number | undefined, targetRoughness: number | undefined): number {
+  if (roughness === undefined || targetRoughness === undefined) return 0.7;
+  return Math.max(0, 1 - Math.abs(roughness - targetRoughness) / 0.6);
+}
+
+export function camouflageMeter(
+  fill: string,
+  blobs: PaintBlob[],
+  targetColor: string,
+  roughness?: number,
+  targetRoughness?: number,
+): CamouflageMeter {
   if (!targetColor) {
     return {
       score: null,
@@ -58,7 +70,9 @@ export function camouflageMeter(fill: string, blobs: PaintBlob[], targetColor: s
   }
   const match = paintedColorMatch(fill, blobs, targetColor);
   const coverage = paintCoverage(fill, blobs);
-  const score = Math.round(match * (0.25 + coverage / 100 * 0.75));
+  // Colour and coverage carry the score; a wrong finish (matte body on a glossy wall) costs up to 15%.
+  const finish = materialMatch(roughness, targetRoughness);
+  const score = Math.round(match * (0.25 + (coverage / 100) * 0.75) * (0.85 + 0.15 * finish));
   if (score >= 86) {
     return { score, colorMatch: match, coverage, label: "완벽한 위장", detail: "색과 칠한 범위가 모두 잘 맞습니다." };
   }
@@ -66,7 +80,13 @@ export function camouflageMeter(fill: string, blobs: PaintBlob[], targetColor: s
     return { score, colorMatch: match, coverage, label: "좋은 위장", detail: "자세를 표면 형태에 맞추면 더 자연스럽습니다." };
   }
   if (score >= 42) {
-    return { score, colorMatch: match, coverage, label: "조금 어색함", detail: "추천 색을 적용하거나 빈 곳을 더 칠해 보세요." };
+    return {
+      score,
+      colorMatch: match,
+      coverage,
+      label: "조금 어색함",
+      detail: finish < 0.5 ? "표면 광택이 안 맞습니다. 재질 슬라이더를 추천값에 맞추세요." : "추천 색을 적용하거나 빈 곳을 더 칠해 보세요.",
+    };
   }
   return { score, colorMatch: match, coverage, label: "눈에 띔", detail: "표면 색과 몸 색의 차이가 큽니다." };
 }

@@ -53,6 +53,7 @@ export function emptyRoom(): RoomState {
     forcedTauntSec: DEFAULT_FORCED_TAUNT_SEC,
     hunterTps: true,
     listWhilePlaying: true,
+    allowBodySizes: true,
     hunterCount: 1,
     ammoEnabled: false,
     ammoCount: DEFAULT_AMMO,
@@ -79,6 +80,7 @@ export type RoomConfigPatch = Partial<
     | "forcedTauntSec"
     | "hunterTps"
     | "listWhilePlaying"
+    | "allowBodySizes"
     | "ammoEnabled"
     | "ammoCount"
   >
@@ -167,6 +169,7 @@ export function sanitizeRoom(input: RoomState): RoomState {
     forcedTauntSec: Math.floor(bounded(source.forcedTauntSec, defaults.forcedTauntSec, FORCED_TAUNT_MIN_SEC, FORCED_TAUNT_MAX_SEC)),
     hunterTps: source.hunterTps !== false,
     listWhilePlaying: source.listWhilePlaying !== false,
+    allowBodySizes: source.allowBodySizes !== false,
     hunterCount: Math.floor(bounded(source.hunterCount, defaults.hunterCount, 1, 3)),
     ammoEnabled: Boolean(source.ammoEnabled),
     ammoCount: Math.floor(bounded(source.ammoCount, defaults.ammoCount, AMMO_MIN, AMMO_MAX)),

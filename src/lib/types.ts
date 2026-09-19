@@ -1,4 +1,4 @@
-export type Pose = "stand" | "crouch" | "sit" | "lie" | "stretch" | "ball" | "stick";
+export type Pose = "stand" | "crouch" | "sit" | "lie" | "stretch" | "ball" | "stick" | "lean" | "huddle" | "spread" | "upside";
 
 export type Phase = "lobby" | "prepare" | "hide" | "hunt" | "reveal" | "result";
 
@@ -215,6 +215,8 @@ export type RoomState = {
   hunterTps: boolean;
   /** Keep the room in the public list while a round is running (else it hides until the lobby). */
   listWhilePlaying: boolean;
+  /** Host allows petit/plump bodies (original: Petit only if the host allows). */
+  allowBodySizes: boolean;
   hunterCount: number;
   ammoEnabled: boolean;
   ammoCount: number;
@@ -245,6 +247,17 @@ export type PlayerSnap = {
   shootSeq: number;
   /** True while the body has moved in the last ~0.4s; running targets are free to shoot at. */
   moving?: boolean;
+  /** Surface finish 0 (glossy) .. 1 (matte); matched against the sampled surface. */
+  roughness?: number;
+  bodySize?: BodySize;
+};
+
+export type BodySize = "petit" | "normal" | "plump";
+/** Visual/physics scale per body size: xz = footprint, y = height. */
+export const BODY_SCALE: Record<BodySize, { xz: number; y: number }> = {
+  petit: { xz: 0.5, y: 0.5 },
+  normal: { xz: 1, y: 1 },
+  plump: { xz: 1.3, y: 1 },
 };
 
 export type ChatMessage = {
@@ -263,4 +276,8 @@ export const POSES: { id: Pose; label: string; hint: string }[] = [
   { id: "stretch", label: "늘이기", hint: "문틀·파이프" },
   { id: "ball", label: "공", hint: "원형 소품" },
   { id: "stick", label: "붙기", hint: "벽·가구 면" },
+  { id: "lean", label: "기대기", hint: "기둥·벽 모서리" },
+  { id: "huddle", label: "웅크리기", hint: "상자·의자 밑" },
+  { id: "spread", label: "팔 벌리기", hint: "넓은 벽면·액자" },
+  { id: "upside", label: "거꾸로", hint: "천장·선반 밑" },
 ];

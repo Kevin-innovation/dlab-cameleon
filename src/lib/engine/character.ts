@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { WHITE } from "../config";
-import { BODY_PARTS, type BodyPart, type PaintBlob, type Pose } from "../types";
+import { BODY_PARTS, BODY_SCALE, type BodyPart, type BodySize, type PaintBlob, type Pose } from "../types";
 
 export type PartLayer = {
   id: BodyPart;
@@ -20,6 +20,8 @@ export type CharacterRig = {
   fill: string;
   blobs: PaintBlob[];
   stealthOpacity: number;
+  roughness: number;
+  bodySize: BodySize;
   pose: Pose;
   paintSig: string;
   ghost: boolean;
@@ -252,6 +254,8 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     fill: WHITE,
     blobs: [],
     stealthOpacity: 1,
+    roughness: 0.7,
+    bodySize: "normal",
     pose: "stand",
     paintSig: "",
     ghost: false,
@@ -278,6 +282,18 @@ export function applyPaint(rig: CharacterRig, fill: string, blobs: PaintBlob[]) 
   }
 }
 
+/** Surface finish of the painted body; matched by hunters against the sampled wall. */
+export function applyFinish(rig: CharacterRig, roughness: number) {
+  const next = Math.max(0, Math.min(1, roughness));
+  if (Math.abs(rig.roughness - next) < 0.01) return;
+  rig.roughness = next;
+  for (const part of Object.values(rig.parts)) {
+    const mat = part.mesh.material as THREE.MeshStandardMaterial;
+    mat.roughness = 0.15 + next * 0.8;
+    mat.metalness = (1 - next) * 0.25;
+  }
+}
+
 export function setCamouflageLook(rig: CharacterRig, opacity: number) {
   const next = Math.max(0.24, Math.min(1, opacity));
   if (Math.abs(rig.stealthOpacity - next) < 0.015) return;
@@ -291,12 +307,29 @@ export function setCamouflageLook(rig: CharacterRig, opacity: number) {
   }
 }
 
+/** Petit/Normal/Plump body: scales the painted body (not the name tag) and re-applies the pose on top. */
+export function applyBodySize(rig: CharacterRig, size: BodySize) {
+  if (rig.bodySize === size) return;
+  rig.bodySize = size;
+  const scale = BODY_SCALE[size];
+  rig.nameSprite.position.y = 2.05 * scale.y;
+  rig.ghostBadge.position.y = 2.42 * scale.y;
+  applyPose(rig, rig.pose);
+}
+
 export function applyPose(rig: CharacterRig, pose: Pose) {
   rig.pose = pose;
   const b = rig.body;
   b.rotation.set(0, 0, 0);
   b.scale.set(1, 1, 1);
   b.position.set(0, 0, 0);
+  applyPoseShape(b, pose);
+  const size = BODY_SCALE[rig.bodySize];
+  b.scale.set(b.scale.x * size.xz, b.scale.y * size.y, b.scale.z * size.xz);
+  b.position.set(b.position.x * size.xz, b.position.y * size.y, b.position.z * size.xz);
+}
+
+function applyPoseShape(b: THREE.Group, pose: Pose) {
   if (pose === "crouch") {
     b.scale.set(1.05, 0.62, 1.15);
   } else if (pose === "sit") {
@@ -314,6 +347,17 @@ export function applyPose(rig: CharacterRig, pose: Pose) {
   } else if (pose === "stick") {
     b.scale.set(1.28, 1.06, 0.08);
     b.position.z = 0;
+  } else if (pose === "lean") {
+    b.rotation.z = 0.32;
+    b.position.x = -0.18;
+  } else if (pose === "huddle") {
+    b.scale.set(0.9, 0.48, 0.9);
+    b.position.y = -0.22;
+  } else if (pose === "spread") {
+    b.scale.set(1.7, 1, 0.55);
+  } else if (pose === "upside") {
+    b.rotation.x = Math.PI;
+    b.position.y = 1.95;
   }
 }
 

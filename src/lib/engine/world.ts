@@ -6,6 +6,7 @@ import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, S
 import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
 import type { BodyPart, BoxDef, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, PropKind, RoomState } from "../types";
 import { hiderAlive, isGhost, isHunter } from "../round";
+import { BODY_SCALE, type BodySize } from "../types";
 import { lightLevelAt } from "../camouflage";
 import { ceilingAt } from "../ceiling";
 import {
@@ -21,6 +22,8 @@ import {
 } from "./collision";
 import {
   animateCharacter,
+  applyBodySize,
+  applyFinish,
   applyPaint,
   applyPose,
   createCharacter,
@@ -80,6 +83,8 @@ export class GameWorld {
     maxY: number;
     box: Collider;
   } | null = null;
+  /** Local player's body size; scales collision radius, height and camera eye height. */
+  bodySize: BodySize = "normal";
   /** Hunter the spectator camera is riding along with, if any. */
   private followId: string | null = null;
   /** Space attached us to the wall; ignore it for detaching until released. */
@@ -889,8 +894,9 @@ export class GameWorld {
     if (ghost && this.cling) this.cling = null;
     const k0 = input.keys;
     this.crouching = k0.has("control") && !this.cling && !input.paintOpen;
-    const r = poseRadius(this.cling ? "stick" : this.crouching ? "crouch" : pose);
-    const h = poseHeight(this.cling ? "stick" : this.crouching ? "crouch" : pose);
+    const body = BODY_SCALE[this.bodySize];
+    const r = poseRadius(this.cling ? "stick" : this.crouching ? "crouch" : pose) * body.xz;
+    const h = poseHeight(this.cling ? "stick" : this.crouching ? "crouch" : pose) * body.y;
     const feet = this.localY;
     const head = this.localY + h;
     if (!this.cling) {
@@ -1124,6 +1130,8 @@ export class GameWorld {
       const show = canSee(room, self, p) && !(opts.hideLocal && p.id === myId);
       rig.group.visible = show;
       applyPaint(rig, p.fill || WHITE, p.blobs || []);
+      applyFinish(rig, p.roughness ?? 0.7);
+      applyBodySize(rig, room.allowBodySizes === false ? "normal" : p.bodySize ?? "normal");
       if (rig.pose !== p.pose) applyPose(rig, p.pose);
       rig.visor.visible = isHunter(room, p.id) && room.phase !== "lobby" && !ghost;
       setNameVisible(
@@ -1159,8 +1167,8 @@ export class GameWorld {
           rig.group.position.x += (x - rig.group.position.x) * (ghost ? k : 1);
           rig.group.position.z += (z - rig.group.position.z) * (ghost ? k : 1);
         } else {
-          const rr = poseRadius(p.pose);
-          const hh = poseHeight(p.pose);
+          const rr = poseRadius(p.pose) * BODY_SCALE[rig.bodySize].xz;
+          const hh = poseHeight(p.pose) * BODY_SCALE[rig.bodySize].y;
           const slid = moveWithSlide(
             rig.group.position.x,
             rig.group.position.z,
@@ -1270,7 +1278,7 @@ export class GameWorld {
     if (opts.fps && !this.hunterTps) {
       this.viewBob += opts.moving ? 0.26 : 0.05;
       const bob = !this.reducedMotion && opts.moving ? Math.sin(this.viewBob) * 0.028 : 0;
-      this.camEye.set(this.localX, (this.crouching ? 1.08 : 1.58) + this.localY + bob, this.localZ);
+      this.camEye.set(this.localX, (this.crouching ? 1.08 : 1.58) * BODY_SCALE[this.bodySize].y + this.localY + bob, this.localZ);
       this.camEye.y = Math.min(this.camEye.y, this.map.ceiling - 0.3);
       this.camera.position.copy(this.camEye);
       this.camRay.set(this.camEye, this.forward);
@@ -1296,7 +1304,7 @@ export class GameWorld {
     this.fpGun.visible = false;
     this.camera.fov = 70;
     const want = opts.paintOpen ? 2.4 : 4.0;
-    this.camEye.set(this.localX, (this.crouching ? 1.05 : 1.48) + this.localY, this.localZ);
+    this.camEye.set(this.localX, (this.crouching ? 1.05 : 1.48) * BODY_SCALE[this.bodySize].y + this.localY, this.localZ);
     this.camEye.y = Math.min(this.camEye.y, this.map.ceiling - 0.3);
     this.camPos.copy(this.camEye).addScaledVector(this.forward, -want);
     this.camPos.y = Math.max(0.55, this.camPos.y);
@@ -1439,13 +1447,21 @@ export class GameWorld {
     return { calls: info.calls, triangles: info.triangles, meshes: this.mapGroup.children.length };
   }
 
-  sampleWorld(clientX: number, clientY: number): string | null {
+  /** Colour and surface finish under the pointer; the finish feeds the material axis of camouflage. */
+  sampleSurface(clientX: number, clientY: number): { color: string; roughness: number } | null {
     this.setPointer(clientX, clientY);
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const hits = this.raycaster.intersectObjects(this.mapGroup.children, true);
     const hit = hits.find((h) => (h.object as THREE.Mesh).isMesh);
     if (!hit) return null;
     const mesh = hit.object as THREE.Mesh;
+    const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
+    const roughness = typeof material?.roughness === "number" ? Math.max(0, Math.min(1, material.roughness)) : 0.7;
+    const color = this.colorFromHit(mesh, hit);
+    return color ? { color, roughness } : null;
+  }
+
+  private colorFromHit(mesh: THREE.Mesh, hit: THREE.Intersection): string | null {
     const canvas = mesh.userData.canvas as HTMLCanvasElement | undefined;
     if (canvas && hit.uv) {
       const ctx = canvas.getContext("2d");

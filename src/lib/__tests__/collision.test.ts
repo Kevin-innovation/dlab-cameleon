@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hunterVisibility, lightLevelAt } from "../camouflage";
+import { camouflageMeter, hunterVisibility, lightLevelAt, materialMatch } from "../camouflage";
 import { blocked, circleHitsBox, moveWithSlide, nearestSurface, resolveStuck } from "../engine/collision";
 import type { Collider } from "../types";
 
@@ -95,5 +95,17 @@ describe("hunterVisibility light factor", () => {
     expect(lightLevelAt(map, 5, 5)).toBe(0.2);
     expect(lightLevelAt(map, 15, 5)).toBe(0.6);
     expect(lightLevelAt(map, 50, 50)).toBe(0.6);
+  });
+});
+
+describe("material finish", () => {
+  it("rewards a matching roughness and penalises a mismatch by up to 15%", () => {
+    expect(materialMatch(0.3, 0.3)).toBe(1);
+    expect(materialMatch(0.1, 0.9)).toBe(0);
+    expect(materialMatch(undefined, 0.5)).toBe(0.7);
+    const good = camouflageMeter("#6b8f71", [], "#6b8f71", 0.8, 0.8).score ?? 0;
+    const bad = camouflageMeter("#6b8f71", [], "#6b8f71", 0.1, 0.8).score ?? 0;
+    expect(good).toBeGreaterThan(bad);
+    expect(bad / good).toBeGreaterThan(0.84);
   });
 });

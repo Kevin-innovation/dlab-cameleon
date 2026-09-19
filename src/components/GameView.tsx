@@ -23,6 +23,8 @@ import {
 import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
 import { camouflageMeter, tagRangeForCamouflage } from "@/lib/camouflage";
+import { pushRecentColor } from "@/lib/color";
+import { ColorWheel } from "./game/ColorWheel";
 import { getMap } from "@/lib/maps";
 import { joystickInput, MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
 import { GameInputState } from "@/lib/input";
@@ -89,7 +91,13 @@ const KEY_BY_CODE: Record<string, string> = {
   Digit6: "6",
   Digit7: "7",
   Digit8: "8",
+  Digit9: "9",
+  Digit0: "0",
+  Minus: "-",
 };
+
+/** Keyboard shortcut for each pose in POSES order (11 poses → 1‥9, 0, -). */
+export const POSE_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-"] as const;
 
 function normalizeKey(e: KeyboardEvent) {
   return KEY_BY_CODE[e.code] ?? e.key.toLowerCase();
@@ -122,6 +130,13 @@ export function GameView({
   const [locked, setLocked] = useState(false);
   const [color, setColor] = useState("#6b8f71");
   const [targetColor, setTargetColor] = useState("");
+  const [roughness, setRoughness] = useState(0.7);
+  const [recentColors, setRecentColors] = useState<string[]>([]);
+  const pickColor = useCallback((hex: string) => {
+    setColor(hex);
+    setRecentColors((cur) => pushRecentColor(cur, hex));
+  }, []);
+  const [targetRoughness, setTargetRoughness] = useState<number | null>(null);
   const [brush, setBrush] = useState(14);
   const [tool, setTool] = useState<Tool>("dropper");
   const [help, setHelp] = useState(false);
@@ -291,8 +306,9 @@ export function GameView({
           world.cycleFollow(session.getRoom().hunterIds);
           return;
         }
-        if (/^[1-7]$/.test(k) && !(k === "5" && session.getRoom().phase === "lobby")) {
-          const pose = POSES[Number(k) - 1]?.id;
+        const poseIndex = (POSE_KEYS as readonly string[]).indexOf(k);
+        if (poseIndex >= 0 && !(k === "5" && session.getRoom().phase === "lobby")) {
+          const pose = POSES[poseIndex]?.id;
           if (pose) applyPosePick(session, world, pose);
         }
         if (k === "c" && !watchingRef.current) {
@@ -313,11 +329,12 @@ export function GameView({
         if (k === "b") setTool("brush");
         if (paintOpenRef.current && (k === " " || k === "space")) {
           e.preventDefault();
-          const c = world.sampleWorld(lastMx, lastMy);
-          if (c) {
-            setColor(c);
-            colorRef.current = c;
-            setTargetColor(c);
+          const surface = world.sampleSurface(lastMx, lastMy);
+          if (surface) {
+            pickColor(surface.color);
+            colorRef.current = surface.color;
+            setTargetColor(surface.color);
+            setTargetRoughness(surface.roughness);
             setTool("brush");
             toolRef.current = "brush";
           }
@@ -491,11 +508,12 @@ export function GameView({
 
       if (paintOpenRef.current) {
         if (toolRef.current === "dropper") {
-          const c = world.sampleWorld(e.clientX, e.clientY);
-          if (c) {
-            setColor(c);
-            colorRef.current = c;
-            setTargetColor(c);
+          const surface = world.sampleSurface(e.clientX, e.clientY);
+          if (surface) {
+            pickColor(surface.color);
+            colorRef.current = surface.color;
+            setTargetColor(surface.color);
+            setTargetRoughness(surface.roughness);
             setTool("brush");
             toolRef.current = "brush";
           }
@@ -728,6 +746,7 @@ export function GameView({
           frameKeys.has("arrowdown") ||
           frameKeys.has("arrowleft") ||
           frameKeys.has("arrowright"));
+      world.bodySize = room.allowBodySizes === false ? "normal" : me?.bodySize ?? "normal";
       const moved = world.stepLocal(
         dt,
         { keys: frameKeys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
@@ -926,7 +945,7 @@ export function GameView({
       viewActiveRef.current = false;
       worldRef.current = null;
     };
-  }, [session, toggleNearbyDoor]);
+  }, [session, toggleNearbyDoor, pickColor]);
 
   useEffect(() => {
     const c = previewRef.current;
@@ -941,7 +960,19 @@ export function GameView({
 
   const me = people.find((p) => p.id === session.myId());
   const myRole = me ? roleOf(hud, me.id) : "spectator";
-  const camouflage = camouflageMeter(me?.fill ?? WHITE, me?.blobs ?? [], targetColor);
+  const camouflage = camouflageMeter(
+    me?.fill ?? WHITE,
+    me?.blobs ?? [],
+    targetColor,
+    me?.roughness ?? roughness,
+    targetRoughness ?? undefined,
+  );
+  // Surface finish is part of the disguise; publish it like fill/blobs so hunters' visibility math sees it.
+  useEffect(() => {
+    if (Number(session.me().get("roughness") ?? 0.7) !== roughness) {
+      session.me().set("roughness", roughness, true);
+    }
+  }, [roughness, session]);
   useEffect(() => {
     const score = camouflage.score ?? 0;
     if (Number(session.me().get("camoScore") ?? 0) !== score) {
@@ -1380,9 +1411,9 @@ export function GameView({
                 <button
                   key={p.id}
                   type="button"
-                  aria-keyshortcuts={String(index + 1)}
+                  aria-keyshortcuts={POSE_KEYS[index]}
                   aria-label={p.label}
-                  title={`${p.hint} · ${index + 1}번 키`}
+                  title={`${p.hint} · ${POSE_KEYS[index]} 키`}
                   onClick={() => {
                     const w = worldRef.current;
                     if (!w) {
@@ -1393,7 +1424,7 @@ export function GameView({
                   }}
                   className={`shortcut-control rounded-lg px-2 py-1 text-[11px] ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
                 >
-                  <span className="shortcut-key-badge" aria-hidden="true">{index + 1}</span>
+                  <span className="shortcut-key-badge" aria-hidden="true">{POSE_KEYS[index]}</span>
                   {p.label}
                 </button>
               ))}
@@ -1459,16 +1490,21 @@ export function GameView({
                 </button>
               ))}
             </div>
-            <label className="mt-2 flex items-center gap-2 text-xs">
-              색
+            <ColorWheel value={color} onChange={pickColor} recent={recentColors} />
+            <label className="mt-1 flex items-center gap-2 whitespace-nowrap text-xs">
+              재질
               <input
-                type="color"
-                name="paintColor"
+                type="range"
+                name="surfaceRoughness"
                 autoComplete="off"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="h-8 w-full cursor-pointer bg-transparent"
+                min={0}
+                max={100}
+                value={Math.round(roughness * 100)}
+                onChange={(e) => setRoughness(Number(e.target.value) / 100)}
+                aria-valuetext={finishLabel(roughness)}
+                className="w-full"
               />
+              <span className="w-10 shrink-0 text-right text-[10px] text-white/70">{finishLabel(roughness)}</span>
             </label>
             <label className="mt-1 flex items-center gap-2 text-xs">
               붓
@@ -1512,14 +1548,26 @@ export function GameView({
                   style={{ backgroundColor: targetColor || "#2a332d" }}
                   aria-hidden="true"
                 />
-                <span>{targetColor ? `찍은 표면 ${targetColor}` : "찍은 표면 없음"}</span>
+                <span>
+                  {targetColor ? `찍은 표면 ${targetColor}` : "찍은 표면 없음"}
+                  {targetRoughness !== null ? ` · ${finishLabel(targetRoughness)}` : ""}
+                </span>
               </div>
+              {targetRoughness !== null && Math.abs(targetRoughness - roughness) > 0.08 && (
+                <button
+                  type="button"
+                  className="mt-2 w-full rounded-lg bg-white/15 py-1.5 text-[11px] font-semibold"
+                  onClick={() => setRoughness(targetRoughness)}
+                >
+                  추천 재질로 맞추기 ({finishLabel(targetRoughness)})
+                </button>
+              )}
               {targetColor && (
                 <button
                   type="button"
                   className="mt-2 w-full rounded-lg bg-lime/90 py-1.5 text-[11px] font-semibold text-black"
                   onClick={() => {
-                    setColor(targetColor);
+                    pickColor(targetColor);
                     colorRef.current = targetColor;
                     session.me().set("fill", targetColor, true);
                     session.me().set("blobs", [], true);
@@ -1566,14 +1614,17 @@ export function GameView({
         />
       )}
 
-      <RoomSocialPanel
-        session={session}
-        room={hud}
-        people={people}
-        nowTick={nowTick}
-        open={socialVisible}
-        onToggle={() => setSocialOpen((value) => !value)}
-      />
+      {/* The chat toggle shares the top-right corner with the paint panel; yield to the palette while it is open. */}
+      {(!paintOpen || socialVisible) && (
+        <RoomSocialPanel
+          session={session}
+          room={hud}
+          people={people}
+          nowTick={nowTick}
+          open={socialVisible}
+          onToggle={() => setSocialOpen((value) => !value)}
+        />
+      )}
 
       {help && (
         <AccessibleModal titleId="game-help-title" onClose={() => setHelp(false)} panelClassName="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-[#17241c] p-6 shadow-2xl">
@@ -1887,6 +1938,14 @@ function applyPosePick(session: Session, world: GameWorld, pose: Pose) {
   }
   world.exitCling();
   session.me().set("pose", pose, true);
+}
+
+/** Human label for a 0‥1 roughness value (0 = mirror-like, 1 = chalky). */
+function finishLabel(roughness: number) {
+  if (roughness < 0.25) return "광택";
+  if (roughness < 0.55) return "반광";
+  if (roughness < 0.8) return "무광";
+  return "거침";
 }
 
 function cyclePose(session: Session, world: GameWorld, dir: number) {

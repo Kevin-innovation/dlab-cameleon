@@ -1,6 +1,6 @@
 # 원작 MECCHA CHAMELEON 대비 격차 분석 · 페이즈 업 계획
 
-상태: R1·R2 완료 (2026-09-19) · R4 진행
+상태: R1·R2·R4 완료 (2026-09-20) · R3(클론)·R5(더블/RCR) 보류
 선행 문서: [meccha-reference.md](meccha-reference.md), [gameplay-contract.md](gameplay-contract.md)
 
 ## 0. 조사 방법과 신뢰도
@@ -111,11 +111,11 @@
 
 | ID | 태스크 | 완료 조건 |
 |---|---|---|
-| R4-T1 | `PlayerSnap`에 `roughness`(0~1) 추가, 페인트 패널 슬라이더. 표면 샘플 시 표면 재질(패턴별 기본 거칠기표)도 함께 저장 | — |
-| R4-T2 | `camouflageMeter`에 재질 일치도 축 추가(색 0.6 / 범위 0.25 / 재질 0.15). `hunterVisibility`에 반영 | 테스트 |
-| R4-T3 | 색 선택: 색상환 + HSV 슬라이더 + 최근 색 팔레트(모바일 우선) | 캡처 |
-| R4-T4 | 체형 크기 옵션 Petit(0.5)·Normal·Plump(1.25), 호스트 허용 토글. 충돌 반지름·자세 높이·카메라 높이 스케일 | 테스트 |
-| R4-T5 | 자세 4종 추가(11종): 기대기, 웅크리기, 팔 벌리기, 거꾸로 | — |
+| R4-T1 | ✅ `PlayerSnap.roughness`(0~1), 페인트 패널 "재질" 슬라이더. 스포이드가 표면 색과 함께 재질(`MeshStandardMaterial.roughness`)을 샘플하고 "추천 재질로 맞추기" 버튼 제공 | ✅ |
+| R4-T2 | ✅ `materialMatch` 축(점수 × 0.85~1.0)을 `camouflageMeter`에 추가, 원격 캐릭터 재질은 `applyFinish`로 렌더 | ✅ `collision.test.ts` |
+| R4-T3 | ✅ `ColorWheel`: 채도·명도 캔버스 + 색상 슬라이더(키보드 ←→) + HEX 입력 + 최근 색 8칸(`src/lib/color.ts`) | ✅ `color.test.ts` + 캡처 |
+| R4-T4 | ✅ 몸 크기 쁘띠(0.5)·보통·통통(가로 1.3). 대기실에서 선택, 호스트 "몸 크기 변경 허용" 토글. 충돌 반지름·높이·카메라 눈높이·원격 보간 모두 `BODY_SCALE` | ✅ |
+| R4-T5 | ✅ 자세 11종(기대기 8, 웅크리기 9, 팔 벌리기 0, 거꾸로 -) | ✅ |
 
 ### R5 — 모드 추가
 

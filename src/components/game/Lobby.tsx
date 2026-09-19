@@ -4,7 +4,13 @@ import { memo, useState } from "react";
 import { SCORE_HUNT_WIN, SCORE_SURVIVE, SCORE_TAG } from "@/lib/config";
 import { MAPS } from "@/lib/maps";
 import type { Session } from "@/lib/session";
-import type { PlayerSnap, RoomState } from "@/lib/types";
+import { BODY_SCALE, type BodySize, type PlayerSnap, type RoomState } from "@/lib/types";
+
+const BODY_SIZES: { id: BodySize; label: string; hint: string }[] = [
+  { id: "petit", label: "쁘띠", hint: "절반 크기 · 좁은 틈" },
+  { id: "normal", label: "보통", hint: "기본" },
+  { id: "plump", label: "통통", hint: "가로 1.3배 · 큰 가구" },
+];
 
 export const Lobby = memo(function Lobby({
   session,
@@ -76,6 +82,29 @@ export const Lobby = memo(function Lobby({
           );
         })}
       </ul>
+      {room.allowBodySizes !== false && (
+        <div className="mt-3 rounded-2xl bg-black/25 p-3">
+          <div id="body-size-label" className="text-xs text-white/60">몸 크기</div>
+          <div className="mt-1 grid grid-cols-3 gap-1.5" role="group" aria-labelledby="body-size-label">
+            {BODY_SIZES.map((b) => {
+              const active = (me?.bodySize ?? "normal") === b.id;
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  aria-pressed={active}
+                  title={b.hint}
+                  onClick={() => session.me().set("bodySize", b.id, true)}
+                  className={`rounded-lg py-1.5 text-xs ${active ? "bg-lime text-black" : "bg-white/10"}`}
+                >
+                  {b.label}
+                  <span className="block text-[10px] opacity-70">×{BODY_SCALE[b.id].xz}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="mt-4 flex gap-2">
         <button
           type="button"
@@ -245,6 +274,19 @@ export const Lobby = memo(function Lobby({
                 onChange={(e) => session.patchRoom({ hunterTps: e.target.checked })}
               />
               술래 3인칭 허용
+            </span>
+          </label>
+          <label className="flex items-center justify-between rounded-xl bg-white/8 p-2 text-sm">
+            <span>
+              <input
+                type="checkbox"
+                name="allowBodySizes"
+                className="mr-2 accent-lime"
+                disabled={!host}
+                checked={room.allowBodySizes !== false}
+                onChange={(e) => session.patchRoom({ allowBodySizes: e.target.checked })}
+              />
+              몸 크기 변경 허용
             </span>
           </label>
           {session.kind === "online" && (

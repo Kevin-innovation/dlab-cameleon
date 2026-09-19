@@ -1,5 +1,6 @@
 import { auditMaps } from "../src/lib/gameplay-audit";
 import { droppedExtraCover, MAPS } from "../src/lib/maps";
+import { AMMO_MIN } from "../src/lib/config";
 import { beginRound, emptyRoom, sanitizeRoom } from "../src/lib/round";
 
 const report = auditMaps(MAPS);
@@ -34,7 +35,7 @@ if (
   boundedRoom.hideTime !== 180 ||
   boundedRoom.huntTime !== 300 ||
   boundedRoom.hunterCount !== 3 ||
-  boundedRoom.ammoCount !== 3 ||
+  boundedRoom.ammoCount !== AMMO_MIN ||
   singlePlayerRound.phase !== "lobby"
 ) {
   errors.push({ severity: "error", code: "ROUND_CONTRACT_FAILED", message: "방 설정 정규화 또는 1인 라운드 차단 계약이 깨졌습니다." });
