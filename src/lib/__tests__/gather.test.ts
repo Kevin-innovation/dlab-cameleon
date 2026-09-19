@@ -63,8 +63,21 @@ describe("rouletteState", () => {
   });
 
   it("never lands on a hider even for the last spinning frame", () => {
-    const end = rouletteState(room, start + (room.prepareTime * 1000 - 1600));
+    const spinEnd = start + (room.prepareTime * 1000 - 1600);
+    const end = rouletteState(room, spinEnd);
     expect(end.order[end.index]).toBe("c");
+    const lastFrame = rouletteState(room, spinEnd - 1);
+    expect(lastFrame.settled).toBe(false);
+    expect(lastFrame.order[lastFrame.index]).toBe("c");
+  });
+
+  it("blinks the landed name before announcing the hunter", () => {
+    const spinEnd = start + (room.prepareTime * 1000 - 1600);
+    expect(rouletteState(room, spinEnd - 1).stage).toBe("spin");
+    const lock = rouletteState(room, spinEnd + 300);
+    expect(lock.stage).toBe("lock");
+    expect(lock.settledFor).toBe(300);
+    expect(rouletteState(room, spinEnd + 1200).stage).toBe("settled");
   });
 
   it("is identical for every client at the same time", () => {

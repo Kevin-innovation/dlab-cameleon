@@ -150,8 +150,10 @@ export function resolveStuck(
   z = clamp(z, m, bounds.d - m);
   const pad = r + 0.06;
   for (let iter = 0; iter < 10; iter++) {
+    let pushed = false;
     for (const b of boxes) {
       if (!solidAt(x, z, r, feetY, headY, b)) continue;
+      pushed = true;
       const surface = closestSurface(x, z, b);
       const len = Math.hypot(surface.nx, surface.nz);
       if (len < 1e-5) {
@@ -166,6 +168,8 @@ export function resolveStuck(
     }
     x = clamp(x, m, bounds.w - m);
     z = clamp(z, m, bounds.d - m);
+    // Free of every box: the common case, so the remaining passes are skipped.
+    if (!pushed) break;
   }
   return { x, z };
 }

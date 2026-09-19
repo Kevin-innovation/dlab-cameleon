@@ -7,10 +7,67 @@ import type { Session } from "@/lib/session";
 import { BODY_SCALE, type BodySize, type PlayerSnap, type RoomState } from "@/lib/types";
 
 const BODY_SIZES: { id: BodySize; label: string; hint: string }[] = [
-  { id: "petit", label: "쁘띠", hint: "절반 크기 · 좁은 틈" },
+  { id: "petit", label: "쁘띠", hint: "절반 크기 · 느림 · 점수 60%" },
   { id: "normal", label: "보통", hint: "기본" },
-  { id: "plump", label: "통통", hint: "가로 1.3배 · 큰 가구" },
+  { id: "plump", label: "통통", hint: "가로 1.3배 · 빠름 · 점수 140%" },
 ];
+
+const FIELD_ROW = "flex min-w-0 items-center justify-between gap-2 rounded-lg bg-white/8 px-2 py-1.5";
+const FIELD_LABEL = "whitespace-nowrap text-xs text-white/85";
+const FIELD_INPUT = "w-12 bg-transparent text-right text-sm tabular-nums disabled:opacity-40";
+
+interface NumberFieldProps {
+  label: string;
+  name: string;
+  min: number;
+  max: number;
+  disabled: boolean;
+  value: number;
+  onChange: (value: number) => void;
+}
+
+/** One-line numeric option: label left, narrow field right, clamped to [min, max]. */
+function NumberField({ label, name, min, max, disabled, value, onChange }: NumberFieldProps) {
+  return (
+    <label className={FIELD_ROW}>
+      <span className={FIELD_LABEL}>{label}</span>
+      <input
+        type="number"
+        name={name}
+        autoComplete="off"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        disabled={disabled}
+        className={FIELD_INPUT}
+        value={value}
+        onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value) || min)))}
+      />
+    </label>
+  );
+}
+
+interface CheckRowProps {
+  label: string;
+  name: string;
+  hint?: string;
+  disabled: boolean;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  wide?: boolean;
+}
+
+function CheckRow({ label, name, hint, disabled, checked, onChange, wide }: CheckRowProps) {
+  return (
+    <label className={`${FIELD_ROW} ${wide ? "col-span-2" : ""}`} title={hint}>
+      <span className={FIELD_LABEL}>
+        <input type="checkbox" name={name} className="mr-2 accent-lime" disabled={disabled} checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        {label}
+      </span>
+      {hint && <span className="truncate text-[11px] text-white/50">{hint}</span>}
+    </label>
+  );
+}
 
 export const Lobby = memo(function Lobby({
   session,
@@ -48,13 +105,13 @@ export const Lobby = memo(function Lobby({
           <CopyCodeButton code={session.roomCode} />
         </div>
       )}
-      <p className="mt-2 text-sm text-white/65">맵에서 WASD 또는 가로 화면 조이스틱으로 이동해 보세요. 전원 준비 완료 후에만 방장이 시작할 수 있습니다.</p>
-      <ul className="mt-4 space-y-2" aria-label="참가자">
+      <p className="mt-1 truncate text-xs text-white/65">WASD로 둘러보기 · 전원 준비 후 방장이 시작</p>
+      <ul className="mt-3 space-y-1" aria-label="참가자">
         {people.map((p) => {
           const isMe = p.id === session.myId();
           const isRoomHost = room.hostId === p.id;
           return (
-            <li key={p.id} className="flex items-center justify-between gap-2 rounded-xl bg-white/5 px-3 py-2">
+            <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-sm">
               <span className="flex min-w-0 items-center gap-1.5">
                 {isRoomHost && <HostCrown />}
                 <span className="truncate">
@@ -83,7 +140,7 @@ export const Lobby = memo(function Lobby({
         })}
       </ul>
       {room.allowBodySizes !== false && (
-        <div className="mt-3 rounded-2xl bg-black/25 p-3">
+        <div className="mt-2 rounded-2xl bg-black/25 p-2.5">
           <div id="body-size-label" className="text-xs text-white/60">몸 크기</div>
           <div className="mt-1 grid grid-cols-3 gap-1.5" role="group" aria-labelledby="body-size-label">
             {BODY_SIZES.map((b) => {
@@ -98,14 +155,16 @@ export const Lobby = memo(function Lobby({
                   className={`rounded-lg py-1.5 text-xs ${active ? "bg-lime text-black" : "bg-white/10"}`}
                 >
                   {b.label}
-                  <span className="block text-[10px] opacity-70">×{BODY_SCALE[b.id].xz}</span>
+                  <span className="block text-[10px] opacity-70">
+                    ×{BODY_SCALE[b.id].xz} · 점수 {Math.round(BODY_SCALE[b.id].score * 100)}%
+                  </span>
                 </button>
               );
             })}
           </div>
         </div>
       )}
-      <div className="mt-4 flex gap-2">
+      <div className="mt-2 flex gap-2">
         <button
           type="button"
           className={`flex-1 rounded-full py-2 font-display ${me?.ready ? "bg-lime text-black" : "bg-white/10"}`}
@@ -117,9 +176,9 @@ export const Lobby = memo(function Lobby({
           나가기
         </button>
       </div>
-      <div className="mt-4 rounded-2xl bg-black/25 p-3">
+      <div className="mt-2 rounded-2xl bg-black/25 p-2.5">
           <div id="map-label" className="text-xs text-white/60">맵</div>
-          <div className="mt-1 grid grid-cols-1 gap-2" role="group" aria-labelledby="map-label">
+          <div className="mt-1 grid grid-cols-2 gap-1.5" role="group" aria-labelledby="map-label">
             {MAPS.map((m) => (
               <button
                 key={m.id}
@@ -127,22 +186,23 @@ export const Lobby = memo(function Lobby({
                 disabled={!host}
                 aria-pressed={room.mapId === m.id}
                 onClick={() => session.patchRoom({ mapId: m.id })}
-                className={`rounded-xl px-3 py-2 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
+                title={m.blurb}
+                className={`min-w-0 rounded-xl px-2.5 py-1.5 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
             >
-              <div className="font-display">
-                {m.name} · {m.difficulty}
+              <div className="truncate font-display text-sm">
+                {m.name} <span className="text-xs font-normal opacity-70">{m.difficulty}</span>
               </div>
-              <div className={`text-xs ${room.mapId === m.id ? "text-black/70" : "text-white/65"}`}>{m.blurb}</div>
+              <div className={`truncate text-[11px] ${room.mapId === m.id ? "text-black/70" : "text-white/60"}`}>{m.blurb}</div>
             </button>
           ))}
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <label className="rounded-xl bg-white/8 p-2">
-            모드
+        <div className="mt-2 grid grid-cols-2 gap-1.5 text-sm">
+          <label className={FIELD_ROW}>
+            <span className={FIELD_LABEL}>모드</span>
             <select
               name="mode"
               autoComplete="off"
-              className="mt-1 w-full bg-[#121c17] text-paper"
+              className="min-w-0 flex-1 bg-[#121c17] text-right text-xs text-paper"
               disabled={!host}
               value={room.mode}
               onChange={(e) => session.patchRoom({ mode: e.target.value as RoomState["mode"] })}
@@ -152,12 +212,12 @@ export const Lobby = memo(function Lobby({
             </select>
           </label>
           {session.kind === "practice" && (
-            <label className="rounded-xl bg-white/8 p-2">
-              술래 설정
+            <label className={FIELD_ROW}>
+              <span className={FIELD_LABEL}>술래</span>
               <select
                 name="hunterMode"
                 autoComplete="off"
-                className="mt-1 w-full bg-[#121c17] text-paper"
+                className="min-w-0 flex-1 bg-[#121c17] text-right text-xs text-paper"
                 value={room.hunterMode ?? "ai"}
                 onChange={(e) => {
                   const hunterMode = e.target.value as RoomState["hunterMode"];
@@ -167,146 +227,93 @@ export const Lobby = memo(function Lobby({
                   });
                 }}
               >
-                <option value="ai" className="bg-[#121c17] text-paper">AI 술래 (내가 숨기)</option>
+                <option value="ai" className="bg-[#121c17] text-paper">AI (내가 숨기)</option>
                 <option value="human" className="bg-[#121c17] text-paper">내가 술래</option>
                 <option value="random" className="bg-[#121c17] text-paper">랜덤</option>
               </select>
             </label>
           )}
-          <label className="rounded-xl bg-white/8 p-2">
-            술래 수
-            <input
-              type="number"
-              name="hunterCount"
-              autoComplete="off"
-              inputMode="numeric"
-              min={1}
-              max={3}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.hunterCount}
-              onChange={(e) => session.patchRoom({ hunterCount: Number(e.target.value) || 1 })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            역할 확인(초)
-            <input
-              type="number"
-              name="prepareTime"
-              autoComplete="off"
-              inputMode="numeric"
-              min={3}
-              max={20}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.prepareTime || 8}
-              onChange={(e) => session.patchRoom({ prepareTime: Math.max(3, Math.min(20, Number(e.target.value) || 8)) })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            위장(초)
-            <input
-              type="number"
-              name="hideTime"
-              autoComplete="off"
-              inputMode="numeric"
-              min={30}
-              max={180}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.hideTime}
-              onChange={(e) => session.patchRoom({ hideTime: Number(e.target.value) || 70 })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            수색(초)
-            <input
-              type="number"
-              name="huntTime"
-              autoComplete="off"
-              inputMode="numeric"
-              min={60}
-              max={300}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.huntTime}
-              onChange={(e) => session.patchRoom({ huntTime: Number(e.target.value) || 150 })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            공개 라운드(초)
-            <input
-              type="number"
-              name="revealTime"
-              autoComplete="off"
-              inputMode="numeric"
-              min={10}
-              max={60}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.revealTime || 30}
-              onChange={(e) => session.patchRoom({ revealTime: Math.max(10, Math.min(60, Number(e.target.value) || 30)) })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            강제 도발(초)
-            <input
-              type="number"
-              name="forcedTauntSec"
-              autoComplete="off"
-              inputMode="numeric"
-              min={15}
-              max={90}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.forcedTauntSec || 45}
-              onChange={(e) => session.patchRoom({ forcedTauntSec: Math.max(15, Math.min(90, Number(e.target.value) || 45)) })}
-            />
-          </label>
-          <label className="flex items-center justify-between rounded-xl bg-white/8 p-2 text-sm">
-            <span>
-              <input
-                type="checkbox"
-                name="hunterTps"
-                className="mr-2 accent-lime"
-                disabled={!host}
-                checked={room.hunterTps !== false}
-                onChange={(e) => session.patchRoom({ hunterTps: e.target.checked })}
-              />
-              술래 3인칭 허용
-            </span>
-          </label>
-          <label className="flex items-center justify-between rounded-xl bg-white/8 p-2 text-sm">
-            <span>
-              <input
-                type="checkbox"
-                name="allowBodySizes"
-                className="mr-2 accent-lime"
-                disabled={!host}
-                checked={room.allowBodySizes !== false}
-                onChange={(e) => session.patchRoom({ allowBodySizes: e.target.checked })}
-              />
-              몸 크기 변경 허용
-            </span>
-          </label>
+          <NumberField
+            label="술래 수"
+            name="hunterCount"
+            min={1}
+            max={3}
+            disabled={!host}
+            value={room.hunterCount}
+            onChange={(hunterCount) => session.patchRoom({ hunterCount })}
+          />
+          <NumberField
+            label="역할 확인(초)"
+            name="prepareTime"
+            min={3}
+            max={20}
+            disabled={!host}
+            value={room.prepareTime || 8}
+            onChange={(prepareTime) => session.patchRoom({ prepareTime })}
+          />
+          <NumberField
+            label="위장(초)"
+            name="hideTime"
+            min={30}
+            max={180}
+            disabled={!host}
+            value={room.hideTime}
+            onChange={(hideTime) => session.patchRoom({ hideTime })}
+          />
+          <NumberField
+            label="수색(초)"
+            name="huntTime"
+            min={60}
+            max={300}
+            disabled={!host}
+            value={room.huntTime}
+            onChange={(huntTime) => session.patchRoom({ huntTime })}
+          />
+          <NumberField
+            label="공개 라운드(초)"
+            name="revealTime"
+            min={5}
+            max={60}
+            disabled={!host}
+            value={room.revealTime || 30}
+            onChange={(revealTime) => session.patchRoom({ revealTime })}
+          />
+          <NumberField
+            label="강제 도발(초)"
+            name="forcedTauntSec"
+            min={15}
+            max={90}
+            disabled={!host}
+            value={room.forcedTauntSec || 45}
+            onChange={(forcedTauntSec) => session.patchRoom({ forcedTauntSec })}
+          />
+          <CheckRow
+            label="술래 3인칭"
+            name="hunterTps"
+            disabled={!host}
+            checked={room.hunterTps !== false}
+            onChange={(hunterTps) => session.patchRoom({ hunterTps })}
+          />
+          <CheckRow
+            label="몸 크기 변경"
+            name="allowBodySizes"
+            disabled={!host}
+            checked={room.allowBodySizes !== false}
+            onChange={(allowBodySizes) => session.patchRoom({ allowBodySizes })}
+          />
           {session.kind === "online" && (
-            <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
-              <span>
-                <input
-                  type="checkbox"
-                  name="listWhilePlaying"
-                  className="mr-2 accent-lime"
-                  disabled={!host}
-                  checked={room.listWhilePlaying !== false}
-                  onChange={(e) => session.patchRoom({ listWhilePlaying: e.target.checked })}
-                />
-                게임 중에도 방 목록에 표시
-              </span>
-              <span className="text-[11px] text-white/55">끄면 라운드 중 코드로만 입장</span>
-            </label>
+            <CheckRow
+              label="게임 중 방 목록 표시"
+              name="listWhilePlaying"
+              hint="끄면 라운드 중 코드로만 입장"
+              disabled={!host}
+              checked={room.listWhilePlaying !== false}
+              onChange={(listWhilePlaying) => session.patchRoom({ listWhilePlaying })}
+              wide
+            />
           )}
-          <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
-            <span>
+          <label className={`${FIELD_ROW} col-span-2`} title="빗나가면 −1 · 맞히면 +1 · 도망치는 상대는 무료">
+            <span className={FIELD_LABEL}>
               <input
                 type="checkbox"
                 name="ammoEnabled"
@@ -315,26 +322,23 @@ export const Lobby = memo(function Lobby({
                 checked={Boolean(room.ammoEnabled)}
                 onChange={(e) => session.patchRoom({ ammoEnabled: e.target.checked })}
               />
-              탄약 제한 사용
+              탄약 제한
             </span>
-            <span className="text-[11px] text-white/55">빗나가면 −1 · 맞히면 +1 · 도망치는 상대는 무료</span>
-          </label>
-          <label className="col-span-2 rounded-xl bg-white/8 p-2">
-            술래 탄 수 (옵션)
-            <input
-              type="number"
-              name="ammoCount"
-              autoComplete="off"
-              inputMode="numeric"
-              min={1}
-              max={99}
-              disabled={!host || !room.ammoEnabled}
-              className="mt-1 w-full bg-transparent"
-              value={room.ammoCount || 5}
-              onChange={(e) =>
-                session.patchRoom({ ammoCount: Math.max(1, Math.min(99, Number(e.target.value) || 5)) })
-              }
-            />
+            <span className="flex items-center gap-1.5 text-xs text-white/60">
+              탄 수
+              <input
+                type="number"
+                name="ammoCount"
+                autoComplete="off"
+                inputMode="numeric"
+                min={1}
+                max={99}
+                disabled={!host || !room.ammoEnabled}
+                className={FIELD_INPUT}
+                value={room.ammoCount || 5}
+                onChange={(e) => session.patchRoom({ ammoCount: Math.max(1, Math.min(99, Number(e.target.value) || 5)) })}
+              />
+            </span>
           </label>
         </div>
         {host ? (
@@ -344,19 +348,15 @@ export const Lobby = memo(function Lobby({
               onClick={onStart}
               aria-describedby="round-start-status"
               disabled={!allReady}
-              className="mt-4 w-full rounded-full bg-lime py-3 font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-3 w-full rounded-full bg-lime py-2.5 font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
             >
               {people.length < 2 ? "2인 이상 필요" : "라운드 시작"}
             </button>
-            <p id="round-start-status" className="mt-2 text-center text-xs text-white/65">
-              {people.length < 2
-                ? "2인 이상 참가해야 라운드를 시작할 수 있습니다"
-                : allReady
-                  ? "전원 준비됨"
-                  : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
+            <p id="round-start-status" className="mt-1.5 truncate text-center text-xs text-white/65">
+              {people.length < 2 ? "2인 이상 참가해야 시작할 수 있습니다" : allReady ? "전원 준비됨" : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작`}
             </p>
-            <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · 술래 눈앞에서 속이면 초당 최대 10 · Tab 현황
+            <p className="mt-1.5 truncate text-center text-[11px] text-white/60" title="술래 눈앞에서 속이면 초당 최대 10점 · Tab으로 현황">
+              발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · 속임 ≤10/초
             </p>
           </>
         ) : (
@@ -364,8 +364,8 @@ export const Lobby = memo(function Lobby({
             <p className="mt-4 text-center text-sm text-white/65">
               호스트 시작 대기 · 준비 {readyCount}/{people.length}
             </p>
-            <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · 술래 눈앞에서 속이면 초당 최대 10 · Tab 현황
+            <p className="mt-1.5 truncate text-center text-[11px] text-white/60" title="술래 눈앞에서 속이면 초당 최대 10점 · Tab으로 현황">
+              발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · 속임 ≤10/초
             </p>
           </>
         )}

@@ -11,6 +11,7 @@ import {
 import {
   beginRound,
   canStartRound,
+  canToggleDoor,
   claimHost,
   emptyRoom,
   finishRound,
@@ -588,3 +589,30 @@ describe("remaining", () => {
     expect(remaining({ ...emptyRoom(), phaseEndsAt: NOW - 10 }, NOW)).toBe(0);
   });
 });
+
+describe("canToggleDoor", () => {
+  const door = { x: 4, z: 4 };
+  const near = { id: "p1", x: 5, z: 4 };
+
+  it("lets anyone walking the lobby open doors", () => {
+    expect(canToggleDoor(emptyRoom(), near, door)).toBe(true);
+  });
+
+  it("blocks ghosts and late joiners during a round but not live hiders", () => {
+    const room = { ...beginRound({ ...emptyRoom(), hunterCount: 1 }, ["h", "p1"], Date.now()), phase: "hide" as const };
+    const hider = room.hunterIds.includes("p1") ? "h" : "p1";
+    expect(canToggleDoor(room, { ...near, id: hider }, door)).toBe(true);
+    expect(canToggleDoor({ ...room, caughtIds: [hider] }, { ...near, id: hider }, door)).toBe(false);
+    expect(canToggleDoor(room, { ...near, id: "late" }, door)).toBe(false);
+  });
+
+  it("rejects out-of-reach, non-finite and roulette/result phases", () => {
+    expect(canToggleDoor(emptyRoom(), { ...near, x: 9 }, door)).toBe(false);
+    expect(canToggleDoor(emptyRoom(), { ...near, x: Number.NaN }, door)).toBe(false);
+    expect(canToggleDoor({ ...emptyRoom(), phase: "reveal" }, near, door)).toBe(false);
+    expect(canToggleDoor({ ...emptyRoom(), phase: "result" }, near, door)).toBe(false);
+    expect(canToggleDoor({ ...emptyRoom(), phase: "prepare" }, near, door)).toBe(false);
+    expect(canToggleDoor(emptyRoom(), near, undefined)).toBe(false);
+  });
+});
+

@@ -33,6 +33,7 @@ import {
   canStartRound,
   claimHost,
   hiderAlive,
+  canToggleDoor,
   isGhost,
   isHunter,
   isParticipant,
@@ -47,7 +48,7 @@ import { accrueMissed } from "@/lib/missed";
 import { hudSignature, snapsFrom, type Session } from "@/lib/session";
 import { resetSoloBots, tickSoloBots } from "@/lib/ai";
 import type { PaintBlob, PlayerSnap, Pose } from "@/lib/types";
-import { POSES } from "@/lib/types";
+import { effectiveBodySize, POSES } from "@/lib/types";
 import { AccessibleModal } from "./AccessibleModal";
 import { Lobby } from "./game/Lobby";
 import { ResultPanel, RevealPanel } from "./game/ResultPanel";
@@ -595,12 +596,9 @@ export function GameView({
     const undoor = session.onDoor((id, actorId) => {
       if (!session.isHost()) return;
       const room = session.getRoom();
-      if (room.phase === "reveal" || room.phase === "result") return;
       const door = getMap(room.mapId).doors.find((candidate) => candidate.id === id);
       const actor = actorId ? snapsFrom(session).find((player) => player.id === actorId) : undefined;
-      if (!door || !actor || roleOf(room, actor.id) === "spectator") return;
-      if (!Number.isFinite(actor.x) || !Number.isFinite(actor.z)) return;
-      if (Math.hypot(actor.x - door.x, actor.z - door.z) > 3.05) return;
+      if (!canToggleDoor(room, actor, door)) return;
       const doors = { ...(room.doors ?? {}) };
       doors[id] = !doors[id];
       session.setRoom({ ...room, doors });
@@ -746,7 +744,7 @@ export function GameView({
           frameKeys.has("arrowdown") ||
           frameKeys.has("arrowleft") ||
           frameKeys.has("arrowright"));
-      world.bodySize = room.allowBodySizes === false ? "normal" : me?.bodySize ?? "normal";
+      world.bodySize = effectiveBodySize(room, me?.bodySize);
       const moved = world.stepLocal(
         dt,
         { keys: frameKeys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
@@ -1253,7 +1251,7 @@ export function GameView({
         </div>
 
         {!locked && !paintOpen && !hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
-          <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-sm">
+          <div className="pointer-events-none absolute bottom-36 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/55 px-4 py-2 text-sm">
             {myRole === "hunter" && hud.phase === "hunt"
               ? "1인칭 수색 · 마우스 조준 · 좌클릭 발사"
               : "게임 화면에서 마우스 이동 = 시점 · 좌클릭 = 조준 태그"}
@@ -1369,7 +1367,7 @@ export function GameView({
         {hud.phase === "reveal" && <RevealPanel room={hud} timeLeft={timeLeft} />}
 
         {!hunterHide && hud.phase !== "result" && hud.phase !== "reveal" && (
-          <div id="game-instructions" className="absolute bottom-3 left-3 z-10 max-w-[240px] rounded-2xl bg-black/40 p-3 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
+          <div id="game-instructions" className="absolute bottom-3 left-3 z-10 max-w-[min(340px,calc(100%-11rem))] rounded-2xl bg-black/40 px-3 py-2 text-[12px] leading-relaxed text-white/80 backdrop-blur-sm">
             {myRole === "hunter" && hud.phase === "hunt" ? (
               <>
                 <div>술래 1인칭 · 우클릭 3인칭 · WASD · Shift 달리기 · Ctrl 숙이기</div>

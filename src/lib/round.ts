@@ -21,7 +21,7 @@ import {
   SCORE_TAG,
 } from "./config";
 import { tagRangeForCamouflage } from "./camouflage";
-import type { PlayerSnap, RoomState, SystemMessage } from "./types";
+import { BODY_SCALE, effectiveBodySize, type PlayerSnap, type RoomState, type SystemMessage } from "./types";
 
 export function emptyRoom(): RoomState {
   return {
@@ -397,16 +397,21 @@ export function finishRound(
   now: number,
 ): RoomState {
   const scores = { ...room.scores };
+  // Hider pay-out scales with body size (petit earns less, plump more) so the smaller hitbox is not a free win.
+  const payout = (id: string) => {
+    const snap = players.find((p) => p.id === id);
+    return BODY_SCALE[effectiveBodySize(room, snap?.bodySize)].score;
+  };
   if (winner === "hiders") {
     for (const p of players) {
-      if (hiderAlive(room, p.id)) scores[p.id] = (scores[p.id] ?? 0) + SCORE_SURVIVE;
+      if (hiderAlive(room, p.id)) scores[p.id] = (scores[p.id] ?? 0) + Math.round(SCORE_SURVIVE * payout(p.id));
     }
   } else {
     for (const id of room.hunterIds) scores[id] = (scores[id] ?? 0) + SCORE_HUNT_WIN;
   }
   // Missed Spot points earned during the hunt join the round score for everyone who earned them.
   for (const [id, points] of Object.entries(room.missed ?? {})) {
-    if (points > 0) scores[id] = (scores[id] ?? 0) + Math.round(points);
+    if (points > 0) scores[id] = (scores[id] ?? 0) + Math.round(points * payout(id));
   }
   return {
     ...room,
@@ -464,3 +469,22 @@ export function tickRoom(room: RoomState, players: PlayerSnap[], now: number): R
 export function remaining(room: RoomState, now: number) {
   return Math.max(0, Math.ceil((room.phaseEndsAt - now) / 1000));
 }
+
+export const DOOR_REACH = 3.05;
+
+/**
+ * Host-side door toggle check. Ghosts and late joiners may not touch doors during a
+ * round, but everyone walking the lobby can open them while waiting.
+ */
+export function canToggleDoor(
+  room: RoomState,
+  actor: { id: string; x: number; z: number } | undefined,
+  door: { x: number; z: number } | undefined,
+): boolean {
+  if (!door || !actor) return false;
+  if (room.phase === "reveal" || room.phase === "result" || room.phase === "prepare") return false;
+  if (room.phase !== "lobby" && roleOf(room, actor.id) === "spectator") return false;
+  if (!Number.isFinite(actor.x) || !Number.isFinite(actor.z)) return false;
+  return Math.hypot(actor.x - door.x, actor.z - door.z) <= DOOR_REACH;
+}
+

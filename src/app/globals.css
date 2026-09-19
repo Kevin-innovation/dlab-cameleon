@@ -120,6 +120,34 @@ label:has(> select:focus-visible) {
   row-gap: 0.65rem;
 }
 
+/* Desktop: the pose bar owns the full bottom edge so eleven poses sit on one line;
+   the key hints and help/paint buttons stack above it instead of beside it. */
+@media (hover: hover) and (pointer: fine) and (min-width: 768px) {
+  .game-shell #game-instructions {
+    bottom: 3.6rem;
+  }
+
+  .game-action-controls {
+    left: 0.75rem;
+  }
+
+  .game-action-controls .pose-action-row {
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 0.3rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .game-action-controls .pose-action-row button {
+    flex: 0 0 auto;
+    padding: 0.25rem 0.45rem;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}
+
 .mobile-touch-controls {
   display: block;
   isolation: isolate;

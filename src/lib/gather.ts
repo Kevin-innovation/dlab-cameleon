@@ -6,6 +6,8 @@ export type GatherSpot = { x: number; z: number; yaw: number };
 
 const RING_RADIUS = 1.8;
 const ROULETTE_TAIL_MS = 1600;
+/** How long the landed name blinks before it is announced as the hunter. */
+export const ROULETTE_LOCK_MS = 900;
 
 /**
  * Where everyone stands while the roulette runs: a ring around the map's gather
@@ -36,6 +38,10 @@ export type RouletteState = {
   settled: boolean;
   /** 0..1 progress of the spin itself. */
   progress: number;
+  /** "spin" while names cycle, "lock" while the landed name blinks, "settled" once announced. */
+  stage: "spin" | "lock" | "settled";
+  /** Milliseconds since the spin stopped (0 while spinning). */
+  settledFor: number;
 };
 
 /**
@@ -44,7 +50,7 @@ export type RouletteState = {
  */
 export function rouletteState(room: RoomState, now: number): RouletteState {
   const order = [...room.participantIds].sort();
-  if (order.length === 0) return { order, index: 0, settled: true, progress: 1 };
+  if (order.length === 0) return { order, index: 0, settled: true, progress: 1, stage: "settled", settledFor: ROULETTE_LOCK_MS };
   const total = room.prepareTime * 1000;
   const start = room.phaseEndsAt - total;
   const spinMs = Math.max(900, total - ROULETTE_TAIL_MS);
@@ -53,6 +59,17 @@ export function rouletteState(room: RoomState, now: number): RouletteState {
   const eased = 1 - Math.pow(1 - progress, 3);
   const laps = 3;
   const steps = laps * order.length + target;
-  const index = Math.floor(eased * steps) % order.length;
-  return { order, index: progress >= 1 ? target : index, settled: progress >= 1, progress };
+  // The last slot of the eased range is the hunter, so the spin visibly rests on the
+  // right name before it locks instead of showing the previous name until settle.
+  const index = Math.min(steps, Math.floor(eased * (steps + 1))) % order.length;
+  const settled = progress >= 1;
+  const settledFor = settled ? Math.max(0, now - (start + spinMs)) : 0;
+  return {
+    order,
+    index: settled ? target : index,
+    settled,
+    progress,
+    stage: !settled ? "spin" : settledFor < ROULETTE_LOCK_MS ? "lock" : "settled",
+    settledFor,
+  };
 }

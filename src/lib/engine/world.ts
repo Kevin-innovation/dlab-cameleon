@@ -6,7 +6,7 @@ import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, S
 import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
 import type { BodyPart, BoxDef, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, PropKind, RoomState } from "../types";
 import { hiderAlive, isGhost, isHunter } from "../round";
-import { BODY_SCALE, type BodySize } from "../types";
+import { BODY_SCALE, effectiveBodySize, type BodySize } from "../types";
 import { lightLevelAt } from "../camouflage";
 import { ceilingAt } from "../ceiling";
 import {
@@ -37,6 +37,17 @@ import {
 } from "./character";
 import { makePatternCanvas, rgbToHex } from "./textures";
 import { hunterVisibility } from "../camouflage";
+
+/** Desktop quality ladder walked by adaptQuality(); the first entry is the default. */
+const QUALITY_STEPS: { pixelRatio: number; shadows: boolean }[] = [
+  { pixelRatio: 1.5, shadows: true },
+  { pixelRatio: 1.25, shadows: true },
+  { pixelRatio: 1, shadows: true },
+  { pixelRatio: 1, shadows: false },
+];
+const QUALITY_SAMPLE_FRAMES = 120;
+const QUALITY_SLOW_FRAME_MS = 26;
+const SHADOW_REFRESH_EVERY = 2;
 
 const LOCAL_PROP_MODELS: Partial<Record<PropKind, string>> = {
   sofa: "/models/lobby-sofa-cc0.glb",
@@ -132,6 +143,12 @@ export class GameWorld {
   private modelTemplates = new Map<string, Promise<THREE.Group>>();
   private mapLoadSeq = 0;
   private modelStats = { pending: 0, loaded: 0, failed: 0 };
+  /** Adaptive quality: index into QUALITY_STEPS, only ever stepped down when frames run long. */
+  private qualityStep = 0;
+  private frameClock = 0;
+  private frameAccum = 0;
+  private frameCount = 0;
+  private shadowFrame = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -145,10 +162,12 @@ export class GameWorld {
     // iPhones often report a 2–3x device pixel ratio. Rendering the full
     // framebuffer at that density makes the WebGL tab far more likely to be
     // evicted when the map, furniture, and player paint textures are loaded.
-    this.renderer.setPixelRatio(Math.min(this.isMobile ? 1 : 2, window.devicePixelRatio || 1));
+    this.renderer.setPixelRatio(Math.min(this.isMobile ? 1 : QUALITY_STEPS[0].pixelRatio, window.devicePixelRatio || 1));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.shadowMap.enabled = !this.isMobile;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Static geometry dominates the shadow pass; refreshing it every other frame is invisible and halves its cost.
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -947,6 +966,7 @@ export class GameWorld {
       if (pose === "lie") speed *= 0.45;
       if (pose === "crouch" || pose === "sit") speed *= 0.72;
       if (ghost) speed *= 1.15;
+      speed *= BODY_SCALE[this.bodySize].speed;
       const dx = this.wish.x * speed * dt;
       const dz = this.wish.z * speed * dt;
       const moved = moveWithSlide(this.localX, this.localZ, dx, dz, r, boxes, bounds, feet, head);
@@ -1131,7 +1151,7 @@ export class GameWorld {
       rig.group.visible = show;
       applyPaint(rig, p.fill || WHITE, p.blobs || []);
       applyFinish(rig, p.roughness ?? 0.7);
-      applyBodySize(rig, room.allowBodySizes === false ? "normal" : p.bodySize ?? "normal");
+      applyBodySize(rig, effectiveBodySize(room, p.bodySize));
       if (rig.pose !== p.pose) applyPose(rig, p.pose);
       rig.visor.visible = isHunter(room, p.id) && room.phase !== "lobby" && !ghost;
       setNameVisible(
@@ -1438,7 +1458,46 @@ export class GameWorld {
   render() {
     this.tickTracers();
     this.tickKillFx();
+    this.shadowFrame = (this.shadowFrame + 1) % SHADOW_REFRESH_EVERY;
+    if (this.renderer.shadowMap.enabled && this.shadowFrame === 0) this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
+    this.adaptQuality();
+  }
+
+  /**
+   * Long frames over a two-second window step resolution down, then shadows off,
+   * so an eight-player match stays playable on integrated GPUs. Never steps back up:
+   * flapping between settings looks worse than a steady lower one.
+   */
+  private adaptQuality() {
+    const now = performance.now();
+    // Tab switches and asset loads produce outlier frames that say nothing about steady-state cost.
+    if (this.frameClock > 0 && now - this.frameClock < 100) {
+      this.frameAccum += now - this.frameClock;
+      this.frameCount += 1;
+    }
+    this.frameClock = now;
+    if (this.frameCount < QUALITY_SAMPLE_FRAMES) return;
+    const average = this.frameAccum / this.frameCount;
+    this.frameAccum = 0;
+    this.frameCount = 0;
+    if (this.isMobile || average <= QUALITY_SLOW_FRAME_MS || this.qualityStep >= QUALITY_STEPS.length - 1) return;
+    this.qualityStep += 1;
+    const step = QUALITY_STEPS[this.qualityStep];
+    this.renderer.setPixelRatio(Math.min(step.pixelRatio, window.devicePixelRatio || 1));
+    this.resize();
+    if (!step.shadows && this.renderer.shadowMap.enabled) {
+      this.renderer.shadowMap.enabled = false;
+      this.scene.traverse((o) => {
+        const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        for (const m of Array.isArray(mat) ? mat : mat ? [mat] : []) m.needsUpdate = true;
+      });
+    }
+  }
+
+  /** Current adaptive quality step (0 = full); exposed for the perf audit. */
+  qualityLevel() {
+    return this.qualityStep;
   }
 
   /** Renderer counters for the last frame (draw calls, triangles); used by the perf audit. */

@@ -254,11 +254,21 @@ export type PlayerSnap = {
 
 export type BodySize = "petit" | "normal" | "plump";
 /** Visual/physics scale per body size: xz = footprint, y = height. */
-export const BODY_SCALE: Record<BodySize, { xz: number; y: number }> = {
-  petit: { xz: 0.5, y: 0.5 },
-  normal: { xz: 1, y: 1 },
-  plump: { xz: 1.3, y: 1 },
+/**
+ * Body sizes trade visibility for pace and pay-out so no size dominates:
+ * petit is half as tall (harder to spot and hit) but slow and earns 60% hider points;
+ * plump is wide (easy to spot) but quick and earns 140%. `score` scales survive + Missed Spot points.
+ */
+export const BODY_SCALE: Record<BodySize, { xz: number; y: number; speed: number; score: number }> = {
+  petit: { xz: 0.5, y: 0.5, speed: 0.78, score: 0.6 },
+  normal: { xz: 1, y: 1, speed: 1, score: 1 },
+  plump: { xz: 1.3, y: 1, speed: 1.1, score: 1.4 },
 };
+
+/** Effective body size once the host's allow toggle is applied. */
+export function effectiveBodySize(room: { allowBodySizes?: boolean }, size: BodySize | undefined): BodySize {
+  return room.allowBodySizes === false ? "normal" : size ?? "normal";
+}
 
 export type ChatMessage = {
   id: string;
