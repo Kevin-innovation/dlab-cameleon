@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState, type FormEvent } from "react";
+import { CHAT_TEXT_MAX } from "@/lib/config";
 import { isParticipant } from "@/lib/round";
 import type { Session } from "@/lib/session";
 import type { ChatMessage, PlayerSnap, RoomState, SystemMessage } from "@/lib/types";
@@ -152,7 +153,7 @@ export const RoomSocialPanel = memo(function RoomSocialPanel({
                 enterKeyHint="send"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                maxLength={120}
+                maxLength={CHAT_TEXT_MAX}
                 placeholder="예: 여기로 와!…"
                 aria-label="채팅 메시지"
                 className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-xs outline-none focus-visible:border-lime/50 focus-visible:ring-1 focus-visible:ring-lime/40"

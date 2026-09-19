@@ -105,8 +105,8 @@ describe("sanitizeRoom", () => {
     expect(room.ammoCount).toBe(3);
   });
 
-  it("drops malformed chat messages and keeps only the last 60", () => {
-    const valid = Array.from({ length: 70 }, (_, i) => ({
+  it("drops malformed chat messages and keeps only the last 32", () => {
+    const valid = Array.from({ length: 50 }, (_, i) => ({
       id: `m${i}`,
       senderId: "p1",
       senderName: "p1",
@@ -115,8 +115,8 @@ describe("sanitizeRoom", () => {
     }));
     const broken = { id: 1, senderId: "p1", senderName: "p1", text: "x", at: NOW } as unknown as RoomState["chat"][number];
     const room = sanitizeRoom({ ...emptyRoom(), chat: [broken, ...valid] });
-    expect(room.chat).toHaveLength(60);
-    expect(room.chat[0].id).toBe("m10");
+    expect(room.chat).toHaveLength(32);
+    expect(room.chat[0].id).toBe("m18");
   });
 
   it("normalizes room metadata fields", () => {
@@ -138,8 +138,8 @@ describe("sanitizeRoom", () => {
     expect(sanitizeRoom({ ...emptyRoom(), maxPlayers: 99 }).maxPlayers).toBe(8);
   });
 
-  it("drops malformed system messages and keeps the last 30", () => {
-    const valid = Array.from({ length: 35 }, (_, i) => ({
+  it("drops malformed system messages and keeps the last 20", () => {
+    const valid = Array.from({ length: 25 }, (_, i) => ({
       id: `s${i}`,
       kind: "host" as const,
       text: `host ${i}`,
@@ -147,7 +147,7 @@ describe("sanitizeRoom", () => {
     }));
     const broken = { id: "x", kind: "nope", text: "x", at: NOW } as unknown as RoomState["system"][number];
     const room = sanitizeRoom({ ...emptyRoom(), system: [broken, ...valid] });
-    expect(room.system).toHaveLength(30);
+    expect(room.system).toHaveLength(20);
     expect(room.system[0].id).toBe("s5");
   });
 
@@ -497,8 +497,51 @@ describe("claimHost", () => {
   it("keeps only the newest system messages", () => {
     let room = emptyRoom();
     for (let i = 0; i < 40; i++) room = claimHost(room, `p${i}`, `n${i}`, NOW + i);
-    expect(room.system).toHaveLength(30);
+    expect(room.system).toHaveLength(20);
     expect(room.system.at(-1)?.text).toContain("n39");
+  });
+});
+
+describe("room state size budget", () => {
+  it("stays under 22KB even when every capped list is full of long Korean text", () => {
+    const at = NOW;
+    const chat = Array.from({ length: 60 }, (_, i) => ({
+      id: `chat-${at}-abcdef`,
+      senderId: "p".repeat(12),
+      senderName: "가".repeat(12),
+      text: "가".repeat(200),
+      at: at + i,
+    }));
+    const system = Array.from({ length: 30 }, (_, i) => ({
+      id: `sys-${at}-abcdefgh`,
+      kind: "host" as const,
+      text: `${"가".repeat(12)}님이 방장이 되었습니다`,
+      at: at + i,
+    }));
+    const ids = Array.from({ length: 8 }, (_, i) => `player-${i}-abcdef`);
+    const room = sanitizeRoom({
+      ...huntRoom(),
+      roomName: "가".repeat(20),
+      hostId: ids[0],
+      hostName: "가".repeat(12),
+      directoryToken: "t".repeat(32),
+      participantIds: ids,
+      hunterIds: ids.slice(0, 3),
+      caughtIds: ids.slice(3),
+      scores: Object.fromEntries(ids.map((id) => [id, 99999])),
+      ammo: Object.fromEntries(ids.map((id) => [id, 12])),
+      doors: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`door-${i}`, true])),
+      feed: Array.from({ length: 10 }, () => ({ id: ids[1], by: ids[0], name: "가".repeat(12), byName: "가".repeat(12), at })),
+      taunts: Array.from({ length: 12 }, () => ({ id: ids[1], x: 12.3456, y: 12.3456, at })),
+      lastTag: { id: ids[1], by: ids[0], name: "가".repeat(12), byName: "가".repeat(12), at },
+      chat,
+      system,
+    });
+    const bytes = new TextEncoder().encode(JSON.stringify(room)).length;
+    expect(bytes).toBeLessThan(22 * 1024);
+    expect(room.chat).toHaveLength(32);
+    expect(room.chat[0].text).toHaveLength(100);
+    expect(room.system).toHaveLength(20);
   });
 });
 

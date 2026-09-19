@@ -53,18 +53,31 @@ export function useRoomList(channelId: string, enabled: boolean): RoomListState 
         schedule();
         return;
       }
+      if (navigator.onLine === false) {
+        setState((prev) => ({ ...prev, loading: false, error: "오프라인 상태입니다. 네트워크가 연결되면 목록을 다시 불러옵니다." }));
+        schedule();
+        return;
+      }
       await load();
       if (activeRef.current) schedule();
     };
     const onVisible = () => {
       if (document.visibilityState === "visible") void tick();
     };
+    const onOnline = () => {
+      failuresRef.current = 0;
+      void tick();
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOnline);
     void tick();
     return () => {
       activeRef.current = false;
       window.clearTimeout(timerRef.current);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOnline);
     };
   }, [enabled, load]);
 

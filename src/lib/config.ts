@@ -7,7 +7,10 @@ export const DIRECTORY_HEARTBEAT_MS = 10000;
 export const DIRECTORY_TTL_S = 25;
 export const DIRECTORY_POLL_MS = 5000;
 export const RECONNECT_GRACE_MS = 20000;
-export const SYSTEM_MESSAGE_MAX = 30;
+/** Chat/system retention keeps the synced room state a few KB in practice (≤ ~24KB worst case). */
+export const CHAT_MESSAGE_MAX = 32;
+export const CHAT_TEXT_MAX = 100;
+export const SYSTEM_MESSAGE_MAX = 20;
 export const DEFAULT_CHANNEL_ID = "kr1";
 export const CHANNELS = [{ id: DEFAULT_CHANNEL_ID, name: "한국 서버", city: "서울" }] as const;
 export type ChannelId = (typeof CHANNELS)[number]["id"];

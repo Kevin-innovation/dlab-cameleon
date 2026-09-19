@@ -1,6 +1,20 @@
 import "server-only";
 import { Redis } from "@upstash/redis";
+import { clientKeyFromHeaders, MemoryRateLimiter } from "./ratelimit";
 import { MemoryRoomDirectoryStore, RedisRoomDirectoryStore, type DirectoryRedis, type RoomDirectoryStore } from "./store";
+
+/** Per-instance abuse guard. 240/min per IP leaves room for several players behind one NAT (list poll 12/min + heartbeat 6/min each). */
+const limiter = new MemoryRateLimiter({ limit: 240, windowMs: 60_000 });
+
+/** Returns a 429 response when the caller exceeded the budget, otherwise null. */
+export function rateLimitResponse(request: Request): Response | null {
+  const result = limiter.hit(clientKeyFromHeaders(request.headers));
+  if (result.allowed) return null;
+  return Response.json(
+    { ok: false, error: "too many requests" },
+    { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": "60" } },
+  );
+}
 
 /**
  * Resolves the room directory backend once per server instance.

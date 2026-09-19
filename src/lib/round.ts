@@ -1,4 +1,6 @@
 import {
+  CHAT_MESSAGE_MAX,
+  CHAT_TEXT_MAX,
   DEFAULT_AMMO,
   DEFAULT_CHANNEL_ID,
   DEFAULT_HIDE,
@@ -103,7 +105,8 @@ export function sanitizeRoom(input: RoomState): RoomState {
             typeof message.text === "string" &&
             Number.isFinite(message.at),
         )
-        .slice(-60)
+        .map((message) => (message.text.length > CHAT_TEXT_MAX ? { ...message, text: message.text.slice(0, CHAT_TEXT_MAX) } : message))
+        .slice(-CHAT_MESSAGE_MAX)
     : [];
   const system = Array.isArray(source.system)
     ? source.system

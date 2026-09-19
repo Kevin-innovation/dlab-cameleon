@@ -231,7 +231,7 @@ type RoomState = {
 | P5-T2 | 목록 폴링 백오프: 실패 시 3→6→12초, 성공 시 복귀. 오프라인이면 폴링 중단 + 안내 | `RoomBrowser.tsx` | — |
 | P5-T3 | `session.ts` 분리: `session/online.ts`, `session/practice.ts`, `session/types.ts` (S1 2단계) | `src/lib/session/*` | import 경로만 변경, 동작 동일 |
 | P5-T4 | 방 상태 크기 점검: `chat` 60개 + `system` 30개 상한, `feed`·`taunts` 기존 상한 유지. `setState("room")` 페이로드가 16KB를 넘지 않는지 로그로 확인 | `round.ts` | — |
-| P5-T5 | (선택) `GameView` 게임 루프를 `useGameLoop` 훅으로 추출해 파일 800줄 이하 목표에 접근 | `src/components/game/useGameLoop.ts` | 시간 여유 시 |
+| P5-T5 | (보류) `GameView` 게임 루프를 `useGameLoop` 훅으로 추출 — 입력 처리 회귀 위험 대비 이득이 작아 이번 개편 범위에서 제외 | `src/components/game/useGameLoop.ts` | 별도 작업 |
 
 ### Phase 6 — 검증·문서
 

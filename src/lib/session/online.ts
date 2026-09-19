@@ -10,114 +10,24 @@ import {
   getRoomCode,
   onDisconnect,
 } from "playroomkit";
+import type { PlayerState } from "playroomkit";
 import {
-  BOT_NAMES,
+  CHAT_MESSAGE_MAX,
+  CHAT_TEXT_MAX,
   DEFAULT_CHANNEL_ID,
-  LEAVE_REASON_KEY,
   MAX_PLAYERS,
   RECONNECT_GRACE_MS,
   ROOM_NAME_MAX,
   SHOT_COOLDOWN,
   SYSTEM_MESSAGE_MAX,
   WHITE,
-} from "./config";
-import { uniqueNickname } from "./nickname";
-import { closeRoom, generateDirectoryToken } from "./rooms/client";
-import { emptyRoom, patchRoom, sanitizeRoom, type RoomConfigPatch } from "./round";
-import type { PlayerState } from "playroomkit";
-import type { ChatMessage, PaintBlob, PlayerSnap, Pose, Role, RoomState, SystemMessage } from "./types";
-
-export type LeaveReason = "kicked" | "lost";
-export type LeaveRecord = { reason: LeaveReason; code: string; at: number };
-
-export function readLeaveRecord(): LeaveRecord | null {
-  try {
-    const raw = window.sessionStorage.getItem(LEAVE_REASON_KEY);
-    if (!raw) return null;
-    window.sessionStorage.removeItem(LEAVE_REASON_KEY);
-    const parsed = JSON.parse(raw) as Partial<LeaveRecord>;
-    if ((parsed.reason !== "kicked" && parsed.reason !== "lost") || typeof parsed.code !== "string") return null;
-    return { reason: parsed.reason, code: parsed.code, at: Number(parsed.at) || 0 };
-  } catch {
-    return null;
-  }
-}
-
-function writeLeaveRecord(record: LeaveRecord) {
-  try {
-    window.sessionStorage.setItem(LEAVE_REASON_KEY, JSON.stringify(record));
-  } catch {
-    // Storage can be blocked; the home screen then shows no reason, which is acceptable.
-  }
-}
-
-export type SessionPlayer = {
-  id: string;
-  get: (key: string) => unknown;
-  set: (key: string, value: unknown, reliable?: boolean) => void;
-};
-
-export type RoomMeta = {
-  roomName: string;
-  maxPlayers: number;
-  isPrivate: boolean;
-  channelId: string;
-};
-
-export type Session = {
-  kind: "online" | "practice";
-  /** Playroom room code; empty for practice. */
-  roomCode: string;
-  myId: () => string;
-  isHost: () => boolean;
-  getRoom: () => RoomState;
-  setRoom: (room: RoomState) => void;
-  patchRoom: (patch: RoomConfigPatch) => void;
-  players: () => SessionPlayer[];
-  me: () => SessionPlayer;
-  callShot: (targetId: string, hunterId?: string, shotSeq?: number) => void;
-  onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
-  callDoor: (id: string) => void;
-  onDoor: (cb: (id: string, actorId?: string) => void) => () => void;
-  sendChat: (text: string) => void;
-  /** Host only. Removes the player from the room; they land on the home screen with a notice. */
-  kick: (playerId: string) => void;
-  leave: () => void;
-};
-
-function readSnap(p: SessionPlayer): PlayerSnap {
-  return {
-    id: p.id,
-    name: String(p.get("name") ?? "손님"),
-    ready: Boolean(p.get("ready")),
-    x: Number(p.get("x") ?? 4),
-    y: Number(p.get("y") ?? 0),
-    z: Number(p.get("z") ?? 4),
-    yaw: Number(p.get("yaw") ?? 0),
-    pose: (p.get("pose") as Pose) || "stand",
-    fill: String(p.get("fill") ?? WHITE),
-    blobs: (p.get("blobs") as PaintBlob[]) || [],
-    camoScore: Number(p.get("camoScore") ?? 0),
-    presenceAt: Number(p.get("presenceAt") ?? 0),
-    role: (p.get("role") as Role) || "spectator",
-    alive: p.get("alive") !== false,
-    shootSeq: Number(p.get("shootSeq") ?? 0),
-  };
-}
-
-export function snapsFrom(session: Session): PlayerSnap[] {
-  return session.players().map(readSnap);
-}
-
-/** Cheap fingerprint of the fields the HUD renders; positions and paint strokes are excluded. */
-export function hudSignature(snaps: PlayerSnap[]): string {
-  return snaps
-    .map(
-      (p) =>
-        `${p.id}|${p.name}|${p.ready ? 1 : 0}|${p.pose}|${p.fill}|${p.camoScore ?? 0}|${p.presenceAt ?? 0}|${p.blobs.length}`,
-    )
-    .join(";");
-}
+} from "../config";
+import { uniqueNickname } from "../nickname";
+import { closeRoom, generateDirectoryToken } from "../rooms/client";
+import { emptyRoom, patchRoom, sanitizeRoom } from "../round";
+import type { ChatMessage, RoomState, SystemMessage } from "../types";
+import { writeLeaveRecord } from "./leave";
+import type { RoomMeta, Session, SessionPlayer } from "./types";
 
 const joined = new Map<string, { id: string; get: SessionPlayer["get"]; set: SessionPlayer["set"] }>();
 
@@ -259,7 +169,7 @@ export async function connectOnline(opts: {
   });
   RPC.register("chat", async (payload, sender) => {
     if (!isHost()) return;
-    const text = String(payload?.text ?? "").trim().slice(0, 120);
+    const text = String(payload?.text ?? "").trim().slice(0, CHAT_TEXT_MAX);
     if (!text) return;
     const now = Date.now();
     const recent = (chatWindows.get(sender.id) ?? []).filter((at) => now - at < 5000);
@@ -273,7 +183,7 @@ export async function connectOnline(opts: {
       at: now,
     };
     const room = sanitizeRoom((getState("room") as RoomState) || emptyRoom());
-    setState("room", sanitizeRoom({ ...room, chat: [...(room.chat ?? []), message].slice(-60) }), true);
+    setState("room", sanitizeRoom({ ...room, chat: [...(room.chat ?? []), message].slice(-CHAT_MESSAGE_MAX) }), true);
   });
 
   const roomCode = getRoomCode() ?? opts.roomCode;
@@ -366,7 +276,7 @@ export async function connectOnline(opts: {
       return () => doorListeners.delete(cb);
     },
     sendChat: (text) => {
-      void RPC.call("chat", { text: text.slice(0, 120) }, RPC.Mode.HOST);
+      void RPC.call("chat", { text: text.slice(0, CHAT_TEXT_MAX) }, RPC.Mode.HOST);
     },
     kick: (playerId) => {
       if (!isHost() || playerId === myPlayer().id) return;
@@ -406,99 +316,6 @@ export async function connectOnline(opts: {
       } else {
         finish();
       }
-    },
-  };
-}
-
-function makeLocalPlayer(id: string, name: string, ox = 0, oz = 0): SessionPlayer {
-  const store: Record<string, unknown> = {
-    name,
-    ready: true,
-    x: 4.2 + ox,
-    y: 0,
-    z: 3.4 + oz,
-    yaw: 0,
-    pose: "stand",
-    fill: WHITE,
-    blobs: [],
-    camoScore: 0,
-    presenceAt: Date.now(),
-    role: "hider",
-    alive: true,
-  };
-  return {
-    id,
-    get: (k) => store[k],
-    set: (k, v) => {
-      store[k] = v;
-    },
-  };
-}
-
-export function createPractice(nickname: string): Session {
-  const id = "local-me";
-  const me = makeLocalPlayer(id, nickname);
-  const bots = BOT_NAMES.map((n, i) => makeLocalPlayer(`bot-${i}`, `${n}·AI`, (i % 3) * 1.4, Math.floor(i / 3) * 1.6));
-  const everyone = [me, ...bots];
-  let room = emptyRoom();
-  room.mode = "normal";
-  room.hunterCount = 1;
-  room.hunterMode = "ai";
-  room.hunterPlayerId = id;
-  const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
-  const doorListeners = new Set<(doorId: string, actorId?: string) => void>();
-  const lastShotSeq = new Map<string, number>();
-  const lastShotAt = new Map<string, number>();
-  return {
-    kind: "practice",
-    roomCode: "",
-    myId: () => id,
-    isHost: () => true,
-    getRoom: () => room,
-    setRoom: (r) => {
-      room = sanitizeRoom(r);
-    },
-    patchRoom: (roomPatch) => {
-      room = patchRoom(room, roomPatch);
-    },
-    players: () => everyone,
-    me: () => me,
-    callShot: (targetId, hunterId, shotSeq) => {
-      const now = Date.now();
-      if (shotSeq !== undefined) {
-        const sourceId = hunterId ?? id;
-        const previous = lastShotSeq.get(sourceId) ?? 0;
-        if (!Number.isSafeInteger(shotSeq) || shotSeq <= previous) return;
-        if (now - (lastShotAt.get(sourceId) ?? 0) < SHOT_COOLDOWN - 80) return;
-        lastShotSeq.set(sourceId, shotSeq);
-        lastShotAt.set(sourceId, now);
-      }
-      shotListeners.forEach((cb) => cb(hunterId ?? id, targetId));
-    },
-    onShot: (cb) => {
-      shotListeners.add(cb);
-      return () => shotListeners.delete(cb);
-    },
-    callDoor: (doorId) => doorListeners.forEach((cb) => cb(doorId, id)),
-    onDoor: (cb) => {
-      doorListeners.add(cb);
-      return () => doorListeners.delete(cb);
-    },
-    kick: () => {},
-    sendChat: (text) => {
-      const clean = text.trim().slice(0, 120);
-      if (!clean) return;
-      const message: ChatMessage = {
-        id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        senderId: id,
-        senderName: nickname,
-        text: clean,
-        at: Date.now(),
-      };
-      room = { ...room, chat: [...(room.chat ?? []), message].slice(-60) };
-    },
-    leave: () => {
-      window.location.assign(window.location.origin + "/");
     },
   };
 }

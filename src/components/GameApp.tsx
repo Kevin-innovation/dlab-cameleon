@@ -98,9 +98,21 @@ function validNickname(raw: string) {
 
 type ConnectTarget = { roomCode: string; maxPlayers: number; meta?: Partial<RoomMeta>; label: string };
 
-/** A kick or a lost connection redirects here with a record; read it once at mount. */
-function readLeaveNotice(): { notice: string; rejoinCode: string } {
+type LeaveNotice = { notice: string; rejoinCode: string };
+let leaveNoticeCache: LeaveNotice | null = null;
+
+/**
+ * A kick or a lost connection redirects here with a record. Reading it consumes it,
+ * and StrictMode invokes state initializers twice, so the first read is memoized.
+ */
+function readLeaveNotice(): LeaveNotice {
   if (typeof window === "undefined") return { notice: "", rejoinCode: "" };
+  if (leaveNoticeCache) return leaveNoticeCache;
+  leaveNoticeCache = computeLeaveNotice();
+  return leaveNoticeCache;
+}
+
+function computeLeaveNotice(): LeaveNotice {
   const left = readLeaveRecord();
   if (!left) return { notice: "", rejoinCode: "" };
   clearRoomHash();
