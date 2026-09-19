@@ -1,6 +1,6 @@
 # 원작 MECCHA CHAMELEON 대비 격차 분석 · 페이즈 업 계획
 
-상태: R1 완료 (2026-09-19) · R2 진행
+상태: R1·R2 완료 (2026-09-19) · R4 진행
 선행 문서: [meccha-reference.md](meccha-reference.md), [gameplay-contract.md](gameplay-contract.md)
 
 ## 0. 조사 방법과 신뢰도

@@ -15,6 +15,9 @@ export const ScoreTab = memo(function ScoreTab({
   people: PlayerSnap[];
   myId: string;
 }) {
+  // Hunters only get the 30-second-old snapshot so the ranking cannot be used as a radar.
+  const missedSource = isHunter(room, myId) ? room.missedShown : room.missed;
+  const missedOf = (id: string) => missedSource?.[id] ?? 0;
   const survivors = people.filter((p) => hiderAlive(room, p.id));
   const dead = people.filter((p) => room.caughtIds.includes(p.id));
   const ranked = [...people].sort((a, b) => (room.scores[b.id] ?? 0) - (room.scores[a.id] ?? 0));
@@ -33,7 +36,12 @@ export const ScoreTab = memo(function ScoreTab({
           {room.phase !== "lobby" && isHunter(room, p.id) ? " · 술래" : ""}
         </span>
       </span>
-      <span className="ml-2 shrink-0 tabular-nums text-lime">{room.scores[p.id] ?? 0}</span>
+      <span className="ml-2 flex shrink-0 items-baseline gap-2 tabular-nums">
+        {room.phase === "hunt" && missedOf(p.id) > 0 && (
+          <span className="text-[11px] text-cyan-200" title="술래 눈앞에서 속인 점수">속임 +{Math.round(missedOf(p.id))}</span>
+        )}
+        <span className="text-lime">{room.scores[p.id] ?? 0}</span>
+      </span>
     </li>
   );
   return (
@@ -66,7 +74,7 @@ export const ScoreTab = memo(function ScoreTab({
           </section>
         </div>
         <p className="mt-4 text-center text-xs text-white/65">
-          점수 기준 · 발견 +{SCORE_TAG} · 카멜레온 생존 승리 +{SCORE_SURVIVE} · 술래 팀 승리 +{SCORE_HUNT_WIN}
+          점수 기준 · 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN} · 술래 시야 안에서 정지한 채 안 들키면 초당 최대 10점(술래 화면은 30초 지연)
         </p>
       </div>
     </section>

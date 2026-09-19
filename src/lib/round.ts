@@ -44,6 +44,8 @@ export function emptyRoom(): RoomState {
     hunterMode: "random",
     caughtIds: [],
     scores: {},
+    missed: {},
+    missedShown: {},
     prepareTime: DEFAULT_PREPARE,
     hideTime: DEFAULT_HIDE,
     huntTime: DEFAULT_HUNT,
@@ -156,6 +158,8 @@ export function sanitizeRoom(input: RoomState): RoomState {
     hunterPlayerId: typeof source.hunterPlayerId === "string" ? source.hunterPlayerId.slice(0, 80) : undefined,
     caughtIds: safeIds(source.caughtIds, 8),
     scores: source.scores && typeof source.scores === "object" ? source.scores : {},
+    missed: source.missed && typeof source.missed === "object" ? source.missed : {},
+    missedShown: source.missedShown && typeof source.missedShown === "object" ? source.missedShown : {},
     prepareTime: Math.floor(bounded(source.prepareTime, defaults.prepareTime, 3, 20)),
     hideTime: Math.floor(bounded(source.hideTime, defaults.hideTime, 30, 180)),
     huntTime: Math.floor(bounded(source.huntTime, defaults.huntTime, 60, 300)),
@@ -262,6 +266,8 @@ export function beginRound(
     hunterIds,
     participantIds: ids,
     caughtIds: [],
+    missed: {},
+    missedShown: {},
     winner: undefined,
     lastTag: undefined,
     feed: [],
@@ -394,6 +400,10 @@ export function finishRound(
     }
   } else {
     for (const id of room.hunterIds) scores[id] = (scores[id] ?? 0) + SCORE_HUNT_WIN;
+  }
+  // Missed Spot points earned during the hunt join the round score for everyone who earned them.
+  for (const [id, points] of Object.entries(room.missed ?? {})) {
+    if (points > 0) scores[id] = (scores[id] ?? 0) + Math.round(points);
   }
   return {
     ...room,

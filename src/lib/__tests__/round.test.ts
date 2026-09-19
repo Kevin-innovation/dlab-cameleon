@@ -394,6 +394,15 @@ describe("processFire", () => {
 });
 
 describe("finishRound", () => {
+  it("adds rounded Missed Spot points to the round score", () => {
+    const players = [snap("h1"), snap("s1"), snap("c1")];
+    const room = huntRoom({ caughtIds: ["c1"], missed: { s1: 41.6, c1: 12.2 } });
+    const next = finishRound(room, "hunters", players, NOW);
+    expect(next.scores.s1).toBe(42);
+    expect(next.scores.c1).toBe(12);
+    expect(next.scores.h1).toBe(SCORE_HUNT_WIN);
+  });
+
   it("awards survivors on a hider win and hunters on a hunter win", () => {
     const players = [snap("h1"), snap("s1"), snap("c1")];
     const room = huntRoom({ caughtIds: ["c1"] });

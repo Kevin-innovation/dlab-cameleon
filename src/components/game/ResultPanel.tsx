@@ -24,7 +24,7 @@ export function ResultPanel({
         <p className="text-lime">라운드 {room.round}</p>
         <h2 id="result-title" className="text-wrap-balance font-display text-4xl">{room.winner === "hiders" ? "카멜레온 승!" : "술래 승!"}</h2>
         <p className="mt-2 text-xs text-white/65">
-          발견 +{SCORE_TAG} · 생존 승리 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN}
+          발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN} · 속임 = 술래 눈앞에서 안 들킨 시간
         </p>
         <ul className="mt-4 space-y-1 text-left">
           {ranked.map((p, i) => (
@@ -32,7 +32,10 @@ export function ResultPanel({
               <span>
                 {i + 1}. {p.name}
               </span>
-              <span className="text-lime">{room.scores[p.id] ?? 0}</span>
+              <span className="flex items-baseline gap-2 tabular-nums">
+                {(room.missed?.[p.id] ?? 0) > 0 && <span className="text-[11px] text-cyan-200">속임 +{Math.round(room.missed[p.id])}</span>}
+                <span className="text-lime">{room.scores[p.id] ?? 0}</span>
+              </span>
             </li>
           ))}
         </ul>

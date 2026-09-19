@@ -10,6 +10,8 @@ import {
 } from "react";
 import {
   MAX_BLOBS,
+  MISSED_FLUSH_MS,
+  MISSED_SHOWN_MS,
   SHOT_COOLDOWN,
   SYNC_HZ,
   TAUNT_COOLDOWN,
@@ -39,6 +41,7 @@ import {
   processFire,
 } from "@/lib/round";
 import { gatherPositions } from "@/lib/gather";
+import { accrueMissed } from "@/lib/missed";
 import { hudSignature, snapsFrom, type Session } from "@/lib/session";
 import { resetSoloBots, tickSoloBots } from "@/lib/ai";
 import type { PaintBlob, PlayerSnap, Pose } from "@/lib/types";
@@ -216,6 +219,9 @@ export function GameView({
     let seenPhase = session.getRoom().phase;
     let bakedId = startMap.id;
     const hostTauntSeq = new Map<string, number>();
+    const missedAcc = new Map<string, number>();
+    let lastMissedFlush = 0;
+    let lastMissedShown = 0;
     let wasHost = false;
     let wasHunterRole = false;
 
@@ -769,6 +775,26 @@ export function GameView({
         }
         const reconciled = reconcileRoomPlayers(room, livePlayers);
         let next = tickRoom(reconciled, livePlayers, Date.now());
+        // Missed Spot: still hiders in a hunter's view earn points; flush to the room every few seconds.
+        if (room.phase === "hunt" && next.phase === "hunt") {
+          const hunters = livePlayers.filter((p) => isHunter(room, p.id));
+          const hiders = livePlayers.filter((p) => hiderAlive(room, p.id));
+          for (const [id, pts] of accrueMissed(hunters, hiders, dt, (a, b) => world.hasLineOfSight(a.id, b.id))) {
+            missedAcc.set(id, (missedAcc.get(id) ?? 0) + pts);
+          }
+          const nowMs = Date.now();
+          if (missedAcc.size > 0 && nowMs - lastMissedFlush > MISSED_FLUSH_MS) {
+            lastMissedFlush = nowMs;
+            const merged = { ...next.missed };
+            for (const [id, pts] of missedAcc) merged[id] = Math.round(((merged[id] ?? 0) + pts) * 100) / 100;
+            missedAcc.clear();
+            next = { ...next, missed: merged };
+          }
+          if (nowMs - lastMissedShown > MISSED_SHOWN_MS) {
+            lastMissedShown = nowMs;
+            next = { ...next, missedShown: { ...next.missed } };
+          }
+        }
         const myName = String(session.me().get("name") ?? "").trim().slice(0, 12);
         next = claimHost(next, session.myId(), myName, Date.now());
         for (const p of session.players()) {
@@ -811,6 +837,8 @@ export function GameView({
           next.round !== room.round ||
           next.hostId !== room.hostId ||
           next.hostName !== room.hostName ||
+          next.missed !== room.missed ||
+          next.missedShown !== room.missedShown ||
           next.lastTag?.at !== room.lastTag?.at ||
           (next.feed?.length ?? 0) !== (room.feed?.length ?? 0) ||
           JSON.stringify(next.ammo) !== JSON.stringify(room.ammo) ||

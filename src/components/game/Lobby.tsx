@@ -314,7 +314,7 @@ export const Lobby = memo(function Lobby({
                   : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
             </p>
             <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
+              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · 술래 눈앞에서 속이면 초당 최대 10 · Tab 현황
             </p>
           </>
         ) : (
@@ -323,7 +323,7 @@ export const Lobby = memo(function Lobby({
               호스트 시작 대기 · 준비 {readyCount}/{people.length}
             </p>
             <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
+              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · 술래 눈앞에서 속이면 초당 최대 10 · Tab 현황
             </p>
           </>
         )}

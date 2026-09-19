@@ -200,6 +200,10 @@ export type RoomState = {
   hunterPlayerId?: string;
   caughtIds: string[];
   scores: Record<string, number>;
+  /** Missed Spot points this round (live, host-flushed every few seconds). */
+  missed: Record<string, number>;
+  /** Snapshot of `missed` refreshed every 30s: what hunters are allowed to see. */
+  missedShown: Record<string, number>;
   prepareTime: number;
   hideTime: number;
   huntTime: number;

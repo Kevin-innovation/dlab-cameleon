@@ -42,7 +42,10 @@ export const DEFAULT_HUNT = 180;
 export const REVEAL_TIME = 30;
 export const WHITE = "#f3f1ea";
 export const SCORE_TAG = 80;
-export const SCORE_SURVIVE = 150;
+/** Survival pays less now that Missed Spot points reward fooling the hunter up close. */
+export const SCORE_SURVIVE = 60;
+export const MISSED_FLUSH_MS = 3000;
+export const MISSED_SHOWN_MS = 30000;
 export const SCORE_HUNT_WIN = 40;
 
 
