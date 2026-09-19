@@ -473,47 +473,63 @@ function clearSpawns(map: GameMap): GameMap {
   };
 }
 
-function fitMapToEightPlayerArena(map: GameMap, width: number, depth: number): GameMap {
+/**
+ * Arena size by difficulty. Harder maps are larger: more ground for hiders to
+ * spread across and more area for the hunter to sweep in the same hunt time.
+ */
+export const ARENA_BY_DIFFICULTY: Record<GameMap["difficulty"], { width: number; depth: number }> = {
+  쉬움: { width: 42, depth: 32 },
+  보통: { width: 48, depth: 36 },
+  어려움: { width: 56, depth: 42 },
+};
+
+/** Long, thin, tall boxes are walls; their length follows the arena. Everything else is a prop that keeps its size. */
+function isWallRun(box: BoxDef, axis: "x" | "z") {
+  const length = axis === "x" ? box.w : box.d;
+  const thickness = axis === "x" ? box.d : box.w;
+  return box.h >= 1.2 && length >= 3 && thickness <= 0.6;
+}
+
+function isFloorSheet(box: BoxDef) {
+  return box.h <= 0.1 && box.w >= 4 && box.d >= 4;
+}
+
+/**
+ * Spreads a hand-built layout to the arena size: positions (and wall lengths)
+ * scale, furniture keeps its real dimensions so cover stays believable.
+ */
+function spreadMapToArena(map: GameMap, width: number, depth: number): GameMap {
   const sx = width / map.w;
   const sz = depth / map.d;
-  const scaleBox = (box: BoxDef): BoxDef => ({
-    ...box,
-    x: box.x * sx,
-    z: box.z * sz,
-    w: box.w * sx,
-    d: box.d * sz,
-    collider: box.collider
-      ? { ...box.collider, w: box.collider.w * sx, d: box.collider.d * sz }
-      : undefined,
-  });
-  const scaleDoor = (door: DoorDef): DoorDef => ({
+  const spreadBox = (box: BoxDef): BoxDef => {
+    const floor = isFloorSheet(box);
+    const wallX = isWallRun(box, "x");
+    const wallZ = isWallRun(box, "z");
+    const w = floor || wallX ? box.w * sx : box.w;
+    const d = floor || wallZ ? box.d * sz : box.d;
+    return { ...box, x: box.x * sx, z: box.z * sz, w, d };
+  };
+  // The wall segments beside a door stretch with the arena, so the leaf must too or a gap opens.
+  const spreadDoor = (door: DoorDef): DoorDef => ({
     ...door,
     x: door.x * sx,
     z: door.z * sz,
     w: door.w * (door.along === "x" ? sx : sz),
-    d: door.d * (door.along === "x" ? sz : sx),
   });
   return {
     ...map,
     w: width,
     d: depth,
-    boxes: map.boxes.map(scaleBox),
-    doors: map.doors.map(scaleDoor),
+    boxes: map.boxes.map(spreadBox),
+    doors: map.doors.map(spreadDoor),
     spawns: map.spawns.map((point) => ({ x: point.x * sx, z: point.z * sz })),
     hunterSpawns: map.hunterSpawns.map((point) => ({ x: point.x * sx, z: point.z * sz })),
   };
 }
 
-const arenaSizes: Record<string, { width: number; depth: number }> = {
-  mansion: { width: 42, depth: 32 },
-  farm: { width: 42, depth: 32 },
-  sewer: { width: 42, depth: 32 },
-  backrooms: { width: 40, depth: 30 },
-};
-
 export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) => {
-  const size = arenaSizes[m.id];
-  return clearSpawns(size ? fitMapToEightPlayerArena(stageLayout(m), size.width, size.depth) : stageLayout(m));
+  const size = ARENA_BY_DIFFICULTY[m.difficulty];
+  return clearSpawns(spreadMapToArena(stageLayout(m), size.width, size.depth));
 });
 
 function rotY(x: number, z: number, ang: number) {

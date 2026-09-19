@@ -34,9 +34,9 @@ export type GameplayAuditReport = {
 
 const PLAYER_SPAWN_RADIUS = 0.45;
 const MIN_MAP_WIDTH = 30;
-const MAX_MAP_WIDTH = 44;
+const MAX_MAP_WIDTH = 60;
 const MIN_MAP_DEPTH = 24;
-const MAX_MAP_DEPTH = 34;
+const MAX_MAP_DEPTH = 46;
 
 function issue(severity: GameplayAuditIssue["severity"], code: string, message: string) {
   return { severity, code, message } satisfies GameplayAuditIssue;

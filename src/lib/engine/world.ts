@@ -188,16 +188,21 @@ export class GameWorld {
 
     const hemi = new THREE.HemisphereLight("#f2efe6", "#3d2a1c", 1.05);
     const sun = new THREE.DirectionalLight("#fff4e0", 1.35);
-    sun.position.set(8, 14, 6);
+    // Aim the sun at the arena centre and size its shadow frustum to the map so
+    // larger (harder) arenas keep shadows in every corner.
+    const half = Math.max(map.w, map.d) * 0.5 + 4;
+    sun.position.set(map.w / 2 + 8, 14 + half * 0.4, map.d / 2 + 6);
+    sun.target.position.set(map.w / 2, 0, map.d / 2);
+    this.mapGroup.add(sun.target);
     sun.castShadow = !this.isMobile;
-    const shadowMapSize = this.isMobile ? 512 : 1024;
+    const shadowMapSize = this.isMobile ? 512 : half > 24 ? 2048 : 1024;
     sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 40;
-    sun.shadow.camera.left = -18;
-    sun.shadow.camera.right = 18;
-    sun.shadow.camera.top = 18;
-    sun.shadow.camera.bottom = -18;
+    sun.shadow.camera.far = 40 + half * 2;
+    sun.shadow.camera.left = -half;
+    sun.shadow.camera.right = half;
+    sun.shadow.camera.top = half;
+    sun.shadow.camera.bottom = -half;
     this.mapGroup.add(hemi, sun);
 
     const accentColor = map.id === "sewer" ? "#65c8ba" : map.id === "backrooms" ? "#fff0a3" : "#ffd1a1";
