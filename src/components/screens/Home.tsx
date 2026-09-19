@@ -76,11 +76,11 @@ export function Home({ nick, setNick, error, notice, rejoinCode, onRejoin, onEnt
               {error}
             </p>
           )}
-          <button type="submit" className="rounded-full bg-lime py-3 font-display text-xl text-black">
+          <button type="submit" className="h-14 w-full rounded-full bg-lime font-display text-xl text-black">
             한국 서버 입장
           </button>
-          <button type="button" onClick={onPractice} className="rounded-full border border-white/20 py-3 text-sm">
-            AI와 플레이 (나 + AI 7인)
+          <button type="button" onClick={onPractice} className="h-14 w-full rounded-full border border-white/20 font-display text-xl">
+            AI와 플레이
           </button>
         </form>
       </div>

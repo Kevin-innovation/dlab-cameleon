@@ -44,32 +44,39 @@ export function RoomBrowser({ channelName, list, busy, error, onRefresh, onJoin,
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={onBack} className="rounded-full border border-white/20 px-4 py-2 text-sm">
+          <button type="button" onClick={onBack} className="h-10 w-28 rounded-full border border-white/20 text-sm">
             닉네임 변경
           </button>
-          <button type="button" onClick={onRefresh} disabled={list.loading} className="rounded-full border border-white/20 px-4 py-2 text-sm disabled:opacity-50">
+          <button type="button" onClick={onRefresh} disabled={list.loading} className="h-10 w-28 rounded-full border border-white/20 text-sm disabled:opacity-50">
             새로고침
           </button>
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2" role="group" aria-label="방 참가 방법">
         <button
           type="button"
           onClick={onQuickJoin}
           disabled={busy}
-          className="rounded-2xl bg-lime px-4 py-4 text-left text-black disabled:opacity-50"
+          className="h-14 rounded-2xl bg-lime font-display text-lg text-black disabled:opacity-50 sm:text-xl"
         >
-          <span className="block font-display text-2xl">빠른 참가</span>
-          <span className="block text-xs text-black/70">{openRooms > 0 ? "자리 있는 방에 바로 입장" : "빈 방이 없으면 새 방을 만듭니다"}</span>
+          빠른 참가
         </button>
-        <button type="button" onClick={onCreate} disabled={busy} className="rounded-2xl border border-lime/40 bg-lime/10 px-4 py-4 text-left disabled:opacity-50">
-          <span className="block font-display text-2xl text-lime">방 만들기</span>
-          <span className="block text-xs text-white/65">이름 · 최대 인원 · 비공개 설정</span>
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={busy}
+          className="h-14 rounded-2xl border border-lime/40 bg-lime/10 font-display text-lg text-lime disabled:opacity-50 sm:text-xl"
+        >
+          방 만들기
         </button>
-        <button type="button" onClick={onJoinByCode} disabled={busy} className="rounded-2xl border border-white/15 bg-white/5 px-4 py-4 text-left disabled:opacity-50">
-          <span className="block font-display text-2xl">코드로 참가</span>
-          <span className="block text-xs text-white/65">비공개 방도 코드로 입장</span>
+        <button
+          type="button"
+          onClick={onJoinByCode}
+          disabled={busy}
+          className="h-14 rounded-2xl border border-white/15 bg-white/5 font-display text-lg disabled:opacity-50 sm:text-xl"
+        >
+          코드로 참가
         </button>
       </div>
 
