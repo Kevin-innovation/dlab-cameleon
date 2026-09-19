@@ -1,5 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import { Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
+
+// One typeface everywhere (lobby, HUD, panels); headings only differ by weight.
+const notoSansKr = Noto_Sans_KR({
+  subsets: ["latin"],
+  weight: ["400", "500", "700", "900"],
+  display: "swap",
+  variable: "--font-noto",
+});
 
 export const metadata: Metadata = {
   title: "카멜론 — 몸에 색을 칠해 숨는다",
@@ -25,7 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="ko"
-      className="h-full antialiased"
+      className={`h-full antialiased ${notoSansKr.variable}`}
     >
       <body className="min-h-full">{children}</body>
     </html>

@@ -7,8 +7,8 @@
   --pink: #ff7aa2;
   --moss: #0b100d;
   --paper: #f4efe4;
-  --font-noto: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
-  --font-display: "Black Han Sans", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  /* --font-noto is injected by next/font (layout.tsx); the fallbacks only apply before it loads. */
+  --font-ui: var(--font-noto), "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 
 @theme inline {
@@ -18,8 +18,8 @@
   --color-pink: var(--pink);
   --color-moss: var(--moss);
   --color-paper: var(--paper);
-  --font-sans: var(--font-noto);
-  --font-display: var(--font-display);
+  --font-sans: var(--font-ui);
+  --font-display: var(--font-ui);
 }
 
 html,
@@ -34,12 +34,14 @@ html {
 }
 
 body {
-  font-family: var(--font-noto), system-ui, sans-serif;
+  font-family: var(--font-ui);
   overflow-x: hidden;
 }
 
+/* Same family as body text; "display" is now just the heavy weight with tighter tracking. */
 .font-display {
-  font-family: var(--font-display), var(--font-noto), sans-serif;
+  font-family: var(--font-ui);
+  font-weight: 900;
   letter-spacing: -0.02em;
 }
 
@@ -107,7 +109,7 @@ label:has(> select:focus-visible) {
   border-radius: 0.4rem;
   background: #0b100d;
   color: var(--lime);
-  font-family: var(--font-noto), system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1;
