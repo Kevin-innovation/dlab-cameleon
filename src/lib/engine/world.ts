@@ -230,7 +230,7 @@ export class GameWorld {
     const floorTex = map.floorTexture
       ? this.loadImageTexture(map.floorTexture, map.w / 4, map.d / 4)
       : canvasTexture(
-          makePatternCanvas("wood", map.floor, [map.floor, "#b08950"], 11, this.isMobile ? 256 : 512),
+          makePatternCanvas(map.floorPattern ?? "wood", map.floor, [map.floor, map.floorPattern ? map.floor : "#b08950"], 11, this.isMobile ? 256 : 512),
           this.isMobile ? 1 : 8,
         );
     const floor = new THREE.Mesh(
@@ -247,6 +247,18 @@ export class GameWorld {
     const kind = map.kind ?? "indoor";
     if (kind === "outdoor") {
       this.mapGroup.add(makeSkyDome(map, Math.max(map.w, map.d) * 3));
+      // The world does not stop at the fence: a wide ground sheet and a ring of
+      // tree silhouettes give the low perimeter something to look out onto.
+      const far = Math.max(map.w, map.d) * 2.5;
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(far * 2, far * 2),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(map.floor).multiplyScalar(0.82), roughness: 1 }),
+      );
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.set(map.w / 2, -0.03, map.d / 2);
+      ground.receiveShadow = true;
+      this.mapGroup.add(ground);
+      this.mapGroup.add(makeTreeLine(map, this.isMobile ? 14 : 28));
     } else if (!map.rooms?.length) {
       // Legacy maps without room definitions: one ceiling sheet. It sits above the
       // lights, so give it an emissive floor so it never renders as a black void.
@@ -1581,6 +1593,32 @@ function makeSkyDome(map: GameMap, radius: number) {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 16), material);
   dome.position.set(map.w / 2, 0, map.d / 2);
   return dome;
+}
+
+/** Ring of simple trees just outside the arena so the horizon is not empty. */
+function makeTreeLine(map: GameMap, count: number) {
+  const group = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color: "#4a3320", roughness: 0.95 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: "#2f5d2a", roughness: 0.9 });
+  const trunkGeo = new THREE.CylinderGeometry(0.22, 0.32, 3.2, 6);
+  const leafGeo = new THREE.SphereGeometry(2.2, 8, 6);
+  const rx = map.w / 2 + 9;
+  const rz = map.d / 2 + 9;
+  for (let i = 0; i < count; i++) {
+    const t = (i / count) * Math.PI * 2;
+    const jitter = ((i * 7919) % 13) / 13;
+    const x = map.w / 2 + Math.cos(t) * (rx + jitter * 5);
+    const z = map.d / 2 + Math.sin(t) * (rz + jitter * 5);
+    const scale = 0.8 + ((i * 31) % 7) / 10;
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.set(x, 1.6 * scale, z);
+    trunk.scale.setScalar(scale);
+    const crown = new THREE.Mesh(leafGeo, leafMat);
+    crown.position.set(x, (3.2 + 1.4) * scale, z);
+    crown.scale.set(scale, scale * 1.15, scale);
+    group.add(trunk, crown);
+  }
+  return group;
 }
 
 /** Lateral/vertical offsets (metres) of the extra camera occlusion rays. */

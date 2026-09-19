@@ -160,6 +160,8 @@ export type GameMap = {
   fog: string;
   floor: string;
   floorTexture?: string;
+  /** Procedural floor pattern when no texture image is set (default: wood). */
+  floorPattern?: Pattern;
   boxes: BoxDef[];
   doors: DoorDef[];
   spawns: { x: number; z: number }[];

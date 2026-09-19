@@ -18,7 +18,7 @@ export type WallLine = {
   style?: WallStyle;
 };
 
-export type WallStyle = { thickness: number; color: string; pattern?: Pattern; colors?: string[] };
+export type WallStyle = { thickness: number; color: string; pattern?: Pattern; colors?: string[]; height?: number };
 
 export type LightDef = { x: number; y: number; z: number; color: string; intensity: number; distance: number };
 
@@ -53,6 +53,7 @@ function roomWallLines(room: RoomDef): WallLine[] {
     color: room.wall?.color ?? DEFAULT_WALL.color,
     pattern: room.wall?.pattern,
     colors: room.wall?.colors,
+    height: room.wall?.height ?? room.ceiling?.height,
   };
   const sides: WallSide[] = ["n", "s", "w", "e"];
   return sides.map((side) => {
@@ -71,7 +72,30 @@ function roomWallLines(room: RoomDef): WallLine[] {
   });
 }
 
-/** Rooms that touch describe the same wall twice; union the intervals and keep both sides' openings. */
+function lineHeight(line: WallLine) {
+  return line.style?.height ?? Number.POSITIVE_INFINITY;
+}
+
+/** Cut `[a0, a1]` by every taller interval already accepted on this plane. */
+function subtractIntervals(a0: number, a1: number, cuts: { a0: number; a1: number }[]) {
+  let pieces = [{ a0, a1 }];
+  for (const cut of cuts) {
+    pieces = pieces.flatMap((piece) => {
+      if (cut.a1 <= piece.a0 + PLANE_EPS || cut.a0 >= piece.a1 - PLANE_EPS) return [piece];
+      const out: { a0: number; a1: number }[] = [];
+      if (cut.a0 > piece.a0 + PLANE_EPS) out.push({ a0: piece.a0, a1: cut.a0 });
+      if (cut.a1 < piece.a1 - PLANE_EPS) out.push({ a0: cut.a1, a1: piece.a1 });
+      return out;
+    });
+  }
+  return pieces.filter((piece) => piece.a1 - piece.a0 > MIN_SEGMENT);
+}
+
+/**
+ * Rooms that touch describe the same wall twice; union the intervals and keep both
+ * sides' openings. Where a taller wall (a barn) overlaps a shorter one (a fence),
+ * the taller wall owns that stretch and the fence continues beyond it.
+ */
 export function mergeWallLines(lines: WallLine[]): WallLine[] {
   const groups = new Map<string, WallLine[]>();
   for (const line of lines) {
@@ -80,10 +104,24 @@ export function mergeWallLines(lines: WallLine[]): WallLine[] {
   }
   const merged: WallLine[] = [];
   for (const group of groups.values()) {
-    const sorted = [...group].sort((a, b) => a.a0 - b.a0);
+    const byHeight = [...group].sort((a, b) => lineHeight(b) - lineHeight(a));
+    const accepted: WallLine[] = [];
+    for (const line of byHeight) {
+      const taller = accepted.filter((acc) => lineHeight(acc) > lineHeight(line));
+      for (const piece of subtractIntervals(line.a0, line.a1, taller)) {
+        accepted.push({
+          ...line,
+          a0: piece.a0,
+          a1: piece.a1,
+          openings: line.openings.filter((o) => o.at >= piece.a0 - PLANE_EPS && o.at <= piece.a1 + PLANE_EPS),
+        });
+      }
+    }
+    // Union runs of equal height that touch or overlap.
+    const sorted = accepted.sort((a, b) => a.a0 - b.a0 || lineHeight(b) - lineHeight(a));
     let current: WallLine | null = null;
     for (const line of sorted) {
-      if (current !== null && line.a0 <= current.a1 + PLANE_EPS) {
+      if (current !== null && lineHeight(current) === lineHeight(line) && line.a0 <= current.a1 + PLANE_EPS) {
         const open: WallLine = current;
         current = { ...open, a1: Math.max(open.a1, line.a1), openings: [...open.openings, ...line.openings] };
       } else {
@@ -215,8 +253,7 @@ export function buildRooms(rooms: RoomDef[], ceiling: number, mapId: string): Bu
   const out: BuiltRooms = { boxes: [], doors: [], lights: [] };
   const lines = mergeWallLines(rooms.flatMap(roomWallLines));
   for (const line of lines) {
-    const height = Math.max(...rooms.map((r) => r.wall?.height ?? r.ceiling?.height ?? ceiling));
-    emitLine(line, height, mapId, out);
+    emitLine(line, line.style?.height ?? ceiling, mapId, out);
   }
   for (const room of rooms) {
     const height = room.ceiling?.height ?? ceiling;

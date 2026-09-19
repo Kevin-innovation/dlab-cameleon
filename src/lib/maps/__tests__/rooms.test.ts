@@ -83,6 +83,28 @@ describe("buildRooms", () => {
   });
 });
 
+describe("wall heights", () => {
+  it("uses the room's own wall height (fences) and lets a building win a shared run", () => {
+    const out = buildRooms(
+      [
+        room({ id: "yard", w: 20, d: 20, wall: { height: 1.1 }, ceiling: { open: true } }),
+        room({ id: "barn", x: 0, z: 0, w: 8, d: 8, ceiling: { height: 4 } }),
+      ],
+      3,
+      "farm",
+    );
+    const walls = out.boxes.filter((b) => b.role === "wall");
+    const fence = walls.find((b) => Math.abs(b.x - 20) < 0.5 && b.d > b.w);
+    expect(fence?.h).toBeCloseTo(1.1, 5);
+    // North plane: the barn owns 0..8 at 4m, the fence continues 8..20 at 1.1m.
+    const north = walls.filter((b) => Math.abs(b.z) < 0.5 && b.w >= b.d).sort((a, b) => a.x - b.x);
+    expect(north.map((b) => [Math.round(b.w * 10) / 10, b.h])).toEqual([
+      [8, 4],
+      [12, 1.1],
+    ]);
+  });
+});
+
 describe("mergeWallLines", () => {
   it("unions overlapping intervals on the same plane and keeps every opening", () => {
     const lines: WallLine[] = [

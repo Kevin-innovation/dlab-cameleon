@@ -44,8 +44,6 @@ const wall = (
 ): BoxDef =>
   B(x, z, w, d, color, { h, y: 0, collide: true, pattern, colors });
 
-const books: Pattern = "books";
-const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67e22", "#1abc9c", "#34495e"];
 export const BOX_COLLIDE_OUTSET = 0.06;
 
 const MANSION = {
@@ -191,66 +189,74 @@ const mansion: GameMap = {
   ],
 };
 
+const FENCE = { color: "#e8e2d2", pattern: "stripes" as Pattern, colors: ["#e8e2d2", "#cfc7b4"], thickness: 0.16, height: 1.15 };
+const LOW_FENCE = { color: "#8a6a44", pattern: "wood" as Pattern, colors: ["#8a6a44", "#6f5232"], thickness: 0.14, height: 0.95 };
+const BARN_WALL = { color: "#9b2f26", pattern: "wood" as Pattern, colors: ["#9b2f26", "#7d241d"], thickness: 0.34, height: 5 };
+const SHED_WALL = { color: "#6f6a5c", pattern: "wood" as Pattern, colors: ["#6f6a5c", "#57534a"], thickness: 0.26, height: 2.8 };
+
+/**
+ * 농장: 낮은 울타리로 둘러싸인 마당(하늘·햇빛·긴 그림자), 어둡고 높은 헛간, 작은 창고,
+ * 닭장·돼지우리. 헛간 안 그늘과 건초 더미 그늘이 위장에 유리하다.
+ */
 const farm: GameMap = {
   id: "farm",
   name: "실내 농장",
-  blurb: "소·건초·호박·빨간 문. 넓은 색면에 붙기 좋습니다.",
+  blurb: "햇빛 마당과 어두운 헛간. 건초·울타리·그늘을 활용하세요.",
   difficulty: "쉬움",
-  w: 52,
-  d: 38,
+  kind: "outdoor",
+  lighting: "day",
+  sky: { top: "#5f9fe0", horizon: "#e9efd8", sun: { azimuth: 0.85, elevation: 0.95, color: "#fff2d6", intensity: 1.6 } },
+  w: 42,
+  d: 32,
   ceiling: 6,
-  fog: "#2a2214",
-  floor: "#c2a05a",
-  floorTexture: "/textures/oak-floor-v1.png",
+  fog: "#e9efd8",
+  floor: "#6f8f3a",
+  floorPattern: "leaves",
+  rooms: [
+    {
+      id: "barn",
+      x: 4,
+      z: 2,
+      w: 16,
+      d: 14,
+      wall: BARN_WALL,
+      light: 0.28,
+      openings: [
+        { kind: "arch", side: "s", at: 8, width: 3.4 },
+        { kind: "door", side: "e", at: 7, width: 1.8 },
+        { kind: "window", side: "w", at: 4, width: 1.6, sill: 1.8, height: 1.2 },
+        { kind: "window", side: "w", at: 10, width: 1.6, sill: 1.8, height: 1.2 },
+      ],
+      ceiling: { style: "beams", color: "#4a3320", height: 5, fixtures: [{ x: 12, z: 9, kind: "pendant", on: false }] },
+    },
+    {
+      id: "shed",
+      x: 30,
+      z: 22,
+      w: 10,
+      d: 8,
+      wall: SHED_WALL,
+      light: 0.25,
+      openings: [{ kind: "door", side: "w", at: 4, width: 1.8 }],
+      ceiling: { style: "concrete", color: "#5b574c", height: 2.8 },
+    },
+    { id: "coop", x: 28, z: 2, w: 12, d: 7, wall: LOW_FENCE, light: 1, openings: [{ kind: "gap", side: "w", at: 3.5, width: 2 }], ceiling: { open: true } },
+    { id: "pen", x: 22, z: 22, w: 8, d: 8, wall: LOW_FENCE, light: 1, openings: [{ kind: "gap", side: "n", at: 4, width: 2.2 }], ceiling: { open: true } },
+    { id: "yard", x: 0, z: 0, w: 42, d: 32, wall: FENCE, light: 1, openings: [{ kind: "gap", side: "s", at: 21, width: 3.6 }], ceiling: { open: true } },
+  ],
   doors: [],
-  hunterSpawns: [{ x: 26, z: 35 }],
+  hunterSpawns: [{ x: 21, z: 30.5 }],
   spawns: [
-    { x: 8, z: 8 },
-    { x: 18, z: 12 },
-    { x: 28, z: 9 },
-    { x: 38, z: 11 },
-    { x: 44, z: 18 },
-    { x: 36, z: 26 },
-    { x: 20, z: 24 },
-    { x: 10, z: 22 },
+    { x: 8.5, z: 10 },
+    { x: 13.5, z: 6.5 },
+    { x: 2, z: 20 },
+    { x: 12, z: 26 },
+    { x: 33.5, z: 21 },
+    { x: 26, z: 12 },
+    { x: 34, z: 27 },
+    { x: 24, z: 26 },
   ],
-  boxes: [
-    B(1, 1, 50, 36, "#c2a05a", { h: 0.05, pattern: "hay", colors: ["#c2a05a", "#d4b36a"] }),
-    B(1, 1, 50, 0.1, "#7ec8e8", { h: 5.5, y: 3.2 }),
-    B(2, 2, 8, 0.22, "#d3533a", { h: 3.2, collide: true, pattern: "wood", colors: ["#d3533a", "#b43c28"] }),
-    B(14, 2, 10, 0.22, "#f0c43a", { h: 2.8, collide: true, pattern: "dots", colors: ["#f0c43a", "#e0a820"] }),
-    B(28, 2, 10, 0.22, "#5aa0d6", { h: 2.8, collide: true, pattern: "wallpaper", colors: ["#5aa0d6", "#3d7eaf"] }),
-    B(42, 2, 8, 0.22, "#6fbf57", { h: 2.6, collide: true, pattern: "leaves" }),
-    B(16, 12, 0.22, 10, "#8b5a2b", { h: 2.4, collide: true, pattern: "wood" }),
-    B(30, 14, 10, 0.22, "#5aa0d6", { h: 2.2, collide: true, pattern: "wallpaper", colors: ["#5aa0d6", "#3d7eaf"] }),
-    B(8, 16, 2.4, 1.5, "#e39b2d", { h: 1.05, pattern: "hay" }),
-    B(36, 16, 1.8, 1.4, "#6fbf57", { h: 1.25, pattern: "leaves" }),
-    B(4, 6, 2.2, 1.6, "#e39b2d", { h: 0.95, pattern: "hay" }),
-    B(8, 8, 2.2, 1.6, "#e39b2d", { h: 0.95, pattern: "hay" }),
-    B(6, 12, 1.6, 1.4, "#d35400", { h: 0.8 }),
-    B(20, 8, 1.6, 1.2, "#e67e22", { h: 0.7 }),
-    B(24, 10, 1.4, 1.2, "#d35400", { h: 0.65 }),
-    B(32, 8, 3.2, 2.2, "#f4f0e4", { h: 1.5, pattern: "dots", colors: ["#f4f0e4", "#111"] }),
-    B(40, 9, 2.4, 1.8, "#6fbf57", { h: 1.2, pattern: "leaves" }),
-    B(12, 20, 0.22, 8, "#8b5a2b", { h: 1.1, pattern: "wood" }),
-    B(26, 18, 0.9, 0.9, "#8b5a2b", { h: 3.6, collide: true, pattern: "wood" }),
-    B(4, 24, 2.0, 1.6, "#c0392b", { h: 1.1, pattern: "wood" }),
-    B(8, 26, 2.8, 2.0, "#7b5428", { h: 1.1, pattern: "hay" }),
-    B(18, 24, 1.6, 0.14, "#f7efe0", { h: 2.0, y: 0.7 }),
-    B(22, 24, 1.6, 0.14, "#f7efe0", { h: 2.0, y: 0.7 }),
-    B(34, 22, 1.6, 1.3, "#e67e22", { h: 0.7 }),
-    B(38, 24, 1.6, 1.3, "#d35400", { h: 0.7 }),
-    B(42, 22, 2.2, 1.8, "#6fbf57", { h: 1.2, pattern: "leaves" }),
-    B(14, 14, 1.3, 1.3, "#e67e22", { h: 0.85, collide: true }),
-    B(16, 15, 1.1, 1.1, "#d35400", { h: 0.7, collide: true }),
-    B(22, 16, 2.0, 1.1, "#f4f0e4", { h: 1.6, collide: true, pattern: "dots", colors: ["#f4f0e4", "#111"] }),
-    B(44, 12, 1.4, 0.9, "#c0392b", { h: 2.1, collide: true, pattern: "wood" }),
-    wall(0, 0, 52, 0.4, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
-    wall(0, 37.6, 22, 0.4, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
-    wall(30, 37.6, 22, 0.4, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
-    wall(0, 0, 0.4, 38, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
-    wall(51.6, 0, 0.4, 38, "#5a3a22", 5.5, "wood", ["#5a3a22", "#7b5428"]),
-  ],
+  boxes: [],
 };
 
 const sewer: GameMap = {
@@ -485,18 +491,6 @@ function placeOnStage(map: GameMap, box: BoxDef) {
 }
 
 function landmarkProps(map: GameMap): BoxDef[] {
-  if (map.id === "mansion") {
-    return [
-      // 북쪽 거실: 큰 소파 + 2인용 소파 + 테이블로 한 덩어리의 은신처를 만든다.
-      B(18, 22.5, 3.6, 1.25, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 } }),
-      B(24, 23, 2.6, 1.15, "#7b3944", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.42, d: 1.03 } }),
-      B(27.5, 23, 1.8, 1.5, "#365b78", { h: 0.95, collide: true, prop: "armchair" }),
-      B(29.8, 24.5, 2.4, 1.4, "#6d4c2a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 2.2, d: 1.2 }, pattern: "wood" }),
-      // 동쪽 서재: 시야를 완전히 막지 않는 낮은 책장 은신처.
-      B(40.5, 20, 2.4, 0.55, "#5c2e12", { h: 2.35, collide: true, prop: "bookshelf", pattern: "books", colors: bookColors }),
-      B(3.5, 24.5, 2.8, 1.15, "#7b3944", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.62, d: 1.03 } }),
-    ];
-  }
   if (map.id === "sewer") {
     return [
       // 남쪽 정비 구역: 원형 드럼과 가구를 섞어 시야·이동 속도를 동시에 바꾼다.
@@ -513,47 +507,6 @@ function landmarkProps(map: GameMap): BoxDef[] {
       B(18.1, 27.4, 1.25, 1.25, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
       B(31.5, 5.5, 1.3, 1.3, "#b03a2e", { h: 1.2, collide: true, prop: "barrel", shape: "cylinder" }),
       B(34, 26, 2.2, 1.5, "#2c3e50", { h: 1.35, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] }),
-    ];
-  }
-  if (map.id === "backrooms") {
-    return [
-      // 사무실 클러스터: 책상 사이에 앉거나 붙을 수 있는 작은 커버를 배치한다.
-      B(15, 7, 1.4, 0.9, "#8c7742", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
-      B(26, 7, 1.4, 0.9, "#8c7742", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
-      B(4, 12, 1.3, 1.3, "#53734c", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#53734c", "#354e30"] }),
-      B(35, 10, 1.1, 1.1, "#d6c57c", { h: 2.9, collide: true, prop: "floorLamp", shape: "cylinder" }),
-      B(4, 18, 2.4, 0.65, "#6d5c3a", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 2.2, d: 0.58 }, pattern: "wood" }),
-      B(17, 22, 1.6, 1.4, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
-      B(24, 22, 3.6, 1.25, "#8c7742", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 } }),
-      B(24.2, 24, 2.2, 1.4, "#6d5c3a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 2.02, d: 1.2 }, pattern: "wood" }),
-      B(29, 22, 1.8, 1.5, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
-      B(31.3, 22, 1.1, 1.1, "#d6c57c", { h: 3.2, collide: true, prop: "floorLamp", shape: "cylinder" }),
-      B(6.5, 22.2, 2.8, 1.15, "#8c7742", { h: 0.95, collide: true, prop: "sofa", collider: { w: 2.62, d: 1.03 } }),
-      B(9.8, 24, 2.1, 1.3, "#6d5c3a", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 1.92, d: 1.1 }, pattern: "wood" }),
-      B(13, 22, 1.7, 1.4, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
-      B(33, 18, 2.6, 0.6, "#6d5c3a", { h: 2.25, collide: true, prop: "bookshelf", collider: { w: 2.3, d: 0.52 }, pattern: "wood" }),
-    ];
-  }
-  if (map.id === "farm") {
-    return [
-      // 서쪽 휴게 구역: 큰 소파·안락의자·테이블의 3단 커버 조합.
-      B(7, 21, 4.4, 1.45, "#7b3f2a", { h: 1.0, collide: true, prop: "sofa", collider: { w: 4.12, d: 1.3 }, texture: "/textures/velvet-ruby-v1.png" }),
-      B(12.5, 22, 1.6, 1.4, "#a56832", { h: 0.95, collide: true, prop: "armchair" }),
-      B(10, 24, 2.5, 1.3, "#6d4420", { h: 0.72, collide: true, prop: "coffeeTable", collider: { w: 2.28, d: 1.12 }, pattern: "wood" }),
-      // 북쪽 관리실: 낮은 소파와 책장으로 빠른 길과 우회 길을 만든다.
-      B(22, 4.5, 3.8, 1.25, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.56, d: 1.12 } }),
-      B(27, 5, 1.6, 1.4, "#a56832", { h: 0.95, collide: true, prop: "armchair" }),
-      B(33, 25, 2.2, 0.8, "#6d4420", { h: 2.1, collide: true, prop: "bookshelf", collider: { w: 2.05, d: 0.7 }, pattern: "wood" }),
-      B(24, 28, 1.3, 1.3, "#2c6e4a", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"] }),
-      B(31, 28, 1.1, 1.1, "#d9c9a5", { h: 2.9, collide: true, prop: "floorLamp", shape: "cylinder" }),
-      B(44, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
-      B(36, 28, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
-      B(14, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
-      B(17, 27, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" }),
-      B(3.5, 29, 2.2, 1.6, "#e39b2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
-      B(6.2, 29.2, 2.2, 1.6, "#d79a2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
-      B(40, 29, 2.2, 1.6, "#e39b2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
-      B(43, 29.2, 2.2, 1.6, "#d79a2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
     ];
   }
   return [];
@@ -877,6 +830,64 @@ function extraCover(map: GameMap): BoxDef[] {
       B(35, 30.8, 2.4, 0.6, "#b08a4e", { h: 0.9, collide: true, pattern: "wood" }),
     ];
   }
+  if (map.id === "farm") {
+    const hay = (x: number, z: number, size = 1.6, h = 1.1) => B(x, z, size, size * 0.75, "#d9a441", { h, collide: true, shape: "cylinder", pattern: "hay" });
+    const hayStack = (x: number, z: number) => [hay(x, z), hay(x + 1.7, z + 0.1), hay(x + 0.85, z + 1.35, 1.6, 2.2)];
+    /** Rows of tall corn: walkable lanes between them, no line of sight across. */
+    const cornField = (x: number, z: number, rows: number, length: number) =>
+      Array.from({ length: rows }, (_, i) =>
+        B(x, z + i * 2, length, 0.7, "#6f9a3a", { h: 2.2, collide: true, pattern: "leaves", colors: ["#6f9a3a", "#c9b44a"] }),
+      );
+    const trough = (x: number, z: number) => B(x, z, 2.2, 0.7, "#5c5c5c", { h: 0.6, collide: true });
+    const tree = (x: number, z: number) => [
+      B(x, z, 0.6, 0.6, "#4a3320", { h: 3.2, collide: true, shape: "cylinder" }),
+      { x: x + 0.3, y: 4.4, z: z + 0.3, w: 4.6, h: 3.6, d: 4.6, color: "#2f6b2e", shape: "sphere" as const, collide: false, role: "trim" as const, pattern: "leaves" as Pattern, colors: ["#2f6b2e", "#1f4a20"] },
+    ];
+    const crate = (x: number, z: number, size = 1.2, h = 1) => B(x, z, size, size, "#8a6a44", { h, collide: true, pattern: "wood" });
+    const chair = (x: number, z: number) => B(x, z, 1.7, 0.9, "#8b5a2b", { h: 0.95, collide: true, prop: "chair", pattern: "wood" });
+    const stall = (x: number, z: number, w: number, d: number) => B(x, z, w, d, "#8a6a44", { h: 1.4, collide: true, pattern: "wood", colors: ["#8a6a44", "#6f5232"] });
+    return [
+      // 헛간 안: 트랙터, 건초, 작업대, 칸막이 축사
+      B(5, 3, 3.4, 4.6, "#2e7d32", { h: 2.2, collide: true, pattern: "stripes", colors: ["#2e7d32", "#1b5e20"] }),
+      B(5.3, 7.9, 1.2, 1.2, "#111", { h: 1.2, collide: true, shape: "cylinder" }),
+      ...hayStack(15, 3),
+      hay(17.5, 12.5),
+      hay(15.5, 13),
+      B(4.6, 12.5, 4, 0.9, "#6d4420", { h: 0.95, collide: true, pattern: "wood" }),
+      stall(10, 3, 0.16, 4),
+      stall(10, 9, 0.16, 4),
+      stall(13, 9, 0.16, 4),
+      crate(11, 4.5, 1, 0.8),
+      // 마당: 나무, 건초 더미, 물통, 우물, 수레
+      ...tree(2, 2.5),
+      ...tree(38.5, 12),
+      ...tree(2.5, 29),
+      ...hayStack(8, 20),
+      hay(14, 23),
+      hay(16, 19),
+      trough(23, 4),
+      B(24, 17, 1.6, 1.6, "#7d7d7d", { h: 1.1, collide: true, shape: "cylinder", pattern: "bricks", colors: ["#7d7d7d", "#5b5b5b"] }),
+      ...cornField(29, 11, 5, 9),
+      B(12, 30, 2.2, 1.6, "#e39b2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
+      B(15, 29.8, 2.2, 1.6, "#d79a2d", { h: 1.1, collide: true, shape: "cylinder", pattern: "hay" }),
+      chair(4, 25),
+      chair(6.5, 25),
+      B(4.5, 27, 2.4, 1.1, "#6d4420", { h: 0.75, collide: true, prop: "coffeeTable", collider: { w: 2.2, d: 1 }, pattern: "wood" }),
+      // 닭장: 작은 닭집과 모이통
+      B(35, 3, 2.4, 1.8, "#c9b48a", { h: 1.5, collide: true, pattern: "wood" }),
+      trough(30, 6.5),
+      // 돼지우리: 진흙과 여물통
+      { x: 26, y: 0.02, z: 26, w: 5, h: 0.04, d: 5, color: "#6b4a2e", collide: false, role: "decal" as const },
+      trough(23, 28.5),
+      B(27, 23, 1.8, 1.4, "#8a6a44", { h: 1.1, collide: true, pattern: "wood" }),
+      // 창고 안
+      crate(31, 23),
+      crate(32.4, 23, 1, 0.8),
+      crate(31.4, 24.4, 1, 1.4),
+      B(36, 28.2, 3.4, 0.9, "#6d4420", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 3.2, d: 0.8 }, pattern: "wood" }),
+      B(38, 23, 1.3, 1.3, "#922b21", { h: 1.2, collide: true, prop: "barrel", shape: "cylinder" }),
+    ];
+  }
   if (map.id === "sewer") {
     return [
       barrel(41, 5),
@@ -998,6 +1009,7 @@ export function getMap(id: string) {
 }
 
 function isSolidProp(b: BoxDef) {
+  if (b.collide === false) return false;
   if (b.h <= 0.22) return false;
   if (b.collide) return b.w >= 0.16 && b.d >= 0.16;
   if (b.w < 0.32 || b.d < 0.32) return false;

@@ -62,6 +62,8 @@ function containsPoint(
 const SIGHT_GRID_STEP = 3;
 const SIGHT_EYE = 1.2;
 const MAX_SIGHT_COVERAGE = 0.45;
+/** Fences and hay do not block eye-height sight, so open-air maps are judged more leniently. */
+const MAX_SIGHT_COVERAGE_OUTDOOR = 0.6;
 
 function segmentHitsBox(x0: number, z0: number, x1: number, z1: number, b: Collider) {
   // Liang–Barsky slab test in 2D against the collider's AABB.
@@ -108,8 +110,9 @@ export function sightCoverage(map: GameMap, colliders: Collider[] = mapColliders
 }
 
 function isPrimaryCover(box: BoxDef) {
+  // Furniture props and any body-sized solid block (hay, crates, counters) count; walls and dressing do not.
   return Boolean(
-    box.prop &&
+    !box.role &&
       box.collide &&
       box.h >= 0.55 &&
       box.h <= 2.4 &&
@@ -123,7 +126,8 @@ function isPrimaryCover(box: BoxDef) {
 export function auditMap(map: GameMap): MapGameplayAudit {
   const issues: GameplayAuditIssue[] = [];
   const colliders = mapColliders(map);
-  const propCount = map.boxes.filter((box) => Boolean(box.prop)).length;
+  // Semantic props: modelled furniture, or shaped/patterned solid blocks (hay bales, crates, counters).
+  const propCount = map.boxes.filter((box) => Boolean(box.prop) || (box.collide && !box.role && Boolean(box.shape || box.pattern))).length;
   const primaryCoverCount = map.boxes.filter(isPrimaryCover).length;
   const rotatedColliderCount = map.boxes.filter((box) => Boolean(box.rotation) && Boolean(box.collide)).length;
   const elevatedObjectCount = map.boxes.filter(
@@ -243,12 +247,13 @@ export function auditMap(map: GameMap): MapGameplayAudit {
       }
     }
   }
-  if (coverage > MAX_SIGHT_COVERAGE) {
+  const sightLimit = map.kind === "outdoor" ? MAX_SIGHT_COVERAGE_OUTDOOR : MAX_SIGHT_COVERAGE;
+  if (coverage > sightLimit) {
     issues.push(
       issue(
         "warning",
         "SIGHTLINES_TOO_OPEN",
-        `한 지점에서 맵의 ${Math.round(coverage * 100)}%가 보입니다 (목표 ≤ ${MAX_SIGHT_COVERAGE * 100}%). 복도·모서리·벽으로 시야를 끊어야 합니다.`,
+        `한 지점에서 맵의 ${Math.round(coverage * 100)}%가 보입니다 (목표 ≤ ${sightLimit * 100}%). 복도·모서리·벽으로 시야를 끊어야 합니다.`,
       ),
     );
   }
