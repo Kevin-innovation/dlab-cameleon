@@ -203,6 +203,8 @@ export type RoomState = {
   prepareTime: number;
   hideTime: number;
   huntTime: number;
+  /** Seconds every hider stays revealed after the hunt; a room option since the lobby grid shows it. */
+  revealTime: number;
   hunterCount: number;
   ammoEnabled: boolean;
   ammoCount: number;

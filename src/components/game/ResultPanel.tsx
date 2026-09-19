@@ -1,6 +1,6 @@
 "use client";
 
-import { REVEAL_TIME, SCORE_HUNT_WIN, SCORE_SURVIVE, SCORE_TAG } from "@/lib/config";
+import { SCORE_HUNT_WIN, SCORE_SURVIVE, SCORE_TAG } from "@/lib/config";
 import type { PlayerSnap, RoomState } from "@/lib/types";
 import { AccessibleModal } from "../AccessibleModal";
 
@@ -49,7 +49,7 @@ export function RevealPanel({ room, timeLeft }: { room: RoomState; timeLeft: num
   return (
     <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-black/25 p-4">
       <div className="w-full max-w-md rounded-3xl border border-lime/25 bg-[#121c17]/90 p-6 text-center shadow-2xl backdrop-blur-sm">
-        <p className="text-sm tracking-[0.18em] text-lime">마지막 {REVEAL_TIME}초</p>
+        <p className="text-sm tracking-[0.18em] text-lime">마지막 {room.revealTime || 30}초</p>
         <h2 className="text-wrap-balance mt-2 font-display text-4xl">검증 라운드</h2>
         <p className="mt-3 text-sm text-white/75">
           모든 카멜레온의 위치가 공개됩니다.

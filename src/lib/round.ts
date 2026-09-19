@@ -42,6 +42,7 @@ export function emptyRoom(): RoomState {
     prepareTime: DEFAULT_PREPARE,
     hideTime: DEFAULT_HIDE,
     huntTime: DEFAULT_HUNT,
+    revealTime: REVEAL_TIME,
     hunterCount: 1,
     ammoEnabled: false,
     ammoCount: DEFAULT_AMMO,
@@ -64,6 +65,7 @@ export type RoomConfigPatch = Partial<
     | "prepareTime"
     | "hideTime"
     | "huntTime"
+    | "revealTime"
     | "ammoEnabled"
     | "ammoCount"
   >
@@ -146,6 +148,7 @@ export function sanitizeRoom(input: RoomState): RoomState {
     prepareTime: Math.floor(bounded(source.prepareTime, defaults.prepareTime, 3, 20)),
     hideTime: Math.floor(bounded(source.hideTime, defaults.hideTime, 30, 180)),
     huntTime: Math.floor(bounded(source.huntTime, defaults.huntTime, 60, 300)),
+    revealTime: Math.floor(bounded(source.revealTime, defaults.revealTime, 10, 60)),
     hunterCount: Math.floor(bounded(source.hunterCount, defaults.hunterCount, 1, 3)),
     ammoEnabled: Boolean(source.ammoEnabled),
     ammoCount: Math.floor(bounded(source.ammoCount, defaults.ammoCount, 3, 12)),
@@ -374,7 +377,7 @@ export function finishRound(
     ...room,
     phase: "reveal",
     winner,
-    phaseEndsAt: now + REVEAL_TIME * 1000,
+    phaseEndsAt: now + (room.revealTime || REVEAL_TIME) * 1000,
     scores,
   };
 }

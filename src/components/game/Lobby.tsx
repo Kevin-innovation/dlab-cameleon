@@ -204,6 +204,21 @@ export const Lobby = memo(function Lobby({
               onChange={(e) => session.patchRoom({ huntTime: Number(e.target.value) || 150 })}
             />
           </label>
+          <label className="rounded-xl bg-white/8 p-2">
+            공개 라운드(초)
+            <input
+              type="number"
+              name="revealTime"
+              autoComplete="off"
+              inputMode="numeric"
+              min={10}
+              max={60}
+              disabled={!host}
+              className="mt-1 w-full bg-transparent"
+              value={room.revealTime || 30}
+              onChange={(e) => session.patchRoom({ revealTime: Math.max(10, Math.min(60, Number(e.target.value) || 30)) })}
+            />
+          </label>
           <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
             <span>
               <input

@@ -375,6 +375,9 @@ describe("finishRound", () => {
     const hiders = finishRound(room, "hiders", players, NOW);
     expect(hiders.scores).toEqual({ s1: SCORE_SURVIVE });
     expect(hiders.phaseEndsAt).toBe(NOW + REVEAL_TIME * 1000);
+    const quick = finishRound({ ...room, revealTime: 12 }, "hiders", players, NOW);
+    expect(quick.phaseEndsAt).toBe(NOW + 12_000);
+    expect(sanitizeRoom({ ...emptyRoom(), revealTime: 500 }).revealTime).toBe(60);
     const hunters = finishRound(room, "hunters", players, NOW);
     expect(hunters.scores).toEqual({ h1: SCORE_HUNT_WIN });
   });
