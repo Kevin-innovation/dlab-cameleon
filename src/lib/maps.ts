@@ -48,70 +48,146 @@ const books: Pattern = "books";
 const bookColors = ["#c0392b", "#2980b9", "#27ae60", "#f1c40f", "#8e44ad", "#e67e22", "#1abc9c", "#34495e"];
 export const BOX_COLLIDE_OUTSET = 0.06;
 
+const MANSION = {
+  ballroom: { x: 0, z: 0, w: 24, d: 14 },
+  library: { x: 24, z: 0, w: 18, d: 14 },
+  hallway: { x: 0, z: 14, w: 30, d: 4 },
+  stairhall: { x: 30, z: 14, w: 12, d: 6 },
+  kitchen: { x: 0, z: 18, w: 14, d: 14 },
+  dining: { x: 14, z: 18, w: 16, d: 14 },
+  conservatory: { x: 30, z: 20, w: 12, d: 12 },
+};
+const CREAM_WALL = { color: "#e9dcc2", pattern: "wallpaper" as Pattern, colors: ["#e9dcc2", "#d6c5a3"], thickness: 0.34 };
+const WOOD_WALL = { color: "#4a3020", pattern: "wood" as Pattern, colors: ["#4a3020", "#3a2416"], thickness: 0.34 };
+const HALL_WALL = { color: "#b9a98c", pattern: "wallpaper" as Pattern, colors: ["#b9a98c", "#a6957a"], thickness: 0.34 };
+const TILE_WALL = { color: "#f0f0ea", pattern: "tiles" as Pattern, colors: ["#f0f0ea", "#d9dbd2"], thickness: 0.34 };
+const RED_WALL = { color: "#a4553f", pattern: "wallpaper" as Pattern, colors: ["#a4553f", "#8c4433"], thickness: 0.34 };
+const GLASS_WALL = { color: "#dfe8d8", thickness: 0.3 };
+
+/** A bright emissive slab just outside a window so the glass reads as daylight. */
+function daylight(x: number, z: number, w: number, d: number): BoxDef {
+  return { x, y: 1.75, z, w, h: 2.2, d, color: "#fff3d0", emissive: "#fff3d0", emissiveIntensity: 1, collide: false, role: "fixture" };
+}
+
+/**
+ * 저택: 무도회장(큰 창·샹들리에), 어두운 서재, 복도, 계단 홀(0.9m 단), 밝은 주방,
+ * 붉은 식당, 유리 온실. 밝기 차이와 커튼·테이블 밑·계단 밑이 은신의 핵심이다.
+ */
 const mansion: GameMap = {
   id: "mansion",
   name: "숨바꼭질 저택",
-  blurb: "무도회장·서재·주방. 책장·액자·타일에 녹아드세요.",
+  blurb: "무도회장·서재·주방·온실. 커튼 뒤와 어두운 서재를 활용하세요.",
   difficulty: "쉬움",
-  w: 48,
-  d: 36,
-  ceiling: 4.2,
-  fog: "#241810",
+  kind: "indoor",
+  lighting: "day",
+  ceilingStyle: "plaster",
+  w: 42,
+  d: 32,
+  ceiling: 3.4,
+  fog: "#2a1d12",
   floor: "#c4a06a",
   floorTexture: "/textures/oak-floor-v1.png",
+  rooms: [
+    {
+      id: "ballroom",
+      ...MANSION.ballroom,
+      wall: CREAM_WALL,
+      light: 0.9,
+      openings: [
+        { kind: "window", side: "n", at: 4, width: 3, sill: 0.9, height: 2 },
+        { kind: "window", side: "n", at: 12, width: 3, sill: 0.9, height: 2 },
+        { kind: "window", side: "n", at: 20, width: 3, sill: 0.9, height: 2 },
+        { kind: "arch", side: "s", at: 12, width: 3.2 },
+        { kind: "door", side: "e", at: 7, width: 1.8 },
+      ],
+      ceiling: { style: "plaster", color: "#f3ecdd", fixtures: [{ x: 8, z: 7, kind: "pendant" }, { x: 16, z: 7, kind: "pendant" }] },
+    },
+    {
+      id: "library",
+      ...MANSION.library,
+      wall: WOOD_WALL,
+      light: 0.3,
+      openings: [
+        { kind: "door", side: "s", at: 3, width: 1.8 },
+        { kind: "window", side: "n", at: 14, width: 2, sill: 1.2, height: 1.4 },
+      ],
+      ceiling: { style: "beams", color: "#5a3f2a", fixtures: [{ x: 29, z: 7, kind: "spot" }, { x: 37, z: 7, kind: "spot", on: false }] },
+    },
+    {
+      id: "hallway",
+      ...MANSION.hallway,
+      wall: HALL_WALL,
+      light: 0.4,
+      openings: [
+        { kind: "door", side: "s", at: 7, width: 1.8 },
+        { kind: "arch", side: "s", at: 22, width: 2.6 },
+        { kind: "arch", side: "e", at: 2, width: 2.6 },
+      ],
+      ceiling: { style: "plaster", color: "#d9cfbc", fixtures: [{ x: 6, z: 16, kind: "spot" }, { x: 24, z: 16, kind: "spot", on: false }] },
+    },
+    {
+      id: "stairhall",
+      ...MANSION.stairhall,
+      wall: HALL_WALL,
+      light: 0.5,
+      openings: [{ kind: "door", side: "s", at: 4, width: 1.8 }],
+      ceiling: { style: "plaster", color: "#d9cfbc", fixtures: [{ x: 34, z: 17, kind: "pendant" }] },
+    },
+    {
+      id: "kitchen",
+      ...MANSION.kitchen,
+      wall: TILE_WALL,
+      light: 0.85,
+      openings: [
+        { kind: "window", side: "w", at: 7, width: 3, sill: 1, height: 1.4 },
+        { kind: "door", side: "e", at: 6, width: 1.8 },
+      ],
+      ceiling: { style: "plaster", color: "#f2f2ee", fixtures: [{ x: 4, z: 25, kind: "fluorescent" }, { x: 10, z: 25, kind: "fluorescent" }] },
+    },
+    {
+      id: "dining",
+      ...MANSION.dining,
+      wall: RED_WALL,
+      light: 0.55,
+      openings: [{ kind: "door", side: "e", at: 6, width: 1.8 }],
+      ceiling: { style: "plaster", color: "#e2d4c2", fixtures: [{ x: 22, z: 25, kind: "pendant" }] },
+    },
+    {
+      id: "conservatory",
+      ...MANSION.conservatory,
+      wall: GLASS_WALL,
+      light: 1,
+      openings: [
+        { kind: "window", side: "e", at: 3, width: 3.4, sill: 0.6, height: 2.3 },
+        { kind: "window", side: "e", at: 9, width: 3.4, sill: 0.6, height: 2.3 },
+        { kind: "window", side: "s", at: 3, width: 3.4, sill: 0.6, height: 2.3 },
+        { kind: "window", side: "s", at: 9, width: 3.4, sill: 0.6, height: 2.3 },
+      ],
+      ceiling: { style: "plaster", color: "#eef4ee" },
+    },
+  ],
   doors: [],
-  hunterSpawns: [{ x: 24, z: 33.5 }],
+  hunterSpawns: [{ x: 12, z: 8 }],
   spawns: [
-    { x: 8, z: 8 },
-    { x: 16, z: 12 },
-    { x: 24, z: 10 },
-    { x: 32, z: 8 },
-    { x: 40, z: 14 },
-    { x: 36, z: 24 },
-    { x: 18, z: 26 },
-    { x: 10, z: 22 },
+    { x: 4, z: 9 },
+    { x: 20, z: 4 },
+    { x: 33.2, z: 4.5 },
+    { x: 15, z: 16 },
+    { x: 7, z: 29 },
+    { x: 22, z: 30 },
+    { x: 36, z: 29 },
+    { x: 31.2, z: 19 },
   ],
   boxes: [
-    B(1, 1, 46, 34, "#c4a06a", { h: 0.04, pattern: "wood" }),
-    B(2, 2, 8, 0.18, "#78856a", {
-      h: 3.6,
-      collide: true,
-      pattern: "wallpaper",
-      texture: "/textures/mansion-wallpaper-v1.png",
-      colors: ["#78856a", "#9caa82"],
-    }),
-    B(12, 2, 10, 0.18, "#1f4d6e", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
-    B(28, 2, 8, 0.18, "#6a8f6a", { h: 2.8, collide: true, pattern: "leaves" }),
-    B(10, 11, 0.2, 8, "#6b3a2a", { h: 2.9, collide: true, pattern: "wallpaper", colors: ["#6b3a2a", "#8a5040"] }),
-    B(20, 9, 9, 0.2, "#1f4d6e", { h: 2.5, collide: true, pattern: "wallpaper", colors: ["#1f4d6e", "#2e6a8f"] }),
-    B(33, 12, 0.2, 7, "#6a8f6a", { h: 2.7, collide: true, pattern: "leaves" }),
-    B(5, 8, 3.6, 1.25, "#a32638", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 }, texture: "/textures/velvet-ruby-v1.png" }),
-    B(26, 14, 2.4, 0.5, "#5c2e12", { h: 2.35, pattern: books, colors: bookColors }),
-    B(2.4, 3.2, 3.6, 1.25, "#a32638", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.12 }, texture: "/textures/velvet-ruby-v1.png", rotation: Math.PI / 2 }),
-    B(7, 3.4, 2.8, 0.5, "#5c2e12", { h: 2.5, pattern: books, colors: bookColors }),
-    B(18, 3.5, 1.4, 1.4, "#2c6e4a", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"], shape: "sphere" }),
-    B(22, 3.2, 3.2, 2.0, "#9b2a2a", { h: 0.08, pattern: "dots", colors: ["#9b2a2a", "#c0392b"] }),
-    B(30, 3.4, 4.2, 0.5, "#5b3a28", { h: 2.6, pattern: books, colors: bookColors }),
-    B(38, 3.6, 2.2, 1.6, "#e8d5a3", { h: 1.4, y: 0.9, pattern: "stripes", colors: ["#e8d5a3", "#c9a66b"] }),
-    B(23.4, 16, 1.1, 1.1, "#d9c9a5", { h: 3.4, collide: true, prop: "floorLamp", pattern: "bricks", shape: "cylinder" }),
-    B(6, 18, 3.6, 2.2, "#d9c4a0", { h: 0.06, texture: "/textures/rug-persian-v1.png" }),
-    B(8, 20, 1.6, 1.4, "#8b4513", { h: 0.7, collide: true, prop: "coffeeTable", collider: { w: 1.42, d: 1.18 }, pattern: "wood" }),
-    B(14, 22, 2.2, 1.2, "#7a3426", { h: 0.95, collide: true, prop: "armchair", collider: { w: 1.72, d: 1.06 }, texture: "/textures/velvet-ruby-v1.png" }),
-    B(32, 18, 4.0, 3.2, "#d8cfc0", { h: 0.05, pattern: "tiles", colors: ["#efe8dc", "#d2c4b0"] }),
-    B(33, 20, 1.6, 0.8, "#c45c26", { h: 0.9, collide: true, prop: "chair" }),
-    B(36, 20, 1.6, 0.8, "#c45c26", { h: 0.9, collide: true, prop: "chair" }),
-    B(38, 24, 5.5, 6, "#d5e4e2", { h: 0.05, pattern: "tiles", colors: ["#d5e4e2", "#b9cdc9"] }),
-    B(40, 26, 1.6, 1.8, "#eef6f4", { h: 1.6, pattern: "tiles" }),
-    B(43, 26, 1.6, 1.8, "#9ec5c1", { h: 0.55, pattern: "tiles" }),
-    B(4, 28, 2.4, 2.4, "#2f4f3a", { h: 1.3, collide: true, prop: "plant", pattern: "leaves", shape: "sphere" }),
-    B(12, 0.42, 1.8, 0.08, "#d4b483", { h: 1.3, y: 1.1, collide: true, prop: "painting", pattern: "stripes", colors: ["#d4b483", "#6b3a2a"] }),
-    B(30, 0.42, 1.6, 0.08, "#2e6a8f", { h: 1.2, y: 1.2, collide: true, prop: "painting", pattern: "dots", colors: ["#2e6a8f", "#f3f1ea"] }),
-    B(9, 15, 0.9, 0.9, "#c9a66b", { h: 1.1, collide: true, pattern: "wood" }),
-    wall(0, 0, 48, 0.4, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
-    wall(0, 35.6, 20, 0.4, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
-    wall(28, 35.6, 20, 0.4, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
-    wall(0, 0, 0.4, 36, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
-    wall(47.6, 0, 0.4, 36, "#4a3428", 3.8, "wallpaper", ["#4a3428", "#6b3a2a"]),
+    daylight(4, -0.5, 3.6, 0.2),
+    daylight(12, -0.5, 3.6, 0.2),
+    daylight(20, -0.5, 3.6, 0.2),
+    daylight(38, -0.5, 2.4, 0.2),
+    daylight(-0.5, 25, 0.2, 3.6),
+    daylight(42.5, 23, 0.2, 4),
+    daylight(42.5, 29, 0.2, 4),
+    daylight(33, 32.5, 4, 0.2),
+    daylight(39, 32.5, 4, 0.2),
   ],
 };
 
@@ -716,6 +792,91 @@ function extraCover(map: GameMap): BoxDef[] {
       crate(53, 40),
     ];
   }
+  if (map.id === "mansion") {
+    const sofa = (x: number, z: number, color = "#7b3f2a") =>
+      B(x, z, 3.4, 1.25, color, { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.2, d: 1.12 }, texture: "/textures/velvet-ruby-v1.png" });
+    const armchair = (x: number, z: number, color = "#a56832") => B(x, z, 1.6, 1.4, color, { h: 0.95, collide: true, prop: "armchair" });
+    const table = (x: number, z: number) =>
+      B(x, z, 2.2, 1.4, "#6d4420", { h: 0.72, collide: true, prop: "coffeeTable", collider: { w: 2.02, d: 1.2 }, pattern: "wood" });
+    const plant = (x: number, z: number) =>
+      B(x, z, 1.3, 1.3, "#2c6e4a", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#2c6e4a", "#1e4d32"] });
+    const lamp = (x: number, z: number) => B(x, z, 1.1, 1.1, "#d9c9a5", { h: 2.6, collide: true, prop: "floorLamp", shape: "cylinder" });
+    const shelf = (x: number, z: number, rotation?: number) =>
+      B(x, z, 2.4, 0.65, "#6d4420", { h: 2.3, collide: true, prop: "bookshelf", collider: { w: 2.2, d: 0.58 }, pattern: "wood", rotation });
+    const woodChair = (x: number, z: number) => chair(x, z, "#8b5a2b");
+    /** Velvet curtain hung 0.7m off the wall so a hider can slip behind it (no collision, blocks sight). */
+    const curtain = (x: number, z: number, w: number, d: number) => B(x, z, w, d, "#7b1f2e", { h: 3.1, collide: false, pattern: "stripes", colors: ["#7b1f2e", "#5e1522"] });
+    const step = (x: number, z: number, h: number) => B(x, z, 1.4, 3.6, "#6b4a32", { h, collide: true, pattern: "wood" });
+    return [
+      // 무도회장: 피아노, 커튼, 벨벳 소파
+      B(1, 1, 2.4, 1.6, "#141414", { h: 1.1, collide: true }),
+      curtain(1.9, 0.9, 0.7, 0.3),
+      curtain(5.4, 0.9, 0.7, 0.3),
+      curtain(9.9, 0.9, 0.7, 0.3),
+      curtain(13.4, 0.9, 0.7, 0.3),
+      curtain(17.9, 0.9, 0.7, 0.3),
+      curtain(21.4, 0.9, 0.7, 0.3),
+      sofa(6, 12.3),
+      sofa(14.5, 12.3),
+      armchair(1, 5.5),
+      armchair(21.5, 8.5),
+      table(10, 5),
+      plant(22.4, 1.2),
+      lamp(1, 12.6),
+      // 서재: 책장 벽과 열
+      shelf(25, 0.5),
+      shelf(28, 0.5),
+      shelf(31, 0.5),
+      shelf(34, 0.5),
+      shelf(39.2, 0.5),
+      shelf(40.2, 3, Math.PI / 2),
+      shelf(40.2, 7, Math.PI / 2),
+      shelf(27, 6),
+      shelf(30, 6),
+      shelf(27, 9.5),
+      shelf(30, 9.5),
+      desk(35, 8),
+      woodChair(35.4, 9.2),
+      armchair(37, 12, "#2f5d3a"),
+      lamp(25.4, 12.5),
+      // 복도
+      B(1, 14.5, 1.6, 0.5, "#6d4420", { h: 0.85, collide: true, pattern: "wood" }),
+      lamp(28.4, 14.6),
+      B(20, 17.2, 2, 0.6, "#6d4420", { h: 0.9, collide: true, pattern: "wood" }),
+      // 계단 홀: 3단 계단과 속이 빈 단(밑에 누워 숨을 수 있다)
+      step(33, 15.2, 0.3),
+      step(34.4, 15.2, 0.6),
+      step(35.8, 15.2, 0.9),
+      { x: 39.4, y: 0.75, z: 17.1, w: 4.4, h: 0.3, d: 5.2, color: "#6b4a32", pattern: "wood", collide: true, role: "trim" },
+      // 주방
+      B(0.5, 18.5, 6, 0.7, "#e8e8e2", { h: 0.92, collide: true }),
+      B(0.5, 31, 6, 0.7, "#e8e8e2", { h: 0.92, collide: true }),
+      B(12.5, 18.5, 1, 0.9, "#f4f4f0", { h: 1.95, collide: true }),
+      B(5, 24.5, 3.2, 1.4, "#3b3b3b", { h: 0.92, collide: true }),
+      woodChair(4, 26.3),
+      woodChair(6.5, 26.3),
+      // 식당
+      B(19, 23, 7, 2.2, "#4a3626", { h: 0.78, collide: true, pattern: "wood" }),
+      woodChair(19.5, 21.6),
+      woodChair(22.5, 21.6),
+      woodChair(25.5, 21.6),
+      woodChair(19.5, 25.5),
+      woodChair(22.5, 25.5),
+      woodChair(25.5, 25.5),
+      B(14.5, 30.5, 4, 0.7, "#6d4420", { h: 1, collide: true, pattern: "wood" }),
+      plant(28.4, 30.2),
+      lamp(14.6, 18.6),
+      // 온실
+      plant(30.5, 20.5),
+      plant(40.4, 20.5),
+      plant(30.5, 30.4),
+      plant(40.4, 30.4),
+      table(34.5, 25),
+      armchair(32.5, 27.5, "#b08a4e"),
+      armchair(38, 27.5, "#b08a4e"),
+      B(35, 30.8, 2.4, 0.6, "#b08a4e", { h: 0.9, collide: true, pattern: "wood" }),
+    ];
+  }
   if (map.id === "sewer") {
     return [
       barrel(41, 5),
@@ -749,7 +910,9 @@ function withExtraCover(map: GameMap): GameMap {
     const [self] = mapColliders({ ...map, boxes: [candidate] });
     const label = `${candidate.prop ?? candidate.pattern ?? "box"}@(${candidate.x.toFixed(1)}, ${candidate.z.toFixed(1)})`;
     if (!self) {
-      dropped.push(`${label}: no collider`);
+      // Non-colliding dressing (curtains, rugs) cannot block anything; place it as is.
+      if (candidate.collide === false) boxes = [...boxes, candidate];
+      else dropped.push(`${label}: no collider`);
       continue;
     }
     const inside = self.minX > 0.2 && self.maxX < map.w - 0.2 && self.minZ > 0.2 && self.maxZ < map.d - 0.2;
