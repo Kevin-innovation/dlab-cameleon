@@ -31,28 +31,68 @@ export type CharacterRig = {
   catching: boolean;
 };
 
-function stampBlob(ctx: CanvasRenderingContext2D, b: PaintBlob, w: number, h: number) {
+/**
+ * Physical extent each part's UV square maps onto (metres): u wraps the circumference,
+ * v runs along the height. A blob radius is expressed in torso-u units, so the same
+ * brush paints the same real-world size on a thin leg as on the torso.
+ */
+const PART_UV_EXTENT: Record<BodyPart, { u: number; v: number }> = {
+  torso: { u: 2 * Math.PI * 0.22, v: 0.55 + 0.44 },
+  head: { u: 2 * Math.PI * 0.2, v: Math.PI * 0.2 },
+  legL: { u: 2 * Math.PI * 0.09, v: 0.42 + 0.18 },
+  legR: { u: 2 * Math.PI * 0.09, v: 0.42 + 0.18 },
+  armL: { u: 2 * Math.PI * 0.07, v: 0.38 + 0.14 },
+  armR: { u: 2 * Math.PI * 0.07, v: 0.38 + 0.14 },
+};
+
+/** Radius scale (u, v) that turns a torso-u radius into this part's UV space. */
+function brushScale(part: BodyPart) {
+  const torso = PART_UV_EXTENT.torso;
+  const extent = PART_UV_EXTENT[part] ?? torso;
+  return { su: torso.u / extent.u, sv: torso.u / extent.v };
+}
+
+function strokePath(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, ru: number, rv: number) {
+  // Draw an elliptical brush by stroking in a squashed coordinate system.
+  const k = rv / ru;
+  ctx.save();
+  ctx.scale(1, k);
+  ctx.lineWidth = ru * 2;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0 / k);
+  ctx.lineTo(x1, y1 / k);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x0, y0 / k, ru, 0, Math.PI * 2);
+  ctx.fill();
+  if (x0 !== x1 || y0 !== y1) {
+    ctx.beginPath();
+    ctx.arc(x1, y1 / k, ru, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function stampBlob(ctx: CanvasRenderingContext2D, b: PaintBlob, w: number, h: number, part?: BodyPart) {
   const x0 = b.x * w;
   const y0 = b.y * h;
   const x1 = (b.tx ?? b.x) * w;
   const y1 = (b.ty ?? b.y) * h;
-  const rad = Math.max(1.2, b.r * w);
+  const scale = part ? brushScale(part) : { su: 1, sv: 1 };
+  const ru = Math.max(1.2, b.r * w * scale.su);
+  const rv = Math.max(1.2, b.r * h * scale.sv);
   ctx.strokeStyle = b.c;
   ctx.fillStyle = b.c;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.lineWidth = rad * 2;
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(x0, y0, rad, 0, Math.PI * 2);
-  ctx.fill();
-  if (x0 !== x1 || y0 !== y1) {
-    ctx.beginPath();
-    ctx.arc(x1, y1, rad, 0, Math.PI * 2);
-    ctx.fill();
+  strokePath(ctx, x0, y0, x1, y1, ru, rv);
+  if (!part) return;
+  // u wraps around the limb: repeat the stamp one texture-width to each side so the
+  // seam at u = 0/1 does not show a gap.
+  const nearSeam = Math.min(x0, x1) - ru < 0 || Math.max(x0, x1) + ru > w;
+  if (nearSeam) {
+    strokePath(ctx, x0 - w, y0, x1 - w, y1, ru, rv);
+    strokePath(ctx, x0 + w, y0, x1 + w, y1, ru, rv);
   }
 }
 
@@ -64,7 +104,7 @@ function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBl
   for (const b of blobs) {
     if (b.part && b.part !== part) continue;
     if (!b.part && part !== "torso") continue;
-    stampBlob(ctx, b, w, h);
+    stampBlob(ctx, b, w, h, part);
   }
 }
 
@@ -434,14 +474,28 @@ export function extendPaint(
   const last = next[next.length - 1];
   const endX = last?.tx ?? last?.x ?? 0;
   const endY = last?.ty ?? last?.y ?? 0;
-  if (
+  const continues =
     dragging &&
-    last &&
+    !!last &&
     last.part === part &&
     last.c === color &&
-    Math.hypot(endX - x, endY - y) < 0.45
-  ) {
-    next[next.length - 1] = { ...last, tx: x, ty: y };
+    last.r === r &&
+    // A hop of more than half the texture is the u seam, not a brush movement.
+    Math.abs(endX - x) < 0.5 &&
+    Math.hypot(endX - x, endY - y) < 0.45;
+  if (continues && last) {
+    // Keep the stroke as a polyline: extend the last segment only while the pointer
+    // stays on its line; otherwise start a new segment from where the last one ended.
+    const segX = endX - last.x;
+    const segY = endY - last.y;
+    const segLen = Math.hypot(segX, segY);
+    const deviation = segLen < 0.004 ? 0 : Math.abs(segX * (y - last.y) - segY * (x - last.x)) / segLen;
+    const forward = segLen < 0.004 || segX * (x - endX) + segY * (y - endY) >= 0;
+    if (deviation < 0.006 && forward) {
+      next[next.length - 1] = { ...last, tx: x, ty: y };
+    } else {
+      next.push({ x: endX, y: endY, r, c: color, part, tx: x, ty: y });
+    }
   } else {
     next.push({ x, y, r, c: color, part, tx: x, ty: y });
   }

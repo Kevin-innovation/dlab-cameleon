@@ -25,21 +25,24 @@ export function colorMatch(a: string, b: string) {
   return Math.max(0, Math.min(100, Math.round((1 - distance / maxDistance) * 100)));
 }
 
+/** Painted UV area of one stroke segment: a capsule of radius r along its length. */
+function blobArea(blob: PaintBlob) {
+  const length = Math.hypot((blob.tx ?? blob.x) - blob.x, (blob.ty ?? blob.y) - blob.y);
+  return Math.min(0.12, (Math.PI * blob.r * blob.r + 2 * blob.r * length) * 1.6);
+}
+
 export function paintCoverage(fill: string, blobs: PaintBlob[]) {
   const base = fill.toLowerCase() !== WHITE.toLowerCase() ? 0.86 : 0.035;
   const parts = new Set(blobs.map((blob) => blob.part));
-  const strokeArea = blobs.reduce((sum, blob) => sum + Math.min(0.12, Math.PI * blob.r * blob.r * 1.6), 0);
+  const strokeArea = blobs.reduce((sum, blob) => sum + blobArea(blob), 0);
   return Math.max(0, Math.min(100, Math.round((base + parts.size * 0.018 + strokeArea * 0.18) * 100)));
 }
 
 function paintedColorMatch(fill: string, blobs: PaintBlob[], targetColor: string) {
   const baseWeight = fill.toLowerCase() !== WHITE.toLowerCase() ? 0.86 : 0.04;
-  const strokeWeight = blobs.reduce((sum, blob) => sum + Math.min(0.12, Math.PI * blob.r * blob.r * 1.6), 0);
+  const strokeWeight = blobs.reduce((sum, blob) => sum + blobArea(blob), 0);
   if (strokeWeight <= 0) return colorMatch(fill, targetColor);
-  const strokeMatch = blobs.reduce((sum, blob) => {
-    const weight = Math.min(0.12, Math.PI * blob.r * blob.r * 1.6);
-    return sum + colorMatch(blob.c, targetColor) * weight;
-  }, 0) / strokeWeight;
+  const strokeMatch = blobs.reduce((sum, blob) => sum + colorMatch(blob.c, targetColor) * blobArea(blob), 0) / strokeWeight;
   return Math.round((colorMatch(fill, targetColor) * baseWeight + strokeMatch * strokeWeight) / (baseWeight + strokeWeight));
 }
 

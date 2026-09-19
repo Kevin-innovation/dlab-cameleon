@@ -88,6 +88,9 @@ export class GameWorld {
   specPitch = 0;
   sampleCanvases: { mesh: THREE.Mesh; canvas: HTMLCanvasElement }[] = [];
   camBlockers: THREE.Object3D[] = [];
+  private remoteStuckSince = new Map<string, number>();
+  private camSide = new THREE.Vector3();
+  private camProbe = new THREE.Vector3();
   private euler = new THREE.Euler(0, 0, 0, "YXZ");
   private forward = new THREE.Vector3();
   private right = new THREE.Vector3();
@@ -716,6 +719,9 @@ export class GameWorld {
     const hit = nearestSurface(this.localX, this.localZ, this.colliders, 0.9);
     if (!hit || hit.dist < 0.04 || hit.dist > 0.55) return false;
     const box = hit.box;
+    // Cling rails run along X or Z. A rotated prop's face is diagonal, so sliding
+    // along an axis would walk the body into (or off) the surface; skip those.
+    if (!isAxisAligned(box)) return false;
     const pad = clingPad();
     if (Math.abs(hit.nx) >= Math.abs(hit.nz)) {
       const sign = hit.nx >= 0 ? 1 : -1;
@@ -893,6 +899,26 @@ export class GameWorld {
     if (yaw !== undefined) this.yaw = yaw;
   }
 
+  /** Leave the wall along its normal, sliding around anything that stands in the way. */
+  private detachFromWall(nx: number, nz: number) {
+    this.cling = null;
+    const r = poseRadius("stand");
+    const h = poseHeight("stand");
+    const moved = moveWithSlide(
+      this.localX,
+      this.localZ,
+      nx * 0.32,
+      nz * 0.32,
+      r,
+      this.colliders,
+      { w: this.map.w, d: this.map.d },
+      this.localY,
+      this.localY + h,
+    );
+    this.localX = moved.x;
+    this.localZ = moved.z;
+  }
+
   private stepCling(dt: number, keys: Set<string>, r: number) {
     const cling = this.cling;
     if (!cling) return;
@@ -900,9 +926,7 @@ export class GameWorld {
     const nz = cling.axis === "z" ? cling.sign : 0;
     const pad = clingPad();
     if (keys.has("shift")) {
-      this.localX += nx * 0.32;
-      this.localZ += nz * 0.32;
-      this.cling = null;
+      this.detachFromWall(nx, nz);
       this.grounded = this.localY <= 0.04;
       return;
     }
@@ -913,9 +937,7 @@ export class GameWorld {
     if (keys.has(" ") || keys.has("space") || keys.has("w") || keys.has("arrowup")) climb += 1;
     if (keys.has("control") || keys.has("s") || keys.has("arrowdown")) climb -= 1;
     if (climb < 0 && this.localY <= 0.03) {
-      this.localX += nx * 0.32;
-      this.localZ += nz * 0.32;
-      this.cling = null;
+      this.detachFromWall(nx, nz);
       this.grounded = true;
       return;
     }
@@ -995,9 +1017,45 @@ export class GameWorld {
         rig.group.position.set(x, y, z);
         rig.group.rotation.y = yaw;
       } else {
-        rig.group.position.x += (x - rig.group.position.x) * 0.28;
-        rig.group.position.y += (y - rig.group.position.y) * 0.28;
-        rig.group.position.z += (z - rig.group.position.z) * 0.28;
+        // Frame-rate independent catch-up. Remote bodies obey the same colliders so
+        // they slide around corners instead of cutting through walls between updates.
+        const gap = Math.hypot(x - rig.group.position.x, z - rig.group.position.z);
+        const k = 1 - Math.exp(-dt * 16);
+        if (gap > REMOTE_SNAP_DISTANCE || ghost) {
+          rig.group.position.x += (x - rig.group.position.x) * (ghost ? k : 1);
+          rig.group.position.z += (z - rig.group.position.z) * (ghost ? k : 1);
+        } else {
+          const rr = poseRadius(p.pose);
+          const hh = poseHeight(p.pose);
+          const slid = moveWithSlide(
+            rig.group.position.x,
+            rig.group.position.z,
+            (x - rig.group.position.x) * k,
+            (z - rig.group.position.z) * k,
+            rr,
+            this.colliders,
+            { w: this.map.w, d: this.map.d },
+            rig.group.position.y,
+            rig.group.position.y + hh,
+          );
+          // Pinned against a wall while the real player is on the other side
+          // (they went around through a door): give up sliding and snap.
+          const wanted = gap * k;
+          const got = Math.hypot(slid.x - rig.group.position.x, slid.z - rig.group.position.z);
+          const stalled = wanted > 0.004 && got < wanted * 0.2;
+          const since = stalled ? (this.remoteStuckSince.get(p.id) ?? now) : 0;
+          if (stalled) this.remoteStuckSince.set(p.id, since);
+          else this.remoteStuckSince.delete(p.id);
+          if (stalled && now - since > 450) {
+            rig.group.position.x = x;
+            rig.group.position.z = z;
+            this.remoteStuckSince.delete(p.id);
+          } else {
+            rig.group.position.x = slid.x;
+            rig.group.position.z = slid.z;
+          }
+        }
+        rig.group.position.y += (y - rig.group.position.y) * k;
         rig.group.rotation.y = yaw;
       }
       const moving =
@@ -1048,6 +1106,7 @@ export class GameWorld {
         disposeObject(rig.group);
         this.players.delete(id);
         this.playerVisibility.delete(id);
+        this.remoteStuckSince.delete(id);
       }
     }
   }
@@ -1111,11 +1170,18 @@ export class GameWorld {
     const maxDist = this.camDir.length();
     if (maxDist > 0.001) {
       this.camDir.multiplyScalar(1 / maxDist);
-      this.camRay.set(this.camEye, this.camDir);
-      this.camRay.near = 0.05;
-      this.camRay.far = maxDist;
-      const hit = this.camRay.intersectObjects(this.camBlockers, false)[0];
-      const dist = hit ? Math.max(0.42, hit.distance - 0.22) : maxDist;
+      // Probe the centre ray plus four offset rays so the camera keeps clear of
+      // corners and door frames that a single ray would slip past.
+      this.camSide.crossVectors(this.camDir, this.camera.up).normalize();
+      let dist = maxDist;
+      for (const [sx, sy] of CAMERA_PROBES) {
+        this.camProbe.copy(this.camEye).addScaledVector(this.camSide, sx).addScaledVector(this.camera.up, sy);
+        this.camRay.set(this.camProbe, this.camDir);
+        this.camRay.near = 0.05;
+        this.camRay.far = maxDist;
+        const hit = this.camRay.intersectObjects(this.camBlockers, false)[0];
+        if (hit) dist = Math.min(dist, Math.max(0.42, hit.distance - 0.22));
+      }
       this.camera.position.copy(this.camEye).addScaledVector(this.camDir, dist);
     } else {
       this.camera.position.copy(this.camEye);
@@ -1393,6 +1459,24 @@ export class GameWorld {
     this.imageTextures.clear();
     this.renderer.dispose();
   }
+}
+
+/** Lateral/vertical offsets (metres) of the extra camera occlusion rays. */
+const CAMERA_PROBES: readonly [number, number][] = [
+  [0, 0],
+  [0.22, 0],
+  [-0.22, 0],
+  [0, 0.16],
+  [0, -0.16],
+];
+
+/** Beyond this gap a remote body teleports (door pass-through, respawn) instead of sliding. */
+const REMOTE_SNAP_DISTANCE = 2.2;
+
+function isAxisAligned(box: Collider) {
+  const quarter = Math.PI / 2;
+  const turns = (box.rotation ?? 0) / quarter;
+  return Math.abs(turns - Math.round(turns)) < 0.02;
 }
 
 function clingPad() {
