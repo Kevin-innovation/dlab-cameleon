@@ -120,6 +120,23 @@ label:has(> select:focus-visible) {
   row-gap: 0.65rem;
 }
 
+/* Every in-game control shares one font, weight and height; pose buttons also share a width. */
+.hud-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  width: 4.6rem;
+  padding: 0 0.3rem;
+  border-radius: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+
 /* Desktop: the pose bar owns the full bottom edge so eleven poses sit on one line;
    the key hints and help/paint buttons stack above it instead of beside it. */
 @media (hover: hover) and (pointer: fine) and (min-width: 768px) {
@@ -141,10 +158,9 @@ label:has(> select:focus-visible) {
   }
 
   .game-action-controls .pose-action-row button {
-    flex: 0 0 auto;
-    padding: 0.25rem 0.45rem;
-    font-size: 11px;
-    white-space: nowrap;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 4.6rem;
   }
 }
 

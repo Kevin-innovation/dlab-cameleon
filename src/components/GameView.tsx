@@ -1391,7 +1391,7 @@ export function GameView({
           <button
             type="button"
             aria-keyshortcuts="H"
-            className="shortcut-control h-10 rounded-full bg-black/50 px-4 font-display"
+            className="shortcut-control hud-button bg-black/50"
             onClick={() => setHelp(true)}
           >
             <span className="shortcut-key-badge" aria-hidden="true">H</span>
@@ -1401,7 +1401,7 @@ export function GameView({
             <button
               type="button"
               aria-keyshortcuts="F"
-              className={`shortcut-control h-10 rounded-full px-4 font-display ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
+              className={`shortcut-control hud-button ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
               onClick={() => setPaintOpen((v) => !v)}
             >
               <span className="shortcut-key-badge" aria-hidden="true">F</span>
@@ -1425,7 +1425,7 @@ export function GameView({
                     }
                     applyPosePick(session, w, p.id);
                   }}
-                  className={`shortcut-control rounded-lg px-2 py-1 text-[11px] ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
+                  className={`shortcut-control hud-button ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
                 >
                   <span className="shortcut-key-badge" aria-hidden="true">{POSE_KEYS[index]}</span>
                   {p.label}

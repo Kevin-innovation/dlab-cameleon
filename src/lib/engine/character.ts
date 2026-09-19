@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { WHITE } from "../config";
+import { POSE_SHAPES } from "../poses";
 import { BODY_PARTS, BODY_SCALE, type BodyPart, type BodySize, type PaintBlob, type Pose } from "../types";
 
 export type PartLayer = {
@@ -330,35 +331,10 @@ export function applyPose(rig: CharacterRig, pose: Pose) {
 }
 
 function applyPoseShape(b: THREE.Group, pose: Pose) {
-  if (pose === "crouch") {
-    b.scale.set(1.05, 0.62, 1.15);
-  } else if (pose === "sit") {
-    b.scale.set(1.2, 0.52, 1.15);
-    b.position.y = -0.15;
-  } else if (pose === "lie") {
-    b.rotation.x = -Math.PI / 2;
-    b.scale.set(1, 0.45, 1.35);
-    b.position.y = 0.28;
-  } else if (pose === "stretch") {
-    b.scale.set(0.62, 1.38, 0.62);
-  } else if (pose === "ball") {
-    b.scale.set(1.25, 0.7, 1.25);
-    b.position.y = 0.1;
-  } else if (pose === "stick") {
-    b.scale.set(1.28, 1.06, 0.08);
-    b.position.z = 0;
-  } else if (pose === "lean") {
-    b.rotation.z = 0.32;
-    b.position.x = -0.18;
-  } else if (pose === "huddle") {
-    b.scale.set(0.9, 0.48, 0.9);
-    b.position.y = -0.22;
-  } else if (pose === "spread") {
-    b.scale.set(1.7, 1, 0.55);
-  } else if (pose === "upside") {
-    b.rotation.x = Math.PI;
-    b.position.y = 1.95;
-  }
+  const shape = POSE_SHAPES[pose] ?? POSE_SHAPES.stand;
+  b.scale.set(...shape.scale);
+  if (shape.position) b.position.set(...shape.position);
+  if (shape.rotation) b.rotation.set(...shape.rotation);
 }
 
 export function setNameVisible(rig: CharacterRig, on: boolean) {
