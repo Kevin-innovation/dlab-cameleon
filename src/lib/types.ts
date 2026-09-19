@@ -205,6 +205,12 @@ export type RoomState = {
   huntTime: number;
   /** Seconds every hider stays revealed after the hunt; a room option since the lobby grid shows it. */
   revealTime: number;
+  /** Seconds between automatic whistles for a silent hider (host option, original default 45). */
+  forcedTauntSec: number;
+  /** Host allows hunters to switch to the over-the-shoulder camera. */
+  hunterTps: boolean;
+  /** Keep the room in the public list while a round is running (else it hides until the lobby). */
+  listWhilePlaying: boolean;
   hunterCount: number;
   ammoEnabled: boolean;
   ammoCount: number;
@@ -233,6 +239,8 @@ export type PlayerSnap = {
   role: Role;
   alive: boolean;
   shootSeq: number;
+  /** True while the body has moved in the last ~0.4s; running targets are free to shoot at. */
+  moving?: boolean;
 };
 
 export type ChatMessage = {

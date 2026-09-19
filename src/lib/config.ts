@@ -25,9 +25,15 @@ export const PLAYER_RADIUS = 0.32;
 export const LOOK_SENS = 0.003;
 export const TAG_RANGE = 8;
 export const SHOT_COOLDOWN = 900;
-export const DEFAULT_AMMO = 6;
-export const TAUNT_COOLDOWN = 8000;
-export const FORCED_TAUNT = 22000;
+/** Original rules: 5 rounds, miss -1, hit +1, shots at a running hider are free. */
+export const DEFAULT_AMMO = 5;
+export const AMMO_MIN = 1;
+export const AMMO_MAX = 99;
+export const TAUNT_COOLDOWN = 5000;
+/** Host-adjustable forced taunt interval (seconds). */
+export const DEFAULT_FORCED_TAUNT_SEC = 45;
+export const FORCED_TAUNT_MIN_SEC = 15;
+export const FORCED_TAUNT_MAX_SEC = 90;
 export const MAX_BLOBS = 140;
 export const SYNC_HZ = 14;
 export const DEFAULT_PREPARE = 8;

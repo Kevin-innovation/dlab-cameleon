@@ -80,6 +80,10 @@ export class GameWorld {
     maxY: number;
     box: Collider;
   } | null = null;
+  /** Hunter the spectator camera is riding along with, if any. */
+  private followId: string | null = null;
+  /** Space attached us to the wall; ignore it for detaching until released. */
+  private clingSpaceLatch = false;
   /** Last position verified free of colliders; used to undo a push-through. */
   private lastFreeX = 4;
   private lastFreeZ = 4;
@@ -730,9 +734,17 @@ export class GameWorld {
     this.pitch = Math.max(-pitchLim, Math.min(pitchLim, this.pitch - dy * LOOK_SENS));
   }
 
+  /** Spectator shortcut: cycle the free camera onto each hunter's shoulder. */
+  cycleFollow(hunterIds: string[]) {
+    if (!this.watch || hunterIds.length === 0) return;
+    const idx = this.followId ? hunterIds.indexOf(this.followId) : -1;
+    this.followId = idx + 1 < hunterIds.length ? hunterIds[idx + 1] : idx === -1 ? hunterIds[0] : null;
+  }
+
   toggleWatch() {
     if (this.watch) {
       this.watch = false;
+      this.followId = null;
       this.yaw = this.bodyYaw;
       this.camera.up.set(0, 1, 0);
       return false;
@@ -829,6 +841,22 @@ export class GameWorld {
   }
 
   stepSpectate(dt: number, keys: Set<string>) {
+    if (this.followId) {
+      const rig = this.players.get(this.followId);
+      const moved = ["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].some((key) => keys.has(key));
+      if (!rig || moved) {
+        this.followId = null;
+      } else {
+        // Over-the-shoulder view of the hunter, using the hunter's facing.
+        const yaw = rig.group.rotation.y;
+        this.specYaw = yaw;
+        this.specPitch = Math.max(this.specPitch, -0.35);
+        this.specX = rig.group.position.x + Math.sin(yaw) * 2.6;
+        this.specZ = rig.group.position.z + Math.cos(yaw) * 2.6;
+        this.specY = rig.group.position.y + 2.0;
+        return;
+      }
+    }
     this.euler.set(this.specPitch, this.specYaw, 0, "YXZ");
     this.forward.set(0, 0, -1).applyEuler(this.euler);
     this.right.set(1, 0, 0).applyEuler(this.euler);
@@ -938,6 +966,8 @@ export class GameWorld {
     if (this.grounded && (k.has(" ") || k.has("space")) && !input.paintOpen) {
       const wall = nearestSurface(this.localX, this.localZ, boxes, 0.52);
       if (wall && wall.dist < 0.48 && this.tryCling(pose)) {
+        // The same Space press that attached us must not detach us next frame.
+        this.clingSpaceLatch = true;
         this.stepCling(dt, k, poseRadius("stick"));
         return { x: this.localX, z: this.localZ, yaw: this.yaw };
       }
@@ -1019,7 +1049,10 @@ export class GameWorld {
     const nx = cling.axis === "x" ? cling.sign : 0;
     const nz = cling.axis === "z" ? cling.sign : 0;
     const pad = clingPad();
-    if (keys.has("shift")) {
+    // Original keys: E climbs, Q descends, Space lets go (W/S and Shift remain as aliases).
+    const spaceHeld = keys.has(" ") || keys.has("space");
+    if (!spaceHeld) this.clingSpaceLatch = false;
+    if (keys.has("shift") || (spaceHeld && !this.clingSpaceLatch)) {
       this.detachFromWall(nx, nz);
       this.grounded = this.localY <= 0.04;
       return;
@@ -1028,8 +1061,8 @@ export class GameWorld {
     if (keys.has("d") || keys.has("arrowright")) along += 1;
     if (keys.has("a") || keys.has("arrowleft")) along -= 1;
     let climb = 0;
-    if (keys.has(" ") || keys.has("space") || keys.has("w") || keys.has("arrowup")) climb += 1;
-    if (keys.has("control") || keys.has("s") || keys.has("arrowdown")) climb -= 1;
+    if (keys.has("e") || keys.has("w") || keys.has("arrowup")) climb += 1;
+    if (keys.has("q") || keys.has("control") || keys.has("s") || keys.has("arrowdown")) climb -= 1;
     if (climb < 0 && this.localY <= 0.03) {
       this.detachFromWall(nx, nz);
       this.grounded = true;

@@ -102,7 +102,7 @@ describe("sanitizeRoom", () => {
     expect(room.hideTime).toBe(30);
     expect(room.huntTime).toBe(300);
     expect(room.hunterCount).toBe(3);
-    expect(room.ammoCount).toBe(3);
+    expect(room.ammoCount).toBe(1);
   });
 
   it("drops malformed chat messages and keeps only the last 32", () => {
@@ -329,11 +329,36 @@ describe("processFire", () => {
     expect(processFire(huntRoom(), plain, "h1", "t1", NOW).tagged?.id).toBe("t1");
   });
 
-  it("consumes ammo on every shot", () => {
+  it("consumes ammo on a miss and restores it on a hit (original rules)", () => {
     const room = huntRoom({ ammoEnabled: true, ammoCount: 3, ammo: { h1: 2 } });
-    const { room: next } = processFire(room, players, "h1", "", NOW);
-    expect(next.ammo.h1).toBe(1);
-    expect(next.phase).toBe("hunt");
+    const missed = processFire(room, players, "h1", "", NOW);
+    expect(missed.room.ammo.h1).toBe(1);
+    expect(missed.room.phase).toBe("hunt");
+    const hit = processFire(missed.room, players, "h1", "t1", NOW);
+    expect(hit.tagged?.id).toBe("t1");
+    expect(hit.room.ammo.h1).toBe(2);
+  });
+
+  it("never restores above the magazine size", () => {
+    const room = huntRoom({ ammoEnabled: true, ammoCount: 3, ammo: { h1: 3 } });
+    const hit = processFire(room, players, "h1", "t1", NOW);
+    expect(hit.room.ammo.h1).toBe(3);
+  });
+
+  it("shooting at a running hider is free even when it misses", () => {
+    const room = huntRoom({ ammoEnabled: true, ammoCount: 3, ammo: { h1: 2 } });
+    const running = [snap("h1"), snap("t1", { x: 20, moving: true })];
+    const miss = processFire(room, running, "h1", "t1", NOW);
+    expect(miss.tagged).toBeUndefined();
+    expect(miss.room.ammo.h1).toBe(2);
+    const stillMiss = processFire(room, [snap("h1"), snap("t1", { x: 20 })], "h1", "t1", NOW);
+    expect(stillMiss.room.ammo.h1).toBe(1);
+  });
+
+  it("defaults to 5 rounds and accepts 1..99", () => {
+    expect(emptyRoom().ammoCount).toBe(5);
+    expect(sanitizeRoom({ ...emptyRoom(), ammoCount: 0 }).ammoCount).toBe(1);
+    expect(sanitizeRoom({ ...emptyRoom(), ammoCount: 500 }).ammoCount).toBe(99);
   });
 
   it("reports an empty magazine without changing the room", () => {

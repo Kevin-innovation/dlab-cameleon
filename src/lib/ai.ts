@@ -690,6 +690,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         if (room.phase === "hide" && !arrivedAtSpot) {
           br.settled = false;
         }
+        p.set("moving", Math.hypot(x - Number(p.get("x") ?? x), z - Number(p.get("z") ?? z)) > 0.01);
         p.set("x", x);
         p.set("z", z);
         p.set("yaw", yaw);

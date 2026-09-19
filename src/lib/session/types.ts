@@ -53,6 +53,7 @@ function readSnap(p: SessionPlayer): PlayerSnap {
     role: (p.get("role") as Role) || "spectator",
     alive: p.get("alive") !== false,
     shootSeq: Number(p.get("shootSeq") ?? 0),
+    moving: Boolean(p.get("moving")),
   };
 }
 

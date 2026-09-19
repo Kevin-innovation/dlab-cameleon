@@ -1,8 +1,13 @@
 import {
+  AMMO_MAX,
+  AMMO_MIN,
   CHAT_MESSAGE_MAX,
   CHAT_TEXT_MAX,
   DEFAULT_AMMO,
   DEFAULT_CHANNEL_ID,
+  DEFAULT_FORCED_TAUNT_SEC,
+  FORCED_TAUNT_MAX_SEC,
+  FORCED_TAUNT_MIN_SEC,
   DEFAULT_HIDE,
   DEFAULT_HUNT,
   DEFAULT_PREPARE,
@@ -43,6 +48,9 @@ export function emptyRoom(): RoomState {
     hideTime: DEFAULT_HIDE,
     huntTime: DEFAULT_HUNT,
     revealTime: REVEAL_TIME,
+    forcedTauntSec: DEFAULT_FORCED_TAUNT_SEC,
+    hunterTps: true,
+    listWhilePlaying: true,
     hunterCount: 1,
     ammoEnabled: false,
     ammoCount: DEFAULT_AMMO,
@@ -66,6 +74,9 @@ export type RoomConfigPatch = Partial<
     | "hideTime"
     | "huntTime"
     | "revealTime"
+    | "forcedTauntSec"
+    | "hunterTps"
+    | "listWhilePlaying"
     | "ammoEnabled"
     | "ammoCount"
   >
@@ -149,9 +160,12 @@ export function sanitizeRoom(input: RoomState): RoomState {
     hideTime: Math.floor(bounded(source.hideTime, defaults.hideTime, 30, 180)),
     huntTime: Math.floor(bounded(source.huntTime, defaults.huntTime, 60, 300)),
     revealTime: Math.floor(bounded(source.revealTime, defaults.revealTime, 10, 60)),
+    forcedTauntSec: Math.floor(bounded(source.forcedTauntSec, defaults.forcedTauntSec, FORCED_TAUNT_MIN_SEC, FORCED_TAUNT_MAX_SEC)),
+    hunterTps: source.hunterTps !== false,
+    listWhilePlaying: source.listWhilePlaying !== false,
     hunterCount: Math.floor(bounded(source.hunterCount, defaults.hunterCount, 1, 3)),
     ammoEnabled: Boolean(source.ammoEnabled),
-    ammoCount: Math.floor(bounded(source.ammoCount, defaults.ammoCount, 3, 12)),
+    ammoCount: Math.floor(bounded(source.ammoCount, defaults.ammoCount, AMMO_MIN, AMMO_MAX)),
     ammo: source.ammo && typeof source.ammo === "object" ? source.ammo : {},
     feed: Array.isArray(source.feed) ? source.feed.slice(-10) : [],
     taunts: Array.isArray(source.taunts) ? source.taunts.slice(-12) : [],
@@ -310,13 +324,13 @@ export function processFire(
   const left = room.ammo[hunterId] ?? 0;
   if (room.ammoEnabled && left <= 0) return { room, empty: true };
 
-  const ammo = room.ammoEnabled ? { ...room.ammo, [hunterId]: left - 1 } : room.ammo;
-  let next: RoomState = { ...room, ammo };
+  let next: RoomState = { ...room };
   let tagged: PlayerSnap | undefined;
+  const target = targetId ? players.find((p) => p.id === targetId) : undefined;
 
   if (targetId) {
     const hunter = players.find((p) => p.id === hunterId);
-    const best = players.find((p) => p.id === targetId);
+    const best = target;
     if (
       hunter &&
       best &&
@@ -348,6 +362,14 @@ export function processFire(
         next.ammo = { ...next.ammo, [best.id]: next.ammoCount || DEFAULT_AMMO };
       }
     }
+  }
+
+  if (room.ammoEnabled) {
+    // Original rules: a hit restores a round, a miss costs one, and shooting at a
+    // running hider is free either way (chasing must not be punished).
+    const magazine = room.ammoCount || DEFAULT_AMMO;
+    const delta = tagged ? 1 : target?.moving ? 0 : -1;
+    next = { ...next, ammo: { ...next.ammo, [hunterId]: Math.max(0, Math.min(magazine, left + delta)) } };
   }
 
   const hidersLeft = players.filter((p) => hiderAlive(next, p.id)).length;

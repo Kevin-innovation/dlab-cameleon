@@ -219,6 +219,50 @@ export const Lobby = memo(function Lobby({
               onChange={(e) => session.patchRoom({ revealTime: Math.max(10, Math.min(60, Number(e.target.value) || 30)) })}
             />
           </label>
+          <label className="rounded-xl bg-white/8 p-2">
+            강제 도발(초)
+            <input
+              type="number"
+              name="forcedTauntSec"
+              autoComplete="off"
+              inputMode="numeric"
+              min={15}
+              max={90}
+              disabled={!host}
+              className="mt-1 w-full bg-transparent"
+              value={room.forcedTauntSec || 45}
+              onChange={(e) => session.patchRoom({ forcedTauntSec: Math.max(15, Math.min(90, Number(e.target.value) || 45)) })}
+            />
+          </label>
+          <label className="flex items-center justify-between rounded-xl bg-white/8 p-2 text-sm">
+            <span>
+              <input
+                type="checkbox"
+                name="hunterTps"
+                className="mr-2 accent-lime"
+                disabled={!host}
+                checked={room.hunterTps !== false}
+                onChange={(e) => session.patchRoom({ hunterTps: e.target.checked })}
+              />
+              술래 3인칭 허용
+            </span>
+          </label>
+          {session.kind === "online" && (
+            <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
+              <span>
+                <input
+                  type="checkbox"
+                  name="listWhilePlaying"
+                  className="mr-2 accent-lime"
+                  disabled={!host}
+                  checked={room.listWhilePlaying !== false}
+                  onChange={(e) => session.patchRoom({ listWhilePlaying: e.target.checked })}
+                />
+                게임 중에도 방 목록에 표시
+              </span>
+              <span className="text-[11px] text-white/55">끄면 라운드 중 코드로만 입장</span>
+            </label>
+          )}
           <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
             <span>
               <input
@@ -231,7 +275,7 @@ export const Lobby = memo(function Lobby({
               />
               탄약 제한 사용
             </span>
-            <span className="text-[11px] text-white/55">기본 모드는 제한 없음</span>
+            <span className="text-[11px] text-white/55">빗나가면 −1 · 맞히면 +1 · 도망치는 상대는 무료</span>
           </label>
           <label className="col-span-2 rounded-xl bg-white/8 p-2">
             술래 탄 수 (옵션)
@@ -240,13 +284,13 @@ export const Lobby = memo(function Lobby({
               name="ammoCount"
               autoComplete="off"
               inputMode="numeric"
-              min={3}
-              max={12}
+              min={1}
+              max={99}
               disabled={!host || !room.ammoEnabled}
               className="mt-1 w-full bg-transparent"
-              value={room.ammoCount || 6}
+              value={room.ammoCount || 5}
               onChange={(e) =>
-                session.patchRoom({ ammoCount: Math.max(3, Math.min(12, Number(e.target.value) || 6)) })
+                session.patchRoom({ ammoCount: Math.max(1, Math.min(99, Number(e.target.value) || 5)) })
               }
             />
           </label>

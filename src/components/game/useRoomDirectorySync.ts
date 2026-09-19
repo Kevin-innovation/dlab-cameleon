@@ -23,7 +23,8 @@ export function buildListing(session: Session, room: RoomState, playerCount: num
     phase: room.phase,
     mapId: room.mapId,
     mode: room.mode,
-    isPrivate: room.isPrivate,
+    // A room that opted out of listing during play looks private while a round runs.
+    isPrivate: room.isPrivate || (room.listWhilePlaying === false && room.phase !== "lobby"),
     createdAt: room.createdAt || Date.now(),
     updatedAt: Date.now(),
   };

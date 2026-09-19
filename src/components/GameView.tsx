@@ -13,7 +13,6 @@ import {
   SHOT_COOLDOWN,
   SYNC_HZ,
   TAUNT_COOLDOWN,
-  FORCED_TAUNT,
   WHITE,
   SCORE_TAG,
   SCORE_SURVIVE,
@@ -76,6 +75,7 @@ const KEY_BY_CODE: Record<string, string> = {
   KeyC: "c",
   KeyT: "t",
   KeyE: "e",
+  KeyQ: "q",
   KeyB: "b",
   KeyV: "v",
   Digit1: "1",
@@ -280,6 +280,11 @@ export function GameView({
         }
         if (k === "h" || k === "?") setHelp((v) => !v);
         if (k === "r") cyclePose(session, world, 1);
+        if (k === "5" && watchingRef.current && session.getRoom().phase === "hunt") {
+          e.preventDefault();
+          world.cycleFollow(session.getRoom().hunterIds);
+          return;
+        }
         if (/^[1-7]$/.test(k) && !(k === "5" && session.getRoom().phase === "lobby")) {
           const pose = POSES[Number(k) - 1]?.id;
           if (pose) applyPosePick(session, world, pose);
@@ -297,7 +302,7 @@ export function GameView({
         if (k === "t") tryTaunt();
         if (k === "e") {
           if (paintOpenRef.current) setTool("dropper");
-          else toggleNearbyDoor();
+          else if (!world.clinging()) toggleNearbyDoor();
         }
         if (k === "b") setTool("brush");
         if (paintOpenRef.current && (k === " " || k === "space")) {
@@ -429,7 +434,8 @@ export function GameView({
       const room = session.getRoom();
       const me = snapsFrom(session).find((p) => p.id === session.myId());
       if (!me || room.phase !== "hunt") return;
-      if (!hiderAlive(room, me.id)) return;
+      // Original rule: eliminated hiders may still whistle to mislead the hunters.
+      if (isHunter(room, me.id) || !isParticipant(room, me.id)) return;
       const t = Date.now();
       if (t - lastTaunt < TAUNT_COOLDOWN) return;
       lastTaunt = t;
@@ -458,7 +464,7 @@ export function GameView({
       if (e.button === 2) {
         const room = session.getRoom();
         const me = snapsFrom(session).find((p) => p.id === session.myId());
-        if (me && room.phase === "hunt" && isHunter(room, me.id)) world.toggleHunterView();
+        if (me && room.phase === "hunt" && isHunter(room, me.id) && room.hunterTps) world.toggleHunterView();
         e.preventDefault();
         return;
       }
@@ -731,7 +737,7 @@ export function GameView({
       if (!watchingRef.current) session.me().set("yaw", world.yaw, false);
 
       if (me && room.phase === "hunt" && hiderAlive(room, me.id)) {
-        if (Date.now() - lastForced > FORCED_TAUNT) {
+        if (Date.now() - lastForced > (room.forcedTauntSec || 45) * 1000) {
           lastForced = Date.now();
           tryTaunt();
         }
@@ -743,6 +749,8 @@ export function GameView({
         session.me().set("y", world.localY, false);
         session.me().set("z", moved.z, false);
         session.me().set("yaw", world.yaw, false);
+        // Running targets are free to shoot at (original ammo rule); publish it with the position.
+        if (Boolean(session.me().get("moving")) !== localMoving) session.me().set("moving", localMoving, false);
         if (session.kind === "online" && t - lastPresence > 2000) {
           lastPresence = t;
           session.me().set("presenceAt", Date.now(), false);
@@ -1211,7 +1219,7 @@ export function GameView({
               <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-center">
                 <div className="text-[11px] tracking-wide text-white/65">탄약</div>
                 <div className="flex items-center justify-center gap-1">
-                  {Array.from({ length: hud.ammoCount || 6 }).map((_, i) => (
+                  {Array.from({ length: Math.min(12, hud.ammoCount || 5) }).map((_, i) => (
                     <span
                       key={i}
                       className={`inline-block h-3 w-2 rounded-sm ${
@@ -1221,7 +1229,7 @@ export function GameView({
                   ))}
                 </div>
                 <div className="font-display text-lg text-amber-200">
-                  {hud.ammo?.[me.id] ?? 0}/{hud.ammoCount || 6}
+                  {hud.ammo?.[me.id] ?? 0}/{hud.ammoCount || 5}
                   {(hud.ammo?.[me.id] ?? 0) <= 0 ? " · 탄 없음" : ""}
                 </div>
               </div>
@@ -1258,7 +1266,7 @@ export function GameView({
         {me?.pose === "stick" && (
           <div className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
             <div className="font-display text-xl text-lime">벽에 붙음</div>
-            <p className="text-sm text-white/75">A/D 좌우 · W/S 오르내리기 · C 또는 Space 떼기</p>
+            <p className="text-sm text-white/75">A/D 좌우 · E 오르기 · Q 내려가기 · Space 떼기</p>
           </div>
         )}
 
@@ -1268,7 +1276,7 @@ export function GameView({
             <p className="text-sm text-white/75">
               {hud.phase === "lobby"
                 ? "WASD·Q/E로 맵 둘러보기 · V 복귀"
-                : "몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · V 복귀"}
+                : "몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · 5 술래 따라가기 · V 복귀"}
             </p>
           </div>
         )}
@@ -1310,7 +1318,7 @@ export function GameView({
               </>
             ) : (
               <>
-                <div>WASD 걷기 · Shift 달리기 · Space 점프/벽오르기 · Ctrl 내려가기</div>
+                <div>WASD 걷기 · Shift 달리기 · Space 점프 · 벽 앞 Space 붙기</div>
                 <div>화면 버튼으로 자세·페인트 · T 도발 · V 관전 · E 문 · Tab 현황</div>
               </>
             )}
@@ -1369,7 +1377,8 @@ export function GameView({
           <TouchControls
             canWatch={myRole === "hider" || myRole === "spectator" || hud.phase === "lobby"}
             canFire={myRole === "hunter" && hud.phase === "hunt"}
-            canOpenDoor={atDoor && !watching}
+            clinging={me?.pose === "stick"}
+            canOpenDoor={atDoor && !watching && me?.pose !== "stick"}
             canPaint={myRole !== "hunter"}
             watching={watching}
             paintOpen={paintOpen}
@@ -1543,7 +1552,7 @@ export function GameView({
           <h2 id="game-help-title" className="text-wrap-balance font-display text-2xl">3D 카멜론</h2>
           <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-white/80">
             <li>위치 → 자세 → 스포이드 → 페인트 순서가 정석입니다. 색만 맞추면 윤곽으로 들킵니다.</li>
-            <li>WASD 걷기, Shift 달리기, Space 점프. 벽에 붙으면 Space로 오르고 Ctrl로 내려가고 Shift로 뗍니다.</li>
+            <li>WASD 걷기, Shift 달리기, Space 점프. 벽 앞에서 Space를 누르면 붙고, 붙은 뒤 E로 오르고 Q로 내려가며 Space로 뗍니다.</li>
             <li>화면의 자세 버튼으로 몸의 형태를 고르고, F로 페인트를 엽니다. Space로 벽 색을 빨아 칠하고, T로 휘파람, V로 관전, E로 문을 엽니다. 열고 지나가면 닫힙니다.</li>
             <li>위장도가 높으면 술래 화면에서 멀리 있을 때 희미하게 보이고, 가까이 접근할수록 선명해집니다. 움직이면 더 쉽게 드러납니다.</li>
             <li>술래는 1인칭으로 맵을 수색합니다. 우클릭으로 3인칭을 전환하고, 가까이 조준해 맞히면 상대를 발견합니다. 탄약 제한은 방 옵션입니다.</li>
@@ -1568,6 +1577,7 @@ function TouchControls({
   canWatch,
   canFire,
   canOpenDoor,
+  clinging,
   canPaint,
   watching,
   paintOpen,
@@ -1589,6 +1599,7 @@ function TouchControls({
   canWatch: boolean;
   canFire: boolean;
   canOpenDoor: boolean;
+  clinging: boolean;
   canPaint: boolean;
   watching: boolean;
   paintOpen: boolean;
@@ -1763,8 +1774,18 @@ function TouchControls({
       </div>
 
       <div className="mobile-touch-actions pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
-        {button("shift", "달리기")}
-        {button(" ", "점프·벽 붙기")}
+        {clinging ? (
+          <>
+            {button("e", "오르기")}
+            {button("q", "내려가기")}
+            {button(" ", "떼기")}
+          </>
+        ) : (
+          <>
+            {button("shift", "달리기")}
+            {button(" ", "점프·벽 붙기")}
+          </>
+        )}
         {canOpenDoor && (
           <button
             type="button"
