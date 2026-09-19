@@ -75,7 +75,11 @@ export class GameWorld {
     minA: number;
     maxA: number;
     maxY: number;
+    box: Collider;
   } | null = null;
+  /** Last position verified free of colliders; used to undo a push-through. */
+  private lastFreeX = 4;
+  private lastFreeZ = 4;
   grounded = true;
   crouching = false;
   hunterTps = false;
@@ -704,12 +708,14 @@ export class GameWorld {
   }
 
   exitCling() {
-    this.cling = null;
+    const cling = this.cling;
+    if (!cling) return;
+    this.detachFromWall(cling.axis === "x" ? cling.sign : 0, cling.axis === "z" ? cling.sign : 0);
   }
 
   tryCling(pose: Pose) {
     if (this.cling) {
-      this.cling = null;
+      this.exitCling();
       return false;
     }
     if (pose === "lie" || pose === "ball") return false;
@@ -732,6 +738,7 @@ export class GameWorld {
         minA: box.minZ + 0.04,
         maxA: box.maxZ - 0.04,
         maxY: box.maxY,
+        box,
       };
       this.localX = this.cling.plane + sign * pad;
       this.localZ = Math.max(this.cling.minA, Math.min(this.cling.maxA, this.localZ));
@@ -744,6 +751,7 @@ export class GameWorld {
         minA: box.minX + 0.04,
         maxA: box.maxX - 0.04,
         maxY: box.maxY,
+        box,
       };
       this.localZ = this.cling.plane + sign * pad;
       this.localX = Math.max(this.cling.minA, Math.min(this.cling.maxA, this.localX));
@@ -793,8 +801,20 @@ export class GameWorld {
     const head = this.localY + h;
     if (!this.cling) {
       const freed = resolveStuck(this.localX, this.localZ, r, boxes, bounds, feet, head);
-      this.localX = freed.x;
-      this.localZ = freed.z;
+      // A large correction means the centre ended up inside a thin wall and the
+      // nearest face was the far side. Go back to the last known-free spot instead
+      // of popping through.
+      if (!ghost && Math.hypot(freed.x - this.localX, freed.z - this.localZ) > 0.45) {
+        this.localX = this.lastFreeX;
+        this.localZ = this.lastFreeZ;
+      } else {
+        this.localX = freed.x;
+        this.localZ = freed.z;
+      }
+      if (!ghost && !blocked(this.localX, this.localZ, r, boxes, bounds, feet, head)) {
+        this.lastFreeX = this.localX;
+        this.lastFreeZ = this.localZ;
+      }
     }
     if (!canMove) return { x: this.localX, z: this.localZ, yaw: this.yaw };
 
@@ -890,6 +910,8 @@ export class GameWorld {
   setLocal(x: number, z: number, yaw?: number) {
     this.localX = x;
     this.localZ = z;
+    this.lastFreeX = x;
+    this.lastFreeZ = z;
     this.localY = 0;
     this.vy = 0;
     this.cling = null;
@@ -944,14 +966,21 @@ export class GameWorld {
     const speed = (keys.has("shift") ? 2.4 : 5.2) * dt;
     const rx = nz;
     const rz = -nx;
-    if (cling.axis === "x") {
-      this.localZ = Math.max(cling.minA, Math.min(cling.maxA, this.localZ + rz * along * speed));
-      this.localX = cling.plane + cling.sign * pad;
-    } else {
-      this.localX = Math.max(cling.minA, Math.min(cling.maxA, this.localX + rx * along * speed));
-      this.localZ = cling.plane + cling.sign * pad;
+    // Moving along or up the wall must not push the body into a neighbouring
+    // wall or prop; the clung box itself is excluded since we sit on its face.
+    const others = this.colliders.filter((b) => !sameCollider(b, cling.box));
+    const bounds = { w: this.map.w, d: this.map.d };
+    const h = poseHeight("stick");
+    let nextX = cling.axis === "x" ? cling.plane + cling.sign * pad : Math.max(cling.minA, Math.min(cling.maxA, this.localX + rx * along * speed));
+    let nextZ = cling.axis === "z" ? cling.plane + cling.sign * pad : Math.max(cling.minA, Math.min(cling.maxA, this.localZ + rz * along * speed));
+    if (blocked(nextX, nextZ, r, others, bounds, this.localY, this.localY + h)) {
+      nextX = this.localX;
+      nextZ = this.localZ;
     }
-    this.localY = Math.max(0, Math.min(this.clingFeetMax(cling.maxY), this.localY + climb * speed));
+    const nextY = Math.max(0, Math.min(this.clingFeetMax(cling.maxY), this.localY + climb * speed));
+    this.localX = nextX;
+    this.localZ = nextZ;
+    if (!blocked(nextX, nextZ, r, others, bounds, nextY, nextY + h)) this.localY = nextY;
     this.vy = 0;
     this.yaw = Math.atan2(nx, nz);
     const m = edgeMargin(r);
@@ -1472,6 +1501,19 @@ const CAMERA_PROBES: readonly [number, number][] = [
 
 /** Beyond this gap a remote body teleports (door pass-through, respawn) instead of sliding. */
 const REMOTE_SNAP_DISTANCE = 2.2;
+
+/** Door colliders are rebuilt every frame, so identify the clung box by geometry, not reference. */
+function sameCollider(a: Collider, b: Collider) {
+  return (
+    a === b ||
+    (Math.abs(a.minX - b.minX) < 1e-6 &&
+      Math.abs(a.maxX - b.maxX) < 1e-6 &&
+      Math.abs(a.minZ - b.minZ) < 1e-6 &&
+      Math.abs(a.maxZ - b.maxZ) < 1e-6 &&
+      Math.abs(a.maxY - b.maxY) < 1e-6 &&
+      (a.rotation ?? 0) === (b.rotation ?? 0))
+  );
+}
 
 function isAxisAligned(box: Collider) {
   const quarter = Math.PI / 2;
