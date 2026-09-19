@@ -210,6 +210,7 @@ export function GameView({
     let bakedId = startMap.id;
     const hostTauntSeq = new Map<string, number>();
     let wasHost = false;
+    let wasHunterRole = false;
 
     const typing = (e: Event) => {
       const el = e.target as HTMLElement | null;
@@ -306,11 +307,13 @@ export function GameView({
         if (k === "v" || (k === "5" && session.getRoom().phase === "lobby")) {
           const room = session.getRoom();
           const snap = snapsFrom(session).find((p) => p.id === session.myId());
+          // Turning watch off is always allowed; turning it on needs a non-hunter in a watchable phase.
           const canWatch =
-            !!snap &&
-            (room.phase === "lobby" ||
-              ((room.phase === "hide" || room.phase === "hunt") &&
-                (hiderAlive(room, snap.id) || roleOf(room, snap.id) === "spectator")));
+            watchingRef.current ||
+            (!!snap &&
+              (room.phase === "lobby" ||
+                ((room.phase === "hide" || room.phase === "hunt") &&
+                  (hiderAlive(room, snap.id) || roleOf(room, snap.id) === "spectator"))));
           if (canWatch) {
             const on = world.toggleWatch();
             watchingRef.current = on;
@@ -657,6 +660,26 @@ export function GameView({
       const hunterWait = !!(me && isHunter(room, me.id) && (room.phase === "prepare" || room.phase === "hide"));
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
       const ghost = !!me && isGhost(room, me.id);
+      // Infection: a caught hider becomes a hunter mid-hunt. Drop every hider-only
+      // mode (watch camera, paint panel, wall cling) so aiming and shooting work.
+      const hunterNow = !!me && room.phase === "hunt" && isHunter(room, me.id);
+      if (hunterNow && !wasHunterRole) {
+        if (watchingRef.current) {
+          world.exitWatch();
+          watchingRef.current = false;
+          setWatching(false);
+        }
+        if (paintOpenRef.current) {
+          paintOpenRef.current = false;
+          setPaintOpen(false);
+        }
+        if (world.clinging() || pose === "stick") {
+          world.exitCling();
+          session.me().set("pose", "stand", true);
+        }
+        input.clearAll();
+      }
+      wasHunterRole = hunterNow;
       if (watchingRef.current && !mobilePortraitRef.current) world.stepSpectate(dt, frameKeys);
       const localMoving =
         !mobilePortraitRef.current &&
@@ -899,10 +922,11 @@ export function GameView({
     const room = session.getRoom();
     const snap = snapsFrom(session).find((p) => p.id === session.myId());
     const canWatch =
-      !!snap &&
-      (room.phase === "lobby" ||
-        ((room.phase === "hide" || room.phase === "hunt") &&
-          (hiderAlive(room, snap.id) || roleOf(room, snap.id) === "spectator")));
+      watchingRef.current ||
+      (!!snap &&
+        (room.phase === "lobby" ||
+          ((room.phase === "hide" || room.phase === "hunt") &&
+            (hiderAlive(room, snap.id) || roleOf(room, snap.id) === "spectator"))));
     if (!canWatch) return;
     const on = world.toggleWatch();
     watchingRef.current = on;

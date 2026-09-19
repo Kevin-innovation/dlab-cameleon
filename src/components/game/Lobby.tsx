@@ -118,8 +118,8 @@ export const Lobby = memo(function Lobby({
               value={room.mode}
               onChange={(e) => session.patchRoom({ mode: e.target.value as RoomState["mode"] })}
             >
-              <option value="normal">기본 숨바꼭질</option>
-              <option value="infection">감염 (커스텀)</option>
+              <option value="normal" className="bg-[#121c17] text-paper">기본 숨바꼭질</option>
+              <option value="infection" className="bg-[#121c17] text-paper">감염 (커스텀)</option>
             </select>
           </label>
           {session.kind === "practice" && (
@@ -138,9 +138,9 @@ export const Lobby = memo(function Lobby({
                   });
                 }}
               >
-                <option value="ai">AI 술래 (내가 숨기)</option>
-                <option value="human">내가 술래</option>
-                <option value="random">랜덤</option>
+                <option value="ai" className="bg-[#121c17] text-paper">AI 술래 (내가 숨기)</option>
+                <option value="human" className="bg-[#121c17] text-paper">내가 술래</option>
+                <option value="random" className="bg-[#121c17] text-paper">랜덤</option>
               </select>
             </label>
           )}
