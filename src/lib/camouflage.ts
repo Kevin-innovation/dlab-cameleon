@@ -71,20 +71,32 @@ export function camouflageMeter(fill: string, blobs: PaintBlob[], targetColor: s
   return { score, colorMatch: match, coverage, label: "눈에 띔", detail: "표면 색과 몸 색의 차이가 큽니다." };
 }
 
+/**
+ * How clearly a hunter sees a hider: 1 = fully visible, 0.24 = as faint as it gets.
+ * `light` is the local brightness 0..1 (windows, fixtures); dark spots help, bright ones hurt.
+ */
 export function hunterVisibility(
   score: number | undefined,
   distance: number,
   pose: Pose = "stand",
   moving = false,
+  light = 0.6,
 ) {
   const concealment = Math.max(0, Math.min(1, (score ?? 0) / 100));
   const distanceFactor = Math.max(0, Math.min(1, (distance - 1.5) / 7));
   const poseBonus = pose === "stick" || pose === "lie" || pose === "ball" ? 0.08 : 0;
   const motionPenalty = moving ? 0.16 : 0;
+  const lightFactor = 0.85 + Math.max(0, Math.min(1, light)) * 0.3; // 0.85 (dark) .. 1.15 (bright)
   return Math.max(
     0.24,
-    Math.min(1, 1 - concealment * Math.max(0, distanceFactor * 0.72 + poseBonus - motionPenalty)),
+    Math.min(1, (1 - concealment * Math.max(0, distanceFactor * 0.72 + poseBonus - motionPenalty)) * lightFactor),
   );
+}
+
+/** Local brightness from the room the point is in; 0.6 outside any declared room. */
+export function lightLevelAt(map: { rooms?: { x: number; z: number; w: number; d: number; light?: number }[] }, x: number, z: number) {
+  const room = map.rooms?.find((r) => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d);
+  return room?.light ?? 0.6;
 }
 
 export function tagRangeForCamouflage(score: number | undefined) {

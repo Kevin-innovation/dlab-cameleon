@@ -1,4 +1,5 @@
 import { resolveStuck } from "./engine/collision";
+import { buildRooms } from "./maps/rooms";
 import type { BoxDef, Collider, DoorDef, GameMap, Pattern } from "./types";
 
 function B(
@@ -624,7 +625,20 @@ function withExtraCover(map: GameMap): GameMap {
   return { ...map, boxes };
 }
 
+/** Room-based maps are authored at final arena size: walls, doors, ceilings and lights come from the room list. */
+function withRooms(map: GameMap): GameMap {
+  if (!map.rooms?.length) return map;
+  const built = buildRooms(map.rooms, map.ceiling, map.id);
+  return {
+    ...map,
+    boxes: [...built.boxes, ...map.boxes],
+    doors: [...built.doors, ...(map.doors ?? [])],
+    lights: [...(map.lights ?? []), ...built.lights],
+  };
+}
+
 export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) => {
+  if (m.rooms?.length) return clearSpawns(withRooms(m));
   const size = ARENA_BY_DIFFICULTY[m.difficulty];
   return clearSpawns(withExtraCover(spreadMapToArena(stageLayout(m), size.width, size.depth)));
 });

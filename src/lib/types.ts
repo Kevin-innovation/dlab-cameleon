@@ -55,6 +55,9 @@ export type PaintBlob = {
   ty?: number;
 };
 
+/** What a generated box is for; drives rendering (glass, emissive ceilings) and audits. */
+export type BoxRole = "wall" | "ceiling" | "fixture" | "glass" | "decal" | "trim";
+
 export type BoxDef = {
   x: number;
   y: number;
@@ -63,6 +66,11 @@ export type BoxDef = {
   h: number;
   d: number;
   color: string;
+  role?: BoxRole;
+  /** Emissive colour for fixtures and ceilings so they read even without direct light. */
+  emissive?: string;
+  emissiveIntensity?: number;
+  opacity?: number;
   shape?: "box" | "cylinder" | "sphere";
   prop?: PropKind;
   rotation?: number;
@@ -100,11 +108,52 @@ export type DoorDef = {
   color: string;
 };
 
+export type MapKind = "indoor" | "outdoor" | "mixed";
+export type LightingPreset = "day" | "fluorescent" | "dim" | "dusk";
+export type CeilingStyle = "plaster" | "tiles" | "concrete" | "beams";
+export type WallSide = "n" | "s" | "e" | "w";
+
+/** An opening cut into one side of a room. `at` is the centre offset along that side from its min corner. */
+export type Opening =
+  | { kind: "door"; side: WallSide; at: number; width: number; leaf?: boolean }
+  | { kind: "arch"; side: WallSide; at: number; width: number }
+  | { kind: "window"; side: WallSide; at: number; width: number; sill: number; height: number }
+  | { kind: "gap"; side: WallSide; at: number; width: number };
+
+export type Fixture = { x: number; z: number; kind: "fluorescent" | "pendant" | "spot"; on?: boolean };
+
+export type RoomDef = {
+  id: string;
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  wall?: { thickness?: number; color?: string; pattern?: Pattern; colors?: string[]; height?: number };
+  openings?: Opening[];
+  ceiling?: { style?: CeilingStyle; color?: string; height?: number; open?: boolean; fixtures?: Fixture[] };
+  /** 0 (dark) .. 1 (bright); feeds hunter visibility and AI hide preference. */
+  light?: number;
+};
+
+export type SkyDef = {
+  top: string;
+  horizon: string;
+  sun: { azimuth: number; elevation: number; color: string; intensity: number };
+};
+
 export type GameMap = {
   id: string;
   name: string;
   blurb: string;
   difficulty: "쉬움" | "보통" | "어려움";
+  kind?: MapKind;
+  lighting?: LightingPreset;
+  sky?: SkyDef;
+  ceilingStyle?: CeilingStyle;
+  ceilingColor?: string;
+  rooms?: RoomDef[];
+  /** Point lights emitted by room fixtures (desktop only; mobile keeps the emissive fixture meshes). */
+  lights?: { x: number; y: number; z: number; color: string; intensity: number; distance: number }[];
   w: number;
   d: number;
   ceiling: number;

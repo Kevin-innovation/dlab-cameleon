@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { hunterVisibility, lightLevelAt } from "../camouflage";
 import { blocked, circleHitsBox, moveWithSlide, nearestSurface, resolveStuck } from "../engine/collision";
 import type { Collider } from "../types";
 
@@ -76,5 +77,23 @@ describe("rotated colliders", () => {
     expect(hit).not.toBeNull();
     expect(Math.abs(hit!.nx)).toBeCloseTo(Math.SQRT1_2, 2);
     expect(Math.abs(hit!.nz)).toBeCloseTo(Math.SQRT1_2, 2);
+  });
+});
+
+describe("hunterVisibility light factor", () => {
+  it("makes a camouflaged hider fainter in the dark and clearer under light", () => {
+    const dark = hunterVisibility(80, 8, "stand", false, 0);
+    const mid = hunterVisibility(80, 8, "stand", false, 0.6);
+    const bright = hunterVisibility(80, 8, "stand", false, 1);
+    expect(dark).toBeLessThan(mid);
+    expect(mid).toBeLessThan(bright);
+    expect(hunterVisibility(0, 1, "stand", false, 1)).toBe(1);
+  });
+
+  it("reads the light level from the containing room", () => {
+    const map = { rooms: [{ x: 0, z: 0, w: 10, d: 10, light: 0.2 }, { x: 10, z: 0, w: 10, d: 10 }] };
+    expect(lightLevelAt(map, 5, 5)).toBe(0.2);
+    expect(lightLevelAt(map, 15, 5)).toBe(0.6);
+    expect(lightLevelAt(map, 50, 50)).toBe(0.6);
   });
 });

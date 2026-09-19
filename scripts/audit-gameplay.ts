@@ -8,7 +8,8 @@ for (const map of report.maps) {
   const { metrics } = map;
   console.log(
     `${map.mapId}: ${metrics.width}x${metrics.depth}, boxes=${metrics.boxCount}, props=${metrics.propCount}, ` +
-      `primaryCover=${metrics.primaryCoverCount}, spawns=${metrics.spawnCount}/${metrics.hunterSpawnCount}`,
+      `primaryCover=${metrics.primaryCoverCount}, spawns=${metrics.spawnCount}/${metrics.hunterSpawnCount}, ` +
+      `sight=${Math.round(metrics.sightCoverage * 100)}%, rooms=${metrics.roomCount}`,
   );
   for (const problem of map.issues) {
     console.log(`  ${problem.severity.toUpperCase()} ${problem.code}: ${problem.message}`);

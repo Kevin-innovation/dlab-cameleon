@@ -1,5 +1,5 @@
 import { SHOT_COOLDOWN, TAG_RANGE, WHITE } from "./config";
-import { colorMatch, hunterVisibility } from "./camouflage";
+import { colorMatch, hunterVisibility, lightLevelAt } from "./camouflage";
 import { blocked, moveWithSlide, poseRadius } from "./engine/collision";
 import { doorColliders, mapColliders } from "./maps";
 import { hiderAlive, isHunter, roleOf } from "./round";
@@ -299,11 +299,13 @@ function hideSpot(map: GameMap, i: number, round: number): HideSpot {
   const covered = !clearSight(hunter.x, hunter.z, x, z, mapColliders(map));
   const paletteMatch =
     palette.slice(1).reduce((sum, color) => sum + colorMatch(fill, color), 0) / Math.max(1, palette.length - 1);
+  // Dark rooms are worth seeking out; bright ones (windows, lit offices) are not.
+  const shade = Math.round((0.6 - lightLevelAt(map, x, z)) * 12);
   const quality = Math.max(
     68,
     Math.min(
       94,
-      Math.round(72 + Math.min(12, distanceFromHunter * 0.45) + (covered ? 8 : 0) + paletteMatch * 0.08),
+      Math.round(72 + Math.min(12, distanceFromHunter * 0.45) + (covered ? 8 : 0) + paletteMatch * 0.08 + shade),
     ),
   );
   return {
@@ -488,7 +490,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
       for (const h of hiders) {
         if (!clearSight(x, z, h.x, h.z, cols)) continue;
         const dist = Math.hypot(h.x - x, h.z - z);
-        const see = hunterVisibility(h.camoScore, dist, h.pose);
+        const see = hunterVisibility(h.camoScore, dist, h.pose, false, lightLevelAt(map, h.x, h.z));
         const score = see * (18 - Math.min(18, dist)) + (dist < 2.4 ? 2.5 : 0);
         if (score > bestScore) {
           bestScore = score;
@@ -561,7 +563,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         const fz = -Math.cos(yaw);
         const inv = 1 / Math.max(0.001, dist);
         const dot = fx * (best.x - x) * inv + fz * (best.z - z) * inv;
-        const visibility = hunterVisibility(best.camoScore, dist, best.pose, true);
+        const visibility = hunterVisibility(best.camoScore, dist, best.pose, true, lightLevelAt(map, best.x, best.z));
         const canSee = visibility > 0.46 && dot > 0.62 && clearSight(x, z, best.x, best.z, cols);
         if (canSee && dist <= TAG_RANGE + 0.6) {
           br.shootAt = now + SHOT_COOLDOWN + 180;

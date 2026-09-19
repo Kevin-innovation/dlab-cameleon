@@ -5,6 +5,7 @@ import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, S
 import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
 import type { BodyPart, BoxDef, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, PropKind, RoomState } from "../types";
 import { hiderAlive, isGhost, isHunter } from "../round";
+import { lightLevelAt } from "../camouflage";
 import {
   blocked,
   edgeMargin,
@@ -180,18 +181,26 @@ export class GameWorld {
       disposeObject(ch);
     }
 
-    this.scene.background = new THREE.Color(map.fog);
-    this.scene.fog = new THREE.FogExp2(map.fog, 0.0072);
+    this.scene.background = new THREE.Color(map.sky ? map.sky.horizon : map.fog);
+    this.scene.fog = new THREE.FogExp2(map.sky ? map.sky.horizon : map.fog, map.kind === "outdoor" ? 0.0035 : 0.0072);
     this.cling = null;
     this.grounded = true;
     this.doorPass.clear();
 
-    const hemi = new THREE.HemisphereLight("#f2efe6", "#3d2a1c", 1.05);
-    const sun = new THREE.DirectionalLight("#fff4e0", 1.35);
+    const preset = LIGHTING_PRESETS[map.lighting ?? "day"];
+    const hemi = new THREE.HemisphereLight(preset.skyColor, preset.groundColor, preset.hemi);
+    const sun = new THREE.DirectionalLight(map.sky?.sun.color ?? preset.sunColor, map.sky?.sun.intensity ?? preset.sun);
     // Aim the sun at the arena centre and size its shadow frustum to the map so
     // larger (harder) arenas keep shadows in every corner.
     const half = Math.max(map.w, map.d) * 0.5 + 4;
-    sun.position.set(map.w / 2 + 8, 14 + half * 0.4, map.d / 2 + 6);
+    if (map.sky) {
+      const az = map.sky.sun.azimuth;
+      const el = map.sky.sun.elevation;
+      const reach = half * 1.6;
+      sun.position.set(map.w / 2 + Math.cos(az) * Math.cos(el) * reach, Math.sin(el) * reach, map.d / 2 + Math.sin(az) * Math.cos(el) * reach);
+    } else {
+      sun.position.set(map.w / 2 + 8, 14 + half * 0.4, map.d / 2 + 6);
+    }
     sun.target.position.set(map.w / 2, 0, map.d / 2);
     this.mapGroup.add(sun.target);
     sun.castShadow = !this.isMobile;
@@ -235,14 +244,28 @@ export class GameWorld {
     this.mapGroup.add(floor);
     this.camBlockers.push(floor);
 
-    const ceil = new THREE.Mesh(
-      new THREE.PlaneGeometry(map.w, map.d),
-      new THREE.MeshStandardMaterial({ color: "#d9cbb8", roughness: 1, side: THREE.DoubleSide }),
-    );
-    ceil.rotation.x = Math.PI / 2;
-    ceil.position.set(map.w / 2, map.ceiling, map.d / 2);
-    this.mapGroup.add(ceil);
-    this.camBlockers.push(ceil);
+    const kind = map.kind ?? "indoor";
+    if (kind === "outdoor") {
+      this.mapGroup.add(makeSkyDome(map, Math.max(map.w, map.d) * 3));
+    } else if (!map.rooms?.length) {
+      // Legacy maps without room definitions: one ceiling sheet. It sits above the
+      // lights, so give it an emissive floor so it never renders as a black void.
+      const ceilColor = map.ceilingColor ?? "#d9cbb8";
+      const ceil = new THREE.Mesh(
+        new THREE.PlaneGeometry(map.w, map.d),
+        new THREE.MeshStandardMaterial({
+          color: ceilColor,
+          emissive: ceilColor,
+          emissiveIntensity: 0.32,
+          roughness: 1,
+          side: THREE.DoubleSide,
+        }),
+      );
+      ceil.rotation.x = Math.PI / 2;
+      ceil.position.set(map.w / 2, map.ceiling, map.d / 2);
+      this.mapGroup.add(ceil);
+      this.camBlockers.push(ceil);
+    }
 
     for (const b of map.boxes) {
       if (b.prop) {
@@ -268,7 +291,7 @@ export class GameWorld {
           ? new THREE.CylinderGeometry(Math.min(b.w, b.d) / 2, Math.min(b.w, b.d) / 2, b.h, 12)
           : b.shape === "sphere"
             ? new THREE.SphereGeometry(Math.min(b.w, b.h, b.d) / 2, 16, 10)
-            : b.collide && b.w > 0.25 && b.h > 0.25 && b.d > 0.25
+            : b.collide && !b.role && b.w > 0.25 && b.h > 0.25 && b.d > 0.25
               ? new RoundedBoxGeometry(
                   b.w,
                   b.h,
@@ -283,20 +306,12 @@ export class GameWorld {
         else mesh.rotation.x = Math.PI / 2;
       };
       let mat: THREE.MeshStandardMaterial;
+      let cnv: HTMLCanvasElement | null = null;
       if (b.texture) {
         const tex = this.loadImageTexture(b.texture, Math.max(1, b.w / 3), Math.max(1, b.h / 3));
         mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(b.x, b.y, b.z);
-        orientPipe(mesh);
-        mesh.castShadow = !this.isMobile;
-        mesh.receiveShadow = true;
-        mesh.userData.color = b.color;
-        mesh.userData.texture = b.texture;
-        this.mapGroup.add(mesh);
-        if (b.collide || b.h >= 0.28) this.camBlockers.push(mesh);
       } else if (b.pattern && b.pattern !== "solid") {
-        const cnv = makePatternCanvas(
+        cnv = makePatternCanvas(
           b.pattern,
           b.color,
           b.colors,
@@ -305,27 +320,32 @@ export class GameWorld {
         );
         const tex = canvasTexture(cnv, this.isMobile ? 1 : 8);
         mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(b.x, b.y, b.z);
-        orientPipe(mesh);
-        mesh.castShadow = !this.isMobile;
-        mesh.receiveShadow = true;
-        mesh.userData.color = b.color;
-        mesh.userData.canvas = cnv;
-        this.sampleCanvases.push({ mesh, canvas: cnv });
-        this.mapGroup.add(mesh);
-        if (b.collide || b.h >= 0.28) this.camBlockers.push(mesh);
       } else {
         mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.78 });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(b.x, b.y, b.z);
-        orientPipe(mesh);
-        mesh.castShadow = !this.isMobile;
-        mesh.receiveShadow = true;
-        mesh.userData.color = b.color;
-        this.mapGroup.add(mesh);
-        if (b.collide || b.h >= 0.28) this.camBlockers.push(mesh);
       }
+      applyRoleMaterial(mat, b);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(b.x, b.y, b.z);
+      orientPipe(mesh);
+      const structural = b.role === "ceiling" || b.role === "fixture" || b.role === "glass";
+      mesh.castShadow = !this.isMobile && !structural;
+      mesh.receiveShadow = b.role !== "fixture";
+      mesh.userData.color = b.color;
+      if (b.texture) mesh.userData.texture = b.texture;
+      if (cnv) {
+        mesh.userData.canvas = cnv;
+        this.sampleCanvases.push({ mesh, canvas: cnv });
+      }
+      this.mapGroup.add(mesh);
+      if (b.role !== "fixture" && (b.collide || b.h >= 0.28)) this.camBlockers.push(mesh);
+    }
+
+    // Room lights: a few real point lights on desktop, emissive fixtures only on mobile.
+    const lightBudget = this.isMobile ? 0 : 6;
+    for (const light of (map.lights ?? []).slice(0, lightBudget)) {
+      const point = new THREE.PointLight(light.color, light.intensity, light.distance, 1.6);
+      point.position.set(light.x, light.y, light.z);
+      this.mapGroup.add(point);
     }
 
     this.doorRigs = [];
@@ -1105,7 +1125,7 @@ export class GameWorld {
       const selfX = self?.id === myId ? this.localX : self?.x ?? 0;
       const selfZ = self?.id === myId ? this.localZ : self?.z ?? 0;
       const distance = Math.hypot(x - selfX, z - selfZ);
-      const visibility = hunterIsSearching ? hunterVisibility(p.camoScore, distance, p.pose, moving) : 1;
+      const visibility = hunterIsSearching ? hunterVisibility(p.camoScore, distance, p.pose, moving, lightLevelAt(this.map, x, z)) : 1;
       this.playerVisibility.set(p.id, visibility);
       setCamouflageLook(rig, visibility);
       if (p.shootSeq > rig.shootSeq) {
@@ -1493,6 +1513,74 @@ export class GameWorld {
     this.imageTextures.clear();
     this.renderer.dispose();
   }
+}
+
+type LightingRig = { hemi: number; sun: number; skyColor: string; groundColor: string; sunColor: string };
+const LIGHTING_PRESETS: Record<NonNullable<GameMap["lighting"]>, LightingRig> = {
+  day: { hemi: 1.05, sun: 1.35, skyColor: "#f2efe6", groundColor: "#3d2a1c", sunColor: "#fff4e0" },
+  fluorescent: { hemi: 0.9, sun: 0.5, skyColor: "#eef2e4", groundColor: "#5a5340", sunColor: "#f6f8ec" },
+  dim: { hemi: 0.42, sun: 0.38, skyColor: "#bcc4c9", groundColor: "#1c1f22", sunColor: "#cfd8dc" },
+  dusk: { hemi: 0.6, sun: 0.95, skyColor: "#f5cfa0", groundColor: "#2b1d24", sunColor: "#ffb36b" },
+};
+
+/** Role-driven material tweaks: glass is translucent, ceilings and fixtures glow so they never read as a void. */
+function applyRoleMaterial(mat: THREE.MeshStandardMaterial, b: BoxDef) {
+  if (b.emissive) {
+    mat.emissive = new THREE.Color(b.emissive);
+    mat.emissiveIntensity = b.emissiveIntensity ?? 0.3;
+  }
+  if (b.role === "glass") {
+    mat.transparent = true;
+    mat.opacity = b.opacity ?? 0.32;
+    mat.roughness = 0.12;
+    mat.metalness = 0.05;
+    mat.depthWrite = false;
+  } else if (b.opacity !== undefined && b.opacity < 1) {
+    mat.transparent = true;
+    mat.opacity = b.opacity;
+  }
+  if (b.role === "ceiling") mat.roughness = 0.95;
+}
+
+/** Gradient sky sphere with a soft sun glow; only for outdoor maps. */
+function makeSkyDome(map: GameMap, radius: number) {
+  const sky = map.sky!;
+  const az = sky.sun.azimuth;
+  const el = sky.sun.elevation;
+  const sunDir = new THREE.Vector3(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)).normalize();
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    uniforms: {
+      top: { value: new THREE.Color(sky.top) },
+      horizon: { value: new THREE.Color(sky.horizon) },
+      sunColor: { value: new THREE.Color(sky.sun.color) },
+      sunDir: { value: sunDir },
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 top; uniform vec3 horizon; uniform vec3 sunColor; uniform vec3 sunDir;
+      varying vec3 vDir;
+      void main() {
+        float h = clamp(vDir.y, 0.0, 1.0);
+        vec3 col = mix(horizon, top, pow(h, 0.55));
+        float sun = pow(max(dot(normalize(vDir), sunDir), 0.0), 220.0);
+        float halo = pow(max(dot(normalize(vDir), sunDir), 0.0), 8.0) * 0.18;
+        col += sunColor * (sun * 1.4 + halo);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 16), material);
+  dome.position.set(map.w / 2, 0, map.d / 2);
+  return dome;
 }
 
 /** Lateral/vertical offsets (metres) of the extra camera occlusion rays. */

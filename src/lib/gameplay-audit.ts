@@ -11,6 +11,9 @@ export type GameplayAuditIssue = {
 export type MapGameplayMetrics = {
   width: number;
   depth: number;
+  /** Mean fraction of sample points visible from a sample point (0..1); lower = more broken-up sightlines. */
+  sightCoverage: number;
+  roomCount: number;
   boxCount: number;
   solidCount: number;
   propCount: number;
@@ -56,6 +59,54 @@ function containsPoint(
   return overlapsPlayerHeight && circleHitsBox(x, z, radius, box);
 }
 
+const SIGHT_GRID_STEP = 3;
+const SIGHT_EYE = 1.2;
+const MAX_SIGHT_COVERAGE = 0.45;
+
+function segmentHitsBox(x0: number, z0: number, x1: number, z1: number, b: Collider) {
+  // Liang–Barsky slab test in 2D against the collider's AABB.
+  const dx = x1 - x0;
+  const dz = z1 - z0;
+  let t0 = 0;
+  let t1 = 1;
+  const clip = (p: number, q: number) => {
+    if (p === 0) return q >= 0;
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+    return true;
+  };
+  return clip(-dx, x0 - b.minX) && clip(dx, b.maxX - x0) && clip(-dz, z0 - b.minZ) && clip(dz, b.maxZ - z0);
+}
+
+/** How open a map is: sample the walkable floor on a grid and count mutually visible pairs at eye height. */
+export function sightCoverage(map: GameMap, colliders: Collider[] = mapColliders(map)): number {
+  const blockers = colliders.filter((c) => c.minY <= SIGHT_EYE && c.maxY >= SIGHT_EYE);
+  const points: { x: number; z: number }[] = [];
+  for (let x = SIGHT_GRID_STEP / 2; x < map.w; x += SIGHT_GRID_STEP) {
+    for (let z = SIGHT_GRID_STEP / 2; z < map.d; z += SIGHT_GRID_STEP) {
+      if (!colliders.some((c) => containsPoint(c, x, z, 0.3))) points.push({ x, z });
+    }
+  }
+  if (points.length < 2) return 1;
+  let visible = 0;
+  let pairs = 0;
+  for (let i = 0; i < points.length; i += 1) {
+    for (let j = i + 1; j < points.length; j += 1) {
+      pairs += 1;
+      const a = points[i];
+      const b = points[j];
+      if (!blockers.some((c) => segmentHitsBox(a.x, a.z, b.x, b.z, c))) visible += 1;
+    }
+  }
+  return visible / pairs;
+}
+
 function isPrimaryCover(box: BoxDef) {
   return Boolean(
     box.prop &&
@@ -76,11 +127,14 @@ export function auditMap(map: GameMap): MapGameplayAudit {
   const primaryCoverCount = map.boxes.filter(isPrimaryCover).length;
   const rotatedColliderCount = map.boxes.filter((box) => Boolean(box.rotation) && Boolean(box.collide)).length;
   const elevatedObjectCount = map.boxes.filter(
-    (box) => box.y - box.h / 2 > 0.08 && box.pattern !== "pipes" && box.prop !== "painting",
+    (box) => box.y - box.h / 2 > 0.08 && box.pattern !== "pipes" && box.prop !== "painting" && !box.role,
   ).length;
+  const coverage = sightCoverage(map, colliders);
   const metrics: MapGameplayMetrics = {
     width: map.w,
     depth: map.d,
+    sightCoverage: Math.round(coverage * 1000) / 1000,
+    roomCount: map.rooms?.length ?? 0,
     boxCount: map.boxes.length,
     solidCount: colliders.length,
     propCount,
@@ -187,6 +241,29 @@ export function auditMap(map: GameMap): MapGameplayAudit {
       if (Math.hypot(points[i].x - points[j].x, points[i].z - points[j].z) < PLAYER_SPAWN_RADIUS * 2.2) {
         issues.push(issue("error", "SPAWN_OVERLAP", "두 스폰 위치가 서로 겹치거나 지나치게 가깝습니다."));
       }
+    }
+  }
+  if (coverage > MAX_SIGHT_COVERAGE) {
+    issues.push(
+      issue(
+        "warning",
+        "SIGHTLINES_TOO_OPEN",
+        `한 지점에서 맵의 ${Math.round(coverage * 100)}%가 보입니다 (목표 ≤ ${MAX_SIGHT_COVERAGE * 100}%). 복도·모서리·벽으로 시야를 끊어야 합니다.`,
+      ),
+    );
+  }
+  if (map.rooms?.length) {
+    if (map.rooms.length < 3) issues.push(issue("warning", "ZONES_TOO_FEW", "방/구역이 3개 미만입니다."));
+    const lights = map.rooms.map((r) => r.light ?? 0.6);
+    if (Math.max(...lights) - Math.min(...lights) < 0.4) {
+      issues.push(issue("warning", "LIGHT_CONTRAST_LOW", "밝은 구역과 어두운 구역의 차이(≥0.4)가 없습니다."));
+    }
+  }
+  // Indoor room maps: every full wall must reach the ceiling, otherwise the "dollhouse" look returns.
+  if (map.rooms?.length && (map.kind ?? "indoor") !== "outdoor") {
+    const short = map.boxes.filter((box) => box.role === "wall" && box.y - box.h / 2 < 0.05 && box.y + box.h / 2 < map.ceiling - 0.05);
+    if (short.length > 0) {
+      issues.push(issue("error", "WALL_BELOW_CEILING", `${short.length}개 벽이 천장(${map.ceiling}m)에 닿지 않습니다.`));
     }
   }
   for (const box of map.boxes) {
