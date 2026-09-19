@@ -66,10 +66,10 @@ export function CreateRoomModal({ nick, busy, onClose, onCreate }: CreateRoomMod
           <input type="checkbox" name="isPrivate" className="h-5 w-5 accent-lime" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
         </label>
         <div className="mt-1 flex gap-2">
-          <button type="button" onClick={onClose} className="flex-1 rounded-full border border-white/20 py-2.5 text-sm">
+          <button type="button" onClick={onClose} className="h-12 flex-1 rounded-full border border-white/20 font-display text-lg">
             취소
           </button>
-          <button type="submit" disabled={busy} className="flex-1 rounded-full bg-lime py-2.5 font-display text-lg text-black disabled:opacity-50">
+          <button type="submit" disabled={busy} className="h-12 flex-1 rounded-full bg-lime font-display text-lg text-black disabled:opacity-50">
             {busy ? "만드는 중…" : "만들기"}
           </button>
         </div>

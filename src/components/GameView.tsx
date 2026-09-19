@@ -46,7 +46,7 @@ import {
 import { gatherPositions } from "@/lib/gather";
 import { accrueMissed } from "@/lib/missed";
 import { hudSignature, snapsFrom, type Session } from "@/lib/session";
-import { resetSoloBots, tickSoloBots } from "@/lib/ai";
+import { debugBrains, resetSoloBots, tickSoloBots } from "@/lib/ai";
 import type { PaintBlob, PlayerSnap, Pose } from "@/lib/types";
 import { effectiveBodySize, POSES } from "@/lib/types";
 import { AccessibleModal } from "./AccessibleModal";
@@ -198,7 +198,9 @@ export function GameView({
     worldRef.current = world;
     if (process.env.NODE_ENV !== "production") {
       // Dev-only handle for the perf audit script (draw calls per map).
-      (window as unknown as { __camelonWorld?: GameWorld }).__camelonWorld = world;
+      (window as unknown as { __camelonWorld?: GameWorld; __camelonSession?: Session }).__camelonWorld = world;
+      (window as unknown as { __camelonSession?: Session }).__camelonSession = session;
+      (window as unknown as { __camelonBrains?: typeof debugBrains }).__camelonBrains = debugBrains;
     }
     const input = inputRef.current;
     const startMap = getMap(session.getRoom().mapId);
@@ -615,6 +617,9 @@ export function GameView({
     let raf = 0;
     const loop = (t: number) => {
       const dt = Math.min(0.05, (t - last) / 1000);
+      // Bots are a simulation, not player physics: on a slow frame they still cover real time
+      // (capped so a backgrounded tab does not teleport them) instead of crawling at 30% speed.
+      const botDt = Math.min(0.25, (t - last) / 1000);
       last = t;
       const room = session.getRoom();
       if (room.mapId !== bakedId) {
@@ -697,7 +702,7 @@ export function GameView({
         }
       }
 
-      if (session.kind === "practice") tickSoloBots(session, map, room, dt, Date.now());
+      if (session.kind === "practice") tickSoloBots(session, map, room, botDt, Date.now());
       const frameKeys = mobilePortraitRef.current ? new Set<string>() : new Set(keys);
       if (!mobilePortraitRef.current) {
         for (const key of input.touchKeys) frameKeys.add(key);
@@ -1386,7 +1391,7 @@ export function GameView({
           <button
             type="button"
             aria-keyshortcuts="H"
-            className="shortcut-control rounded-full bg-black/50 px-3 py-1 text-sm"
+            className="shortcut-control h-10 rounded-full bg-black/50 px-4 font-display"
             onClick={() => setHelp(true)}
           >
             <span className="shortcut-key-badge" aria-hidden="true">H</span>
@@ -1396,7 +1401,7 @@ export function GameView({
             <button
               type="button"
               aria-keyshortcuts="F"
-              className={`shortcut-control rounded-full px-4 py-2 font-display ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
+              className={`shortcut-control h-10 rounded-full px-4 font-display ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
               onClick={() => setPaintOpen((v) => !v)}
             >
               <span className="shortcut-key-badge" aria-hidden="true">F</span>

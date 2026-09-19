@@ -72,7 +72,7 @@ export function createPractice(nickname: string): Session {
       shotListeners.add(cb);
       return () => shotListeners.delete(cb);
     },
-    callDoor: (doorId) => doorListeners.forEach((cb) => cb(doorId, id)),
+    callDoor: (doorId, actorId) => doorListeners.forEach((cb) => cb(doorId, actorId ?? id)),
     onDoor: (cb) => {
       doorListeners.add(cb);
       return () => doorListeners.delete(cb);

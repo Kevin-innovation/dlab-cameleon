@@ -12,9 +12,10 @@ const BODY_SIZES: { id: BodySize; label: string; hint: string }[] = [
   { id: "plump", label: "통통", hint: "가로 1.3배 · 빠름 · 점수 140%" },
 ];
 
-const FIELD_ROW = "flex min-w-0 items-center justify-between gap-2 rounded-lg bg-white/8 px-2 py-1.5";
+const FIELD_ROW = "flex h-9 min-w-0 items-center justify-between gap-2 rounded-lg bg-white/8 px-2";
+const FIELD_SELECT = "h-7 min-w-0 max-w-[60%] truncate rounded-md bg-[#121c17] px-1 text-right text-xs text-paper";
 const FIELD_LABEL = "whitespace-nowrap text-xs text-white/85";
-const FIELD_INPUT = "w-12 bg-transparent text-right text-sm tabular-nums disabled:opacity-40";
+const FIELD_INPUT = "h-7 w-12 bg-transparent text-right text-sm tabular-nums disabled:opacity-40";
 
 interface NumberFieldProps {
   label: string;
@@ -152,7 +153,7 @@ export const Lobby = memo(function Lobby({
                   aria-pressed={active}
                   title={b.hint}
                   onClick={() => session.me().set("bodySize", b.id, true)}
-                  className={`rounded-lg py-1.5 text-xs ${active ? "bg-lime text-black" : "bg-white/10"}`}
+                  className={`h-12 rounded-lg text-xs leading-tight ${active ? "bg-lime text-black" : "bg-white/10"}`}
                 >
                   {b.label}
                   <span className="block text-[10px] opacity-70">
@@ -167,12 +168,12 @@ export const Lobby = memo(function Lobby({
       <div className="mt-2 flex gap-2">
         <button
           type="button"
-          className={`flex-1 rounded-full py-2 font-display ${me?.ready ? "bg-lime text-black" : "bg-white/10"}`}
+          className={`h-11 flex-1 rounded-full font-display ${me?.ready ? "bg-lime text-black" : "bg-white/10"}`}
           onClick={() => session.me().set("ready", !me?.ready, true)}
         >
           {me?.ready ? "준비 완료" : "준비"}
         </button>
-        <button type="button" className="rounded-full bg-white/10 px-4" onClick={() => session.leave()}>
+        <button type="button" className="h-11 rounded-full bg-white/10 px-5" onClick={() => session.leave()}>
           나가기
         </button>
       </div>
@@ -187,7 +188,7 @@ export const Lobby = memo(function Lobby({
                 aria-pressed={room.mapId === m.id}
                 onClick={() => session.patchRoom({ mapId: m.id })}
                 title={m.blurb}
-                className={`min-w-0 rounded-xl px-2.5 py-1.5 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
+                className={`h-12 min-w-0 rounded-xl px-2.5 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
             >
               <div className="truncate font-display text-sm">
                 {m.name} <span className="text-xs font-normal opacity-70">{m.difficulty}</span>
@@ -198,26 +199,26 @@ export const Lobby = memo(function Lobby({
         </div>
         <div className="mt-2 grid grid-cols-2 gap-1.5 text-sm">
           <label className={FIELD_ROW}>
-            <span className={FIELD_LABEL}>모드</span>
+            <span className={FIELD_LABEL} title="기본: 발견되면 관전 · 감염: 발견되면 술래 합류">모드</span>
             <select
               name="mode"
               autoComplete="off"
-              className="min-w-0 flex-1 bg-[#121c17] text-right text-xs text-paper"
+              className={FIELD_SELECT}
               disabled={!host}
               value={room.mode}
               onChange={(e) => session.patchRoom({ mode: e.target.value as RoomState["mode"] })}
             >
-              <option value="normal" className="bg-[#121c17] text-paper">기본 숨바꼭질</option>
-              <option value="infection" className="bg-[#121c17] text-paper">감염 (커스텀)</option>
+              <option value="normal" className="bg-[#121c17] text-paper">기본</option>
+              <option value="infection" className="bg-[#121c17] text-paper">감염</option>
             </select>
           </label>
           {session.kind === "practice" && (
             <label className={FIELD_ROW}>
-              <span className={FIELD_LABEL}>술래</span>
+              <span className={FIELD_LABEL} title="AI: 봇이 술래 · 나: 내가 술래 · 랜덤">술래</span>
               <select
                 name="hunterMode"
                 autoComplete="off"
-                className="min-w-0 flex-1 bg-[#121c17] text-right text-xs text-paper"
+                className={FIELD_SELECT}
                 value={room.hunterMode ?? "ai"}
                 onChange={(e) => {
                   const hunterMode = e.target.value as RoomState["hunterMode"];
@@ -227,8 +228,8 @@ export const Lobby = memo(function Lobby({
                   });
                 }}
               >
-                <option value="ai" className="bg-[#121c17] text-paper">AI (내가 숨기)</option>
-                <option value="human" className="bg-[#121c17] text-paper">내가 술래</option>
+                <option value="ai" className="bg-[#121c17] text-paper">AI</option>
+                <option value="human" className="bg-[#121c17] text-paper">나</option>
                 <option value="random" className="bg-[#121c17] text-paper">랜덤</option>
               </select>
             </label>
@@ -348,7 +349,7 @@ export const Lobby = memo(function Lobby({
               onClick={onStart}
               aria-describedby="round-start-status"
               disabled={!allReady}
-              className="mt-3 w-full rounded-full bg-lime py-2.5 font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-3 h-11 w-full rounded-full bg-lime font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
             >
               {people.length < 2 ? "2인 이상 필요" : "라운드 시작"}
             </button>

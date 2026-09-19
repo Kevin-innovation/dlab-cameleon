@@ -28,7 +28,8 @@ export type Session = {
   me: () => SessionPlayer;
   callShot: (targetId: string, hunterId?: string, shotSeq?: number) => void;
   onShot: (cb: (hunterId: string, targetId: string) => void) => () => void;
-  callDoor: (id: string) => void;
+  /** Toggle a door; `actorId` lets the practice host act for its bots (ignored online, the sender is the actor). */
+  callDoor: (id: string, actorId?: string) => void;
   onDoor: (cb: (id: string, actorId?: string) => void) => () => void;
   sendChat: (text: string) => void;
   /** Host only. Removes the player from the room; they land on the home screen with a notice. */

@@ -49,6 +49,10 @@ type Brain = {
   lastSeenAt: number;
   nextDecisionAt: number;
   stuckSince: number;
+  /** Closest the body has come to the current waypoint, and when; stuck = no new best for a while. */
+  wpBest: number;
+  wpBestAt: number;
+  wpKey: string;
 };
 
 const brains = new Map<string, Brain>();
@@ -73,7 +77,10 @@ function colliders(map: GameMap, room: RoomState) {
     staticColliders.set(map.id, base);
   }
   const doors = (map.doors ?? []).flatMap((d) => doorColliders(d, !!room.doors?.[d.id]));
-  return { all: [...base, ...doors], doors };
+  // Bots only collide with closed leaves: an open leaf swung into the doorway would pin them
+  // against it (the grid routes straight through the opening), and the auto-close then loops.
+  const closedLeaves = (map.doors ?? []).filter((d) => !room.doors?.[d.id]).flatMap((d) => doorColliders(d, false));
+  return { all: [...base, ...closedLeaves], doors };
 }
 
 /** Everything a bot needs to move and route on one map for one tick. */
@@ -91,8 +98,27 @@ function clearSight(map: GameMap, ax: number, az: number, bx: number, bz: number
 const ROUTE_MIN_INTERVAL_MS = 350;
 const STUCK_REROUTE_MS = 700;
 const STEER_ANGLES = [0.5, -0.5, 1.0, -1.0, 1.57, -1.57, 2.2, -2.2];
+const ARRIVE_RADIUS = 0.38;
+const NAV_MARGIN = 0.12;
+const ESCAPE_AFTER_MS = 250;
+const STALL_MS = 200;
+const SCOUT_MIN_HIDE_S = 45;
+const ARRIVE_STUCK_RADIUS = 1.1;
+const ARRIVE_STUCK_MS = 400;
 
-function followGoal(
+const DOOR_REACH_BOT = 2.4;
+const DOOR_RETRY_MS = 2200;
+
+/** Bots open the closed door they are about to walk through; the host validates reach like any player. */
+function openDoorAhead(session: Session, map: GameMap, room: RoomState, p: SessionPlayer, br: Brain, x: number, z: number, now: number) {
+  if (now <= br.doorAt) return;
+  const door = (map.doors ?? []).find((d) => !room.doors?.[d.id] && Math.hypot(d.x - x, d.z - z) < DOOR_REACH_BOT);
+  if (!door) return;
+  br.doorAt = now + DOOR_RETRY_MS;
+  session.callDoor(door.id, p.id);
+}
+
+export function followGoal(
   br: Brain,
   x: number,
   z: number,
@@ -135,20 +161,47 @@ function followGoal(
   const step = Math.min(speed * dt, distance);
   const slide = (angle: number) =>
     moveWithSlide(x, z, -Math.sin(angle) * step, -Math.cos(angle) * step, radius, nav.cols, nav.bounds, NAV_STEP_HEIGHT, NAV_HEAD_HEIGHT);
-  const before = Math.hypot(goal.x - x, goal.z - z);
+  // Steer towards the current waypoint, not the final goal: scoring by the goal drags bodies
+  // into the nearest wall corner whenever the waypoint sits around it.
+  const toWaypoint = (px: number, pz: number) => Math.hypot(waypoint.x - px, waypoint.z - pz);
   const straight = slide(heading);
-  let best = { ...straight, score: Math.hypot(goal.x - straight.x, goal.z - straight.z) };
+  let best = { ...straight, score: toWaypoint(straight.x, straight.z) };
   // Only fan out into side-steps when the straight move was mostly absorbed by a wall.
   if (Math.hypot(straight.x - x, straight.z - z) < step * 0.6) {
     for (const offset of STEER_ANGLES) {
       const moved = slide(heading + offset);
-      const score = Math.hypot(goal.x - moved.x, goal.z - moved.z);
+      const score = toWaypoint(moved.x, moved.z);
       if (score < best.score - 0.002) best = { ...moved, score };
     }
   }
-  if (best.score >= before - 0.001) {
+  // Stuck = no new closest approach to the waypoint for a while. Frame displacement is useless
+  // here: a body wriggling on a wall corner moves plenty without getting anywhere.
+  const wpKey = `${waypoint.x.toFixed(2)}:${waypoint.z.toFixed(2)}`;
+  if (br.wpKey !== wpKey) {
+    br.wpKey = wpKey;
+    br.wpBest = Number.POSITIVE_INFINITY;
+    br.wpBestAt = now;
+  }
+  if (best.score < br.wpBest - 0.01) {
+    br.wpBest = best.score;
+    br.wpBestAt = now;
+  }
+  const pinned = now - br.wpBestAt > STALL_MS;
+  // Pinned on a corner where every move lengthens the way: take whichever move displaces the
+  // most so the body works itself free instead of vibrating in place until the reroute.
+  if (pinned && br.stuckSince && now - br.stuckSince > ESCAPE_AFTER_MS) {
+    for (const offset of STEER_ANGLES) {
+      const moved = slide(heading + offset);
+      if (Math.hypot(moved.x - x, moved.z - z) > Math.hypot(best.x - x, best.z - z) + 0.002) best = { ...moved, score: toWaypoint(moved.x, moved.z) };
+    }
+  }
+  const goalDistance = Math.hypot(goal.x - best.x, goal.z - best.z);
+  let nearAndStuck = false;
+  if (pinned) {
     br.stuckSince ||= now;
-    if (now - br.stuckSince > STUCK_REROUTE_MS) {
+    // Hide spots hug furniture, so the body often cannot reach the exact point; close enough counts.
+    nearAndStuck = goalDistance < ARRIVE_STUCK_RADIUS && now - br.stuckSince > ARRIVE_STUCK_MS;
+    if (!nearAndStuck && now - br.stuckSince > STUCK_REROUTE_MS) {
       br.route = [];
       br.routeKey = "";
       br.routeReadyAt = 0;
@@ -161,11 +214,11 @@ function followGoal(
     x: best.x,
     z: best.z,
     yaw: heading,
-    arrived: Math.hypot(goal.x - best.x, goal.z - best.z) < 0.38,
+    arrived: goalDistance < ARRIVE_RADIUS || nearAndStuck,
   };
 }
 
-function hideSpot(map: GameMap, i: number, round: number): HideSpot {
+export function hideSpot(map: GameMap, i: number, round: number): HideSpot {
   const props = map.boxes.filter((b) => b.h >= 0.55 && b.h <= 3.4 && b.w < map.w * 0.2 && b.d < map.d * 0.2);
   const rnd = mul(`spot${i}${map.id}${round}`);
   const fallback: GameMap["boxes"][number] = {
@@ -320,7 +373,8 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
       turn: 0,
       doorAt: 0,
       searchSpots,
-      searchSpotIndex: 0,
+      // Short hide phases go straight to the final spot; scouting decoys needs time to walk back.
+      searchSpotIndex: room.hideTime < SCOUT_MIN_HIDE_S ? searchSpots.length - 1 : 0,
       pauseUntil: 0,
       paintStartedAt: 0,
       paintDuration: 2200 + (i % 3) * 450,
@@ -335,6 +389,9 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
       lastSeenAt: 0,
       nextDecisionAt: 0,
       stuckSince: 0,
+      wpBest: Number.POSITIVE_INFINITY,
+      wpBestAt: 0,
+      wpKey: "",
     });
   }
 }
@@ -359,7 +416,8 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
   }
   const { all: cols, doors: doorCols } = colliders(map, room);
   const bounds = { w: map.w, d: map.d };
-  const navFor = (radius: number): Nav => ({ grid: navGridFor(map, radius), cols, bounds });
+  // The grid is baked with a little extra radius so routes keep clear of corners the body would graze.
+  const navFor = (radius: number): Nav => ({ grid: navGridFor(map, radius + NAV_MARGIN), cols, bounds });
   const players = session.players();
   const snaps = players.map((p) => ({
     id: p.id,
@@ -443,11 +501,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         }
         br.behavior = "patrolling";
       }
-      const door = (map.doors ?? []).find((d) => !room.doors?.[d.id] && Math.hypot(d.x - x, d.z - z) < 2.4);
-      if (door && now > br.doorAt) {
-        br.doorAt = now + 2200;
-        session.callDoor(door.id);
-      }
+      openDoorAhead(session, map, room, p, br, x, z, now);
 
       const moved = followGoal(
         br,
@@ -560,6 +614,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
         br.tx = target.x;
         br.tz = target.z;
       }
+      openDoorAhead(session, map, room, p, br, x, z, now);
       const moved = followGoal(
         br,
         x,
@@ -597,7 +652,7 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
       if (moved.arrived) {
         if (!br.settled && room.phase === "hide") {
           br.pauseUntil ||= now + 950 + ((br.patrol + br.searchSpotIndex) % 3) * 350;
-          const finalWindow = Math.max(8000, Math.min(14000, room.hideTime * 250));
+          const finalWindow = Math.max(10000, Math.min(16000, room.hideTime * 330));
           const lastSpot = br.searchSpotIndex >= br.searchSpots.length - 1;
           if (!lastSpot && now >= br.pauseUntil && now < room.phaseEndsAt - finalWindow) {
             br.searchSpotIndex += 1;
@@ -633,3 +688,22 @@ export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt
     }
   }
 }
+
+/** Dev-only snapshot of every bot brain for the headless behaviour scripts. */
+export function debugBrains() {
+  return [...brains.entries()].map(([id, br]) => ({
+    id,
+    tx: br.tx,
+    tz: br.tz,
+    settled: br.settled,
+    behavior: br.behavior,
+    pose: br.pose,
+    spot: br.searchSpotIndex,
+    spots: br.searchSpots.length,
+    route: br.route.length,
+    waypoint: br.route[br.routeIndex],
+    routeIndex: br.routeIndex,
+    stuckSince: br.stuckSince,
+  }));
+}
+
