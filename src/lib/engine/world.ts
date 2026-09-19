@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, SNEAK_SPEED, WHITE } from "../config";
 import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
@@ -279,15 +280,21 @@ export class GameWorld {
       this.camBlockers.push(ceil);
     }
 
+    const batches = new Map<string, StaticBatch>();
+    const staticProps: { object: THREE.Object3D; blocker: boolean }[] = [];
     for (const b of map.boxes) {
       if (b.prop) {
-        const prop = this.createPropVisual(b);
-        this.mapGroup.add(prop);
-        if (b.collide || b.h >= 0.28) this.addMeshBlockers(prop);
         const modelUrl = b.modelUrl ?? LOCAL_PROP_MODELS[b.prop];
         if (modelUrl) {
+          // Placeholder until the glTF arrives; the model replaces it and is flattened then.
+          const prop = flattenStatic(this.createPropVisual(b));
+          this.mapGroup.add(prop);
+          if (b.collide || b.h >= 0.28) this.addMeshBlockers(prop);
           this.modelStats.pending += 1;
           void this.loadPropModel(b, prop, modelUrl, loadSeq);
+        } else {
+          // Purely procedural props are static for the map's lifetime: batch them map-wide.
+          staticProps.push({ object: this.createPropVisual(b), blocker: Boolean(b.collide || b.h >= 0.28) });
         }
         continue;
       }
@@ -312,44 +319,64 @@ export class GameWorld {
                   Math.min(0.08, b.w / 4, b.h / 4, b.d / 4),
                 )
               : new THREE.BoxGeometry(b.w, b.h, b.d);
-      const orientPipe = (mesh: THREE.Mesh) => {
-        if (!isPipe) return;
-        if (b.w >= b.d) mesh.rotation.z = Math.PI / 2;
-        else mesh.rotation.x = Math.PI / 2;
-      };
-      let mat: THREE.MeshStandardMaterial;
-      let cnv: HTMLCanvasElement | null = null;
-      if (b.texture) {
-        const tex = this.loadImageTexture(b.texture, Math.max(1, b.w / 3), Math.max(1, b.h / 3));
-        mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
-      } else if (b.pattern && b.pattern !== "solid") {
-        cnv = makePatternCanvas(
-          b.pattern,
-          b.color,
-          b.colors,
-          (b.x * 100 + b.z * 17) | 0,
-          this.isMobile ? 128 : 256,
-        );
-        const tex = canvasTexture(cnv, this.isMobile ? 1 : 8);
-        mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 });
-      } else {
-        mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.78 });
+      const key = materialKey(b);
+      let batch = batches.get(key);
+      if (!batch) {
+        let mat: THREE.MeshStandardMaterial;
+        let cnv: HTMLCanvasElement | null = null;
+        if (b.texture) {
+          const tex = this.loadImageTexture(b.texture, Math.max(1, b.w / 3), Math.max(1, b.h / 3));
+          mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
+        } else if (b.pattern && b.pattern !== "solid") {
+          // One canvas per material key (not per box) so equal surfaces share a texture and a draw call.
+          cnv = makePatternCanvas(b.pattern, b.color, b.colors, 7, this.isMobile ? 128 : 256);
+          const tex = canvasTexture(cnv, this.isMobile ? 1 : 8);
+          mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 });
+        } else {
+          mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.78 });
+        }
+        applyRoleMaterial(mat, b);
+        batch = { mat, cnv, geoms: [], color: b.color, texture: b.texture, role: b.role, blocker: false, castShadow: false };
+        batches.set(key, batch);
       }
-      applyRoleMaterial(mat, b);
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(b.x, b.y, b.z);
-      orientPipe(mesh);
+      // Bake the box transform into its geometry so the whole batch is one static mesh.
+      const placed = geo;
+      if (isPipe) {
+        if (b.w >= b.d) placed.rotateZ(Math.PI / 2);
+        else placed.rotateX(Math.PI / 2);
+      } else if (b.rotation) {
+        placed.rotateY(b.rotation);
+      }
+      placed.translate(b.x, b.y, b.z);
+      batch.geoms.push(placed);
       const structural = b.role === "ceiling" || b.role === "fixture" || b.role === "glass";
-      mesh.castShadow = !this.isMobile && !structural;
-      mesh.receiveShadow = b.role !== "fixture";
-      mesh.userData.color = b.color;
-      if (b.texture) mesh.userData.texture = b.texture;
-      if (cnv) {
-        mesh.userData.canvas = cnv;
-        this.sampleCanvases.push({ mesh, canvas: cnv });
+      if (!structural) batch.castShadow = true;
+      if (b.role !== "fixture" && (b.collide || b.h >= 0.28)) batch.blocker = true;
+    }
+
+    if (staticProps.length) {
+      const holder = new THREE.Group();
+      for (const entry of staticProps) holder.add(entry.object);
+      const flat = flattenStatic(holder);
+      this.mapGroup.add(flat);
+      if (staticProps.some((entry) => entry.blocker)) this.addMeshBlockers(flat);
+    }
+
+    for (const batch of batches.values()) {
+      const merged = mergeGeometries(batch.geoms, false);
+      for (const geom of batch.geoms) geom.dispose();
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, batch.mat);
+      mesh.castShadow = !this.isMobile && batch.castShadow;
+      mesh.receiveShadow = batch.role !== "fixture";
+      mesh.userData.color = batch.color;
+      if (batch.texture) mesh.userData.texture = batch.texture;
+      if (batch.cnv) {
+        mesh.userData.canvas = batch.cnv;
+        this.sampleCanvases.push({ mesh, canvas: batch.cnv });
       }
       this.mapGroup.add(mesh);
-      if (b.role !== "fixture" && (b.collide || b.h >= 0.28)) this.camBlockers.push(mesh);
+      if (batch.blocker) this.camBlockers.push(mesh);
     }
 
     // Room lights: a few real point lights on desktop, emissive fixtures only on mobile.
@@ -616,8 +643,9 @@ export class GameWorld {
       disposeObject(fallback);
       this.modelStats.pending = Math.max(0, this.modelStats.pending - 1);
       this.modelStats.loaded += 1;
-    } catch {
+    } catch (error) {
       // The procedural prop remains visible when an optional model cannot load.
+      console.warn("[world] prop model failed", url, error);
       if (loadSeq === this.mapLoadSeq) {
         this.modelStats.pending = Math.max(0, this.modelStats.pending - 1);
         this.modelStats.failed += 1;
@@ -1365,6 +1393,12 @@ export class GameWorld {
     this.renderer.render(this.scene, this.camera);
   }
 
+  /** Renderer counters for the last frame (draw calls, triangles); used by the perf audit. */
+  frameStats() {
+    const info = this.renderer.info.render;
+    return { calls: info.calls, triangles: info.triangles, meshes: this.mapGroup.children.length };
+  }
+
   sampleWorld(clientX: number, clientY: number): string | null {
     this.setPointer(clientX, clientY);
     this.raycaster.setFromCamera(this.pointer, this.camera);
@@ -1525,6 +1559,32 @@ export class GameWorld {
     this.imageTextures.clear();
     this.renderer.dispose();
   }
+}
+
+type StaticBatch = {
+  mat: THREE.MeshStandardMaterial;
+  cnv: HTMLCanvasElement | null;
+  geoms: THREE.BufferGeometry[];
+  color: string;
+  texture?: string;
+  role?: BoxDef["role"];
+  blocker: boolean;
+  castShadow: boolean;
+};
+
+/** Boxes that can share one mesh: same look in every respect that reaches the material. */
+function materialKey(b: BoxDef) {
+  return [
+    b.texture ?? "",
+    b.pattern ?? "",
+    b.color,
+    (b.colors ?? []).join(","),
+    b.role ?? "",
+    b.emissive ?? "",
+    b.emissiveIntensity ?? "",
+    b.opacity ?? "",
+    b.texture ? `${Math.max(1, b.w / 3).toFixed(1)}x${Math.max(1, b.h / 3).toFixed(1)}` : "",
+  ].join("|");
 }
 
 type LightingRig = { hemi: number; sun: number; skyColor: string; groundColor: string; sunColor: string };
@@ -1721,6 +1781,92 @@ function disposeObject(obj: THREE.Object3D) {
     if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
     else mat?.dispose();
   });
+}
+
+/**
+ * Collapses a static prop (procedural group or glTF clone) into one mesh per
+ * distinct material, with world transforms baked in. Cuts draw calls roughly
+ * 5-10x per prop; multi-material meshes are kept as they are.
+ */
+/** Local-to-root transform of a node, refreshing each local matrix from its TRS on the way up. */
+function matrixWithin(root: THREE.Object3D, node: THREE.Object3D) {
+  const chain: THREE.Object3D[] = [];
+  for (let cursor: THREE.Object3D | null = node; cursor; cursor = cursor.parent) {
+    chain.push(cursor);
+    if (cursor === root) break;
+  }
+  const result = new THREE.Matrix4();
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const item = chain[i];
+    if (item.matrixAutoUpdate) item.updateMatrix();
+    result.multiply(item.matrix);
+  }
+  return result;
+}
+
+function flattenStatic(root: THREE.Object3D): THREE.Group {
+  const out = new THREE.Group();
+  out.userData = { ...root.userData };
+  const buckets = new Map<string, { material: THREE.Material; geoms: THREE.BufferGeometry[]; sample: THREE.Mesh }>();
+  const keep: THREE.Mesh[] = [];
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (Array.isArray(mesh.material) || !mesh.geometry.attributes.position) {
+      keep.push(mesh);
+      return;
+    }
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    // Procedural props create a fresh material per part, so key on what the shader sees.
+    const key = [
+      material.type,
+      material.color ? material.color.getHexString() : "",
+      material.map ? material.map.uuid : "",
+      material.emissive ? material.emissive.getHexString() : "",
+      material.emissiveIntensity ?? "",
+      material.roughness ?? "",
+      material.metalness ?? "",
+      material.transparent ? material.opacity : "",
+      material.side,
+    ].join("|");
+    const cloned = mesh.geometry.clone().applyMatrix4(matrixWithin(root, mesh));
+    // Merging needs identical attribute sets and index-ness; normalise both.
+    const geometry = cloned.index ? cloned.toNonIndexed() : cloned;
+    if (geometry !== cloned) cloned.dispose();
+    for (const name of Object.keys(geometry.attributes)) {
+      if (name !== "position" && name !== "normal" && name !== "uv") geometry.deleteAttribute(name);
+    }
+    if (!geometry.attributes.normal) geometry.computeVertexNormals();
+    if (!geometry.attributes.uv) {
+      geometry.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 2), 2));
+    }
+    const bucket = buckets.get(key);
+    if (bucket) bucket.geoms.push(geometry);
+    else buckets.set(key, { material, geoms: [geometry], sample: mesh });
+  });
+  for (const bucket of buckets.values()) {
+    const merged = bucket.geoms.length === 1 ? bucket.geoms[0] : mergeGeometries(bucket.geoms, false);
+    if (bucket.geoms.length > 1) for (const geom of bucket.geoms) geom.dispose();
+    if (!merged) {
+      console.warn("[world] prop batch could not be merged; keeping parts separate", bucket.geoms.length);
+      continue;
+    }
+    const mesh = new THREE.Mesh(merged, bucket.material);
+    mesh.castShadow = bucket.sample.castShadow;
+    mesh.receiveShadow = bucket.sample.receiveShadow;
+    mesh.userData = { ...bucket.sample.userData };
+    out.add(mesh);
+  }
+  for (const mesh of keep) {
+    const clone = mesh.clone();
+    clone.applyMatrix4(matrixWithin(root, mesh));
+    out.add(clone);
+  }
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (mesh.isMesh && !keep.includes(mesh)) mesh.geometry.dispose();
+  });
+  return out;
 }
 
 function cloneStaticModel(template: THREE.Group) {

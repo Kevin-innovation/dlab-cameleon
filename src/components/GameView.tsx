@@ -175,6 +175,10 @@ export function GameView({
       return;
     }
     worldRef.current = world;
+    if (process.env.NODE_ENV !== "production") {
+      // Dev-only handle for the perf audit script (draw calls per map).
+      (window as unknown as { __camelonWorld?: GameWorld }).__camelonWorld = world;
+    }
     const input = inputRef.current;
     const startMap = getMap(session.getRoom().mapId);
     try {
