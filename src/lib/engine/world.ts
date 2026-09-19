@@ -7,6 +7,7 @@ import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps
 import type { BodyPart, BoxDef, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, PropKind, RoomState } from "../types";
 import { hiderAlive, isGhost, isHunter } from "../round";
 import { lightLevelAt } from "../camouflage";
+import { ceilingAt } from "../ceiling";
 import {
   blocked,
   edgeMargin,
@@ -603,11 +604,10 @@ export class GameWorld {
       model.updateMatrixWorld(true);
       const sourceBox = new THREE.Box3().setFromObject(model);
       const sourceSize = sourceBox.getSize(new THREE.Vector3());
-      const scale = Math.min(
-        def.w / Math.max(0.001, sourceSize.x),
-        def.h / Math.max(0.001, sourceSize.y),
-        def.d / Math.max(0.001, sourceSize.z),
-      );
+      // Fit the footprint so the visual matches the collider; height only caps runaway proportions.
+      const footprint = Math.min(def.w / Math.max(0.001, sourceSize.x), def.d / Math.max(0.001, sourceSize.z));
+      const heightCap = (def.h * 1.35) / Math.max(0.001, sourceSize.y);
+      const scale = Math.min(footprint, heightCap);
       model.scale.setScalar(Math.max(0.001, scale));
       model.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
@@ -845,7 +845,8 @@ export class GameWorld {
     this.specZ += this.wish.z * speed;
     this.specX = Math.max(1, Math.min(this.map.w - 1, this.specX));
     this.specZ = Math.max(1, Math.min(this.map.d - 1, this.specZ));
-    this.specY = Math.max(0.6, Math.min(this.map.ceiling - 0.4, this.specY));
+    const specRoof = ceilingAt(this.map, this.specX, this.specZ);
+    this.specY = Math.max(0.6, Math.min((Number.isFinite(specRoof) ? specRoof : this.map.ceiling + 6) - 0.4, this.specY));
   }
 
   stepLocal(
@@ -965,6 +966,12 @@ export class GameWorld {
         this.localY = Math.max(0, bump - h - 0.02);
         this.vy = 0;
       }
+    }
+    // Rooms have real ceilings now: a jump ends at the ceiling instead of poking through it.
+    const roof = ceilingAt(this.map, this.localX, this.localZ);
+    if (Number.isFinite(roof) && this.localY + h > roof - 0.06) {
+      this.localY = Math.max(0, roof - 0.06 - h);
+      if (this.vy > 0) this.vy = 0;
     }
     const m = edgeMargin(r);
     this.localX = Math.max(m, Math.min(this.map.w - m, this.localX));

@@ -153,6 +153,7 @@ const mansion: GameMap = {
     },
   ],
   doors: [],
+  gather: { x: 12, z: 9.5 },
   hunterSpawns: [{ x: 12, z: 8 }],
   spawns: [
     { x: 4, z: 9 },
@@ -233,6 +234,7 @@ const farm: GameMap = {
     { id: "yard", x: 0, z: 0, w: 42, d: 32, wall: FENCE, light: 1, openings: [{ kind: "gap", side: "s", at: 21, width: 3.6 }], ceiling: { open: true } },
   ],
   doors: [],
+  gather: { x: 21, z: 19 },
   hunterSpawns: [{ x: 21, z: 30.5 }],
   spawns: [
     { x: 8.5, z: 10 },
@@ -354,6 +356,7 @@ const sewer: GameMap = {
     },
   ],
   doors: [],
+  gather: { x: 24, z: 17 },
   hunterSpawns: [{ x: 43, z: 6 }],
   spawns: [
     { x: 3, z: 12.5 },
@@ -441,6 +444,7 @@ const backrooms: GameMap = {
     { id: "server", ...BR.server, wall: DARK_WALL, light: 0.2, openings: [{ kind: "door", side: "n", at: 8, width: 1.8 }], ceiling: { style: "tiles", fixtures: [{ x: 48, z: 38, kind: "spot" }] } },
   ],
   doors: [],
+  gather: { x: 8.5, z: 5.5 },
   hunterSpawns: [{ x: 53.5, z: 9.5 }],
   spawns: [
     { x: 4, z: 5 },

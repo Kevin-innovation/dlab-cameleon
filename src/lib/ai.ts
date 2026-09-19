@@ -1,5 +1,6 @@
 import { SHOT_COOLDOWN, TAG_RANGE, WHITE } from "./config";
 import { colorMatch, hunterVisibility, lightLevelAt } from "./camouflage";
+import { gatherPositions } from "./gather";
 import { blocked, moveWithSlide, poseRadius } from "./engine/collision";
 import { doorColliders, mapColliders } from "./maps";
 import { hiderAlive, isHunter, roleOf } from "./round";
@@ -50,6 +51,7 @@ type Brain = {
 };
 
 const brains = new Map<string, Brain>();
+let spawnedForRound = -1;
 
 function mul(id: string) {
   let h = 0;
@@ -393,11 +395,13 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
     const searchSpots = finalSpot
       ? [...candidates.filter((spot) => spot !== finalSpot), finalSpot]
       : candidates;
-    const sp = role === "hunter" ? map.hunterSpawns[i % map.hunterSpawns.length] : map.spawns[i % map.spawns.length];
+    // Bots join the roulette ring first; tickSoloBots moves them to role spawns when hiding starts.
+    const ring = gatherPositions(map, room.participantIds).get(p.id);
+    const sp = ring ?? (role === "hunter" ? map.hunterSpawns[i % map.hunterSpawns.length] : map.spawns[i % map.spawns.length]);
     p.set("x", sp.x);
     p.set("z", sp.z);
     p.set("y", 0);
-    p.set("yaw", 0);
+    p.set("yaw", ring?.yaw ?? 0);
     p.set("pose", "stand");
     p.set("fill", WHITE);
     p.set("blobs", []);
@@ -440,7 +444,22 @@ export function resetSoloBots(session: Session, map: GameMap, room: RoomState) {
 
 export function tickSoloBots(session: Session, map: GameMap, room: RoomState, dt: number, now: number) {
   if (session.kind !== "practice") return;
-  if (room.phase !== "hide" && room.phase !== "hunt") return;
+  if (room.phase !== "hide" && room.phase !== "hunt") {
+    spawnedForRound = room.phase === "prepare" ? -1 : spawnedForRound;
+    return;
+  }
+  if (spawnedForRound !== room.round) {
+    // First hide tick of the round: leave the ring for the role spawns.
+    spawnedForRound = room.round;
+    for (const p of session.players()) {
+      if (p.id === session.myId()) continue;
+      const i = Number(String(p.id).replace("bot-", "")) || 0;
+      const sp = isHunter(room, p.id) ? map.hunterSpawns[i % map.hunterSpawns.length] : map.spawns[i % map.spawns.length];
+      p.set("x", sp.x);
+      p.set("z", sp.z);
+      p.set("y", 0);
+    }
+  }
   const cols = colliders(map, room);
   const bounds = { w: map.w, d: map.d };
   const players = session.players();

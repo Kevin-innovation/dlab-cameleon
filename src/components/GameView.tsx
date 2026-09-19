@@ -39,6 +39,7 @@ import {
   tickRoom,
   processFire,
 } from "@/lib/round";
+import { gatherPositions } from "@/lib/gather";
 import { hudSignature, snapsFrom, type Session } from "@/lib/session";
 import { resetSoloBots, tickSoloBots } from "@/lib/ai";
 import type { PaintBlob, PlayerSnap, Pose } from "@/lib/types";
@@ -46,6 +47,7 @@ import { POSES } from "@/lib/types";
 import { AccessibleModal } from "./AccessibleModal";
 import { Lobby } from "./game/Lobby";
 import { ResultPanel, RevealPanel } from "./game/ResultPanel";
+import { RoulettePanel } from "./game/RoulettePanel";
 import { RoomSocialPanel } from "./game/RoomSocialPanel";
 import { ScoreTab } from "./game/ScoreTab";
 import { useRoomDirectorySync } from "./game/useRoomDirectorySync";
@@ -211,6 +213,7 @@ export function GameView({
     let lastForced = Date.now();
     let seenTouchFire = touchFireRef.current;
     let seenRound = session.getRoom().round;
+    let seenPhase = session.getRoom().phase;
     let bakedId = startMap.id;
     const hostTauntSeq = new Map<string, number>();
     let wasHost = false;
@@ -562,7 +565,7 @@ export function GameView({
     const undoor = session.onDoor((id, actorId) => {
       if (!session.isHost()) return;
       const room = session.getRoom();
-      if (room.phase !== "prepare" && room.phase !== "hide" && room.phase !== "hunt") return;
+      if (room.phase === "reveal" || room.phase === "result") return;
       const door = getMap(room.mapId).doors.find((candidate) => candidate.id === id);
       const actor = actorId ? snapsFrom(session).find((player) => player.id === actorId) : undefined;
       if (!door || !actor || roleOf(room, actor.id) === "spectator") return;
@@ -622,14 +625,14 @@ export function GameView({
 
       if (room.round !== seenRound) {
         seenRound = room.round;
+        seenPhase = room.phase;
         if (me && room.round > 0) {
           const role = roleOf(room, me.id);
+          // Everyone meets on the gather ring for the roulette; role spawns come with the hide phase.
+          const spot = gatherPositions(map, room.participantIds).get(me.id);
           const idx = Math.max(0, players.findIndex((p) => p.id === me.id));
-          const spawn =
-            role === "hunter"
-              ? map.hunterSpawns[idx % map.hunterSpawns.length]
-              : map.spawns[idx % map.spawns.length];
-          world.setLocal(spawn.x, spawn.z);
+          const spawn = spot ?? map.spawns[idx % map.spawns.length];
+          world.setLocal(spawn.x, spawn.z, spot?.yaw);
           session.me().set("x", spawn.x, true);
           session.me().set("y", 0, true);
           session.me().set("z", spawn.z, true);
@@ -648,6 +651,23 @@ export function GameView({
           if (session.kind === "practice") resetSoloBots(session, map, room);
         }
       }
+      if (room.phase !== seenPhase) {
+        const from = seenPhase;
+        seenPhase = room.phase;
+        if (from === "prepare" && room.phase === "hide" && me && isParticipant(room, me.id)) {
+          // Roulette is over: hiders scatter to their spawns, hunters wait at theirs.
+          const role = roleOf(room, me.id);
+          const idx = Math.max(0, players.findIndex((p) => p.id === me.id));
+          const spawn =
+            role === "hunter"
+              ? map.hunterSpawns[idx % map.hunterSpawns.length]
+              : map.spawns[idx % map.spawns.length];
+          world.setLocal(spawn.x, spawn.z, 0);
+          session.me().set("x", spawn.x, true);
+          session.me().set("y", 0, true);
+          session.me().set("z", spawn.z, true);
+        }
+      }
 
       if (session.kind === "practice") tickSoloBots(session, map, room, dt, Date.now());
       const frameKeys = mobilePortraitRef.current ? new Set<string>() : new Set(keys);
@@ -661,7 +681,7 @@ export function GameView({
         look.dy = 0;
       }
       world.syncDoors(room.doors ?? {});
-      const hunterWait = !!(me && isHunter(room, me.id) && (room.phase === "prepare" || room.phase === "hide"));
+      const hunterWait = !!(me && isHunter(room, me.id) && room.phase === "hide");
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
       const ghost = !!me && isGhost(room, me.id);
       // Infection: a caught hider becomes a hunter mid-hunt. Drop every hider-only
@@ -699,7 +719,7 @@ export function GameView({
       const moved = world.stepLocal(
         dt,
         { keys: frameKeys, paintOpen: paintOpenRef.current, tool: toolRef.current, color: colorRef.current, brush: brushRef.current },
-        !mobilePortraitRef.current && !hunterWait && room.phase !== "result" && !watchingRef.current,
+        !mobilePortraitRef.current && !hunterWait && room.phase !== "result" && room.phase !== "prepare" && !watchingRef.current,
         pose,
         ghost,
       );
@@ -892,7 +912,7 @@ export function GameView({
       session.me().set("camoScore", score, false);
     }
   }, [camouflage.score, session]);
-  const hunterHide = myRole === "hunter" && (hud.phase === "prepare" || hud.phase === "hide");
+  const hunterHide = myRole === "hunter" && hud.phase === "hide";
   const timeLeft = remaining(hud, nowTick);
   const phaseAnnouncement =
     hud.phase === "lobby"
@@ -1209,10 +1229,12 @@ export function GameView({
           </>
         )}
 
+        {hud.phase === "prepare" && <RoulettePanel room={hud} people={people} myId={session.myId()} />}
+
         {hunterHide && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0b100d] text-center">
             <p className="text-sm text-lime">술래는 아직 입장할 수 없습니다</p>
-            <h2 className="text-wrap-balance mt-2 font-display text-5xl">{hud.phase === "prepare" ? "역할 확인 중…" : "위장 중…"}</h2>
+            <h2 className="text-wrap-balance mt-2 font-display text-5xl">위장 중…</h2>
             <p className="mt-3 text-white/70">카멜레온들이 3D 맵에서 몸을 칠하고 있습니다</p>
             <div className="mt-8 font-display text-7xl text-lime">{timeLeft}</div>
           </div>

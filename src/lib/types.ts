@@ -152,6 +152,8 @@ export type GameMap = {
   ceilingStyle?: CeilingStyle;
   ceilingColor?: string;
   rooms?: RoomDef[];
+  /** Where players gather for the role roulette; defaults to the first hunter spawn. */
+  gather?: { x: number; z: number };
   /** Point lights emitted by room fixtures (desktop only; mobile keeps the emissive fixture meshes). */
   lights?: { x: number; y: number; z: number; color: string; intensity: number; distance: number }[];
   w: number;
