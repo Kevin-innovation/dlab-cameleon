@@ -240,48 +240,91 @@ const sewer: GameMap = {
   ],
 };
 
+const YELLOW_WALL = { color: "#e2d36a", pattern: "wallpaper" as Pattern, colors: ["#e2d36a", "#c9b84a"], thickness: 0.3 };
+const OFFICE_WALL = { color: "#d8cf9c", pattern: "wallpaper" as Pattern, colors: ["#d8cf9c", "#c4b97e"], thickness: 0.3 };
+const DARK_WALL = { color: "#8f8650", pattern: "wallpaper" as Pattern, colors: ["#8f8650", "#6f6838"], thickness: 0.3 };
+
+/** Fluorescent tubes on a grid inside a room; `on: false` leaves a dark zone. */
+function fluorescentGrid(room: { x: number; z: number; w: number; d: number }, spacing: number, on = true) {
+  const out: { x: number; z: number; kind: "fluorescent"; on: boolean }[] = [];
+  const nx = Math.max(1, Math.round(room.w / spacing));
+  const nz = Math.max(1, Math.round(room.d / spacing));
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < nz; j++) {
+      out.push({ x: room.x + ((i + 0.5) * room.w) / nx, z: room.z + ((j + 0.5) * room.d) / nz, kind: "fluorescent", on });
+    }
+  }
+  return out;
+}
+
+const BR = {
+  lobby: { x: 0, z: 0, w: 16, d: 10 },
+  copy: { x: 0, z: 10, w: 8, d: 8 },
+  kitchen: { x: 8, z: 10, w: 8, d: 8 },
+  corridorB: { x: 0, z: 18, w: 16, d: 4 },
+  archive: { x: 0, z: 22, w: 16, d: 10 },
+  lounge: { x: 0, z: 32, w: 16, d: 10 },
+  spine: { x: 16, z: 0, w: 4, d: 42 },
+  officeA: { x: 20, z: 0, w: 20, d: 14 },
+  meeting: { x: 40, z: 0, w: 16, d: 12 },
+  storage: { x: 40, z: 12, w: 16, d: 12 },
+  officeB: { x: 20, z: 14, w: 20, d: 16 },
+  breakroom: { x: 40, z: 24, w: 16, d: 6 },
+  corridorC: { x: 20, z: 30, w: 36, d: 4 },
+  officeC: { x: 20, z: 34, w: 20, d: 8 },
+  server: { x: 40, z: 34, w: 16, d: 8 },
+};
+
+/**
+ * 백룸: 56×42 사무실. 형광등 그리드 아래의 밝은 사무 구역, 창이 있는 회의실,
+ * 형광등이 꺼진 창고·서버실·문서고, 좁은 탕비실·복사실, 긴 복도가 시야를 끊는다.
+ */
 const backrooms: GameMap = {
   id: "backrooms",
   name: "백룸",
-  blurb: "노란 사무실. 의자·서랍·형광 벽 가장자리에 붙으세요.",
+  blurb: "노란 사무실. 꺼진 형광등 구역과 칸막이 사이에 숨으세요.",
   difficulty: "어려움",
-  w: 40,
-  d: 30,
-  ceiling: 3.6,
-  fog: "#b8a84a",
-  floor: "#d4c56a",
+  kind: "indoor",
+  lighting: "fluorescent",
+  ceilingStyle: "tiles",
+  w: 56,
+  d: 42,
+  ceiling: 2.9,
+  fog: "#8d8340",
+  floor: "#c9b95a",
+  rooms: [
+    { id: "lobby", ...BR.lobby, wall: YELLOW_WALL, light: 0.8, openings: [{ kind: "arch", side: "e", at: 5, width: 2.4 }], ceiling: { style: "tiles", fixtures: [{ x: 5, z: 5, kind: "pendant" }, { x: 11, z: 5, kind: "pendant" }] } },
+    { id: "copy", ...BR.copy, wall: OFFICE_WALL, light: 0.5, openings: [{ kind: "door", side: "s", at: 4, width: 1.8 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.copy, 5) } },
+    { id: "kitchen", ...BR.kitchen, wall: OFFICE_WALL, light: 0.7, openings: [{ kind: "door", side: "s", at: 4, width: 1.8 }, { kind: "arch", side: "e", at: 4, width: 2 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.kitchen, 5) } },
+    { id: "corridorB", ...BR.corridorB, wall: YELLOW_WALL, light: 0.35, openings: [{ kind: "arch", side: "e", at: 2, width: 2.4 }], ceiling: { style: "tiles", fixtures: [{ x: 4, z: 20, kind: "fluorescent" }, { x: 12, z: 20, kind: "fluorescent", on: false }] } },
+    { id: "archive", ...BR.archive, wall: DARK_WALL, light: 0.12, openings: [{ kind: "door", side: "n", at: 3, width: 1.8 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.archive, 6, false) } },
+    { id: "lounge", ...BR.lounge, wall: YELLOW_WALL, light: 0.6, openings: [{ kind: "door", side: "n", at: 12, width: 1.8 }, { kind: "arch", side: "e", at: 5, width: 2.4 }], ceiling: { style: "tiles", fixtures: [{ x: 5, z: 37, kind: "pendant" }, { x: 11, z: 37, kind: "pendant" }] } },
+    { id: "spine", ...BR.spine, wall: YELLOW_WALL, light: 0.55, ceiling: { style: "tiles", fixtures: [{ x: 18, z: 8, kind: "fluorescent" }, { x: 18, z: 20, kind: "fluorescent" }, { x: 18, z: 32, kind: "fluorescent" }, { x: 18, z: 38, kind: "fluorescent", on: false }] } },
+    { id: "officeA", ...BR.officeA, wall: OFFICE_WALL, light: 0.75, openings: [{ kind: "arch", side: "w", at: 7, width: 2.4 }, { kind: "door", side: "e", at: 6, width: 1.8 }, { kind: "door", side: "s", at: 10, width: 1.8 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.officeA, 6) } },
+    { id: "meeting", ...BR.meeting, wall: OFFICE_WALL, light: 0.95, openings: [{ kind: "window", side: "e", at: 3, width: 3, sill: 0.9, height: 1.5 }, { kind: "window", side: "e", at: 9, width: 3, sill: 0.9, height: 1.5 }, { kind: "door", side: "s", at: 8, width: 1.8 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.meeting, 6) } },
+    { id: "storage", ...BR.storage, wall: DARK_WALL, light: 0.1, openings: [{ kind: "door", side: "s", at: 8, width: 1.8 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.storage, 6, false) } },
+    { id: "officeB", ...BR.officeB, wall: OFFICE_WALL, light: 0.65, openings: [{ kind: "arch", side: "w", at: 8, width: 2.4 }, { kind: "arch", side: "s", at: 10, width: 2.4 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.officeB, 6) } },
+    { id: "breakroom", ...BR.breakroom, wall: YELLOW_WALL, light: 0.7, openings: [{ kind: "arch", side: "s", at: 8, width: 2.4 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.breakroom, 8) } },
+    { id: "corridorC", ...BR.corridorC, wall: YELLOW_WALL, light: 0.45, ceiling: { style: "tiles", fixtures: [{ x: 26, z: 32, kind: "fluorescent" }, { x: 38, z: 32, kind: "fluorescent" }, { x: 50, z: 32, kind: "fluorescent" }] } },
+    { id: "officeC", ...BR.officeC, wall: OFFICE_WALL, light: 0.6, openings: [{ kind: "arch", side: "n", at: 10, width: 2.4 }], ceiling: { style: "tiles", fixtures: fluorescentGrid(BR.officeC, 7) } },
+    { id: "server", ...BR.server, wall: DARK_WALL, light: 0.2, openings: [{ kind: "door", side: "n", at: 8, width: 1.8 }], ceiling: { style: "tiles", fixtures: [{ x: 48, z: 38, kind: "spot" }] } },
+  ],
   doors: [],
-  hunterSpawns: [{ x: 20, z: 27.5 }],
+  hunterSpawns: [{ x: 53.5, z: 9.5 }],
   spawns: [
-    { x: 6, z: 6 },
-    { x: 14, z: 8 },
-    { x: 22, z: 7 },
-    { x: 30, z: 9 },
-    { x: 33, z: 16 },
-    { x: 24, z: 20 },
-    { x: 12, z: 18 },
-    { x: 7, z: 14 },
+    { x: 4, z: 5 },
+    { x: 12.5, z: 12.7 },
+    { x: 8, z: 26 },
+    { x: 5, z: 37 },
+    { x: 30, z: 10.5 },
+    { x: 36, z: 22 },
+    { x: 30, z: 38 },
+    { x: 52.5, z: 28.5 },
   ],
   boxes: [
-    B(1, 1, 38, 28, "#d4c56a", { h: 0.04, pattern: "tiles", colors: ["#d4c56a", "#c4b44a"] }),
-    B(2, 2, 10, 0.18, "#e2d36a", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#e2d36a", "#c9b84a"] }),
-    B(14, 2, 12, 0.18, "#e8dc7a", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#e8dc7a", "#d4c56a"] }),
-    B(28, 2, 10, 0.18, "#d4c56a", { h: 3.2, collide: true, pattern: "wallpaper", colors: ["#d4c56a", "#b8a84a"] }),
-    B(6, 8, 1.4, 0.7, "#6d5c3a", { h: 0.95, collide: true, pattern: "wood" }),
-    B(8, 8, 0.55, 0.55, "#2c2c2c", { h: 1.05, collide: true }),
-    B(18, 10, 1.6, 0.8, "#6d5c3a", { h: 0.9, collide: true, pattern: "wood" }),
-    B(20, 10, 0.55, 0.55, "#1a1a1a", { h: 1.05, collide: true }),
-    B(26, 9, 1.2, 1.2, "#4a4a4a", { h: 1.2, collide: true }),
-    B(12, 16, 0.9, 0.9, "#5a4a32", { h: 0.85, collide: true, pattern: "wood" }),
-    B(13, 16.2, 0.9, 0.9, "#5a4a32", { h: 0.85, y: 0.85, collide: true, pattern: "wood" }),
-    B(30, 14, 1.8, 1.1, "#3d3d3d", { h: 1.15, collide: true }),
-    B(5, 20, 1.3, 1.0, "#2f2f2f", { h: 1.3, collide: true, pattern: "bricks", colors: ["#2f2f2f", "#111"] }),
-    B(22, 18, 2.2, 0.16, "#e74c3c", { h: 1.4, y: 0.9, collide: true, pattern: "stripes", colors: ["#e74c3c", "#f1c40f"] }),
-    wall(0, 0, 40, 0.4, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
-    wall(0, 29.6, 16, 0.4, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
-    wall(24, 29.6, 16, 0.4, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
-    wall(0, 0, 0.4, 30, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
-    wall(39.6, 0, 0.4, 30, "#c9b84a", 3.5, "wallpaper", ["#c9b84a", "#e2d36a"]),
+    // 회의실 창 밖의 "낮 빛": 창 너머에 밝은 발광 패널을 두어 창이 실제로 빛나게 한다.
+    { x: 56.5, y: 1.65, z: 3, w: 0.2, h: 1.7, d: 3.6, color: "#fff4cc", emissive: "#fff4cc", emissiveIntensity: 1, collide: false, role: "fixture" },
+    { x: 56.5, y: 1.65, z: 9, w: 0.2, h: 1.7, d: 3.6, color: "#fff4cc", emissive: "#fff4cc", emissiveIntensity: 1, collide: false, role: "fixture" },
   ],
 };
 
@@ -548,36 +591,129 @@ const barrel = (x: number, z: number, color = "#b03a2e", size = 1.3): BoxDef =>
  */
 function extraCover(map: GameMap): BoxDef[] {
   if (map.id === "backrooms") {
+    const sofa = (x: number, z: number, color = "#8c7742") =>
+      B(x, z, 3.4, 1.25, color, { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.2, d: 1.12 } });
+    const armchair = (x: number, z: number, color = "#8c7742") => B(x, z, 1.6, 1.4, color, { h: 0.95, collide: true, prop: "armchair" });
+    const table = (x: number, z: number) =>
+      B(x, z, 2.2, 1.4, "#6d5c3a", { h: 0.72, collide: true, prop: "coffeeTable", collider: { w: 2.02, d: 1.2 }, pattern: "wood" });
+    const plant = (x: number, z: number) =>
+      B(x, z, 1.3, 1.3, "#53734c", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#53734c", "#354e30"] });
+    const lamp = (x: number, z: number) => B(x, z, 1.1, 1.1, "#d6c57c", { h: 2.6, collide: true, prop: "floorLamp", shape: "cylinder" });
+    const shelf = (x: number, z: number) =>
+      B(x, z, 2.4, 0.65, "#6d5c3a", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 2.2, d: 0.58 }, pattern: "wood" });
+    const rack = (x: number, z: number) =>
+      B(x, z, 4, 0.6, "#7a7f86", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 3.8, d: 0.54 } });
+    const server = (x: number, z: number) => B(x, z, 1, 1.2, "#26313a", { h: 2.1, collide: true, pattern: "dots", colors: ["#26313a", "#4fd1c5"] });
+    const crate = (x: number, z: number, size = 1.2, h = 1) => B(x, z, size, size, "#5b4b32", { h, collide: true, pattern: "wood" });
+    /** Three-sided cubicle: two partitions plus a desk and chair tucked inside. */
+    const pod = (x: number, z: number) => [
+      partition(x, z, 0.16, 5),
+      partition(x + 0.16, z + 5.16, 4.84, 0.16),
+      desk(x + 1, z + 1.5),
+      chair(x + 1.4, z + 2.8),
+    ];
     return [
-      // 사무실 칸막이: 시야를 끊는 낮은 벽으로 구역을 늘린다.
-      partition(20, 15.5, 9, 0.16),
-      partition(44, 6, 0.16, 7),
-      partition(13, 33.2, 8, 0.16),
-      partition(37, 34, 9, 0.16),
-      partition(6, 28.5, 0.16, 6),
-      partition(50, 24, 0.16, 8),
-      // 북쪽 사무 구역
-      desk(10.5, 4.5),
-      chair(11, 5.6),
-      cabinet(3, 9.5),
-      desk(47.5, 4.5),
-      chair(48, 5.6),
-      cabinet(52.5, 9),
-      B(2.5, 15.5, 1.3, 1.3, "#53734c", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#53734c", "#354e30"] }),
-      desk(23, 17),
-      chair(23.4, 18.2),
-      B(38.5, 5, 3.4, 1.25, "#8c7742", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.2, d: 1.12 } }),
-      // 남쪽 휴게·창고 구역
-      desk(13.5, 36.5),
-      chair(14, 37.7),
-      desk(40.5, 36.5),
-      chair(41, 37.7),
-      cabinet(3, 37),
-      cabinet(52, 37),
-      B(52.5, 27, 1.0, 0.8, "#2a2a2a", { h: 1.9, collide: true }),
-      B(3.5, 30, 1.1, 1.1, "#d6c57c", { h: 3.0, collide: true, prop: "floorLamp", shape: "cylinder" }),
-      B(30, 35.5, 1.6, 1.4, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
-      B(22.5, 33, 2.4, 0.65, "#6d5c3a", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 2.2, d: 0.58 }, pattern: "wood" }),
+      // 로비: 안내 데스크와 소파
+      B(6, 2, 4, 1, "#3a3a3a", { h: 1.1, collide: true }),
+      sofa(2, 7),
+      armchair(12, 7),
+      plant(14, 1.5),
+      lamp(1, 1),
+      // 복사실
+      B(1, 11, 1.2, 0.8, "#6e6e6e", { h: 1.3, collide: true }),
+      cabinet(6.5, 11),
+      cabinet(6.5, 12),
+      desk(1, 15),
+      chair(1.4, 16.2),
+      // 탕비실
+      B(8.5, 10.5, 5, 0.7, "#cfd3c8", { h: 0.9, collide: true }),
+      B(14.5, 10.6, 0.9, 0.8, "#e9ece6", { h: 1.9, collide: true }),
+      table(10.8, 14),
+      chair(9.5, 15.8),
+      chair(13, 15.8),
+      // 복도 B
+      cabinet(13, 18.4),
+      // 문서고: 어두운 책장 열
+      shelf(2, 24),
+      shelf(5, 24),
+      shelf(9, 24),
+      shelf(12, 24),
+      shelf(2, 27.5),
+      shelf(5, 27.5),
+      shelf(9, 27.5),
+      shelf(12, 27.5),
+      cabinet(1, 30.5),
+      cabinet(2, 30.5),
+      crate(13.5, 30.2),
+      // 라운지
+      sofa(2, 34, "#7b3f2a"),
+      sofa(2, 39, "#7b3f2a"),
+      armchair(8, 35),
+      table(9.5, 37.5),
+      plant(14.2, 40),
+      lamp(14.5, 33),
+      B(9, 40.8, 3, 0.6, "#2a2a2a", { h: 0.7, collide: true }),
+      // 중앙 복도
+      B(19.2, 26, 0.5, 0.5, "#b9d4e6", { h: 1.3, collide: true }),
+      cabinet(16.4, 12),
+      // 사무실 A: 칸막이 부스 2개 + 캐비닛 줄
+      ...pod(22, 1),
+      ...pod(29, 1),
+      cabinet(21, 12.8),
+      cabinet(22, 12.8),
+      cabinet(23, 12.8),
+      plant(38.5, 1),
+      // 회의실: 긴 테이블과 의자
+      B(45, 4.5, 6, 2.2, "#4a3626", { h: 0.78, collide: true, pattern: "wood" }),
+      chair(45, 3.3),
+      chair(47.5, 3.3),
+      chair(50, 3.3),
+      chair(45, 7),
+      chair(47.5, 7),
+      chair(50, 7),
+      // 창고: 선반 열과 상자
+      rack(42, 14),
+      rack(42, 18),
+      rack(48, 14),
+      rack(48, 18),
+      crate(52, 21),
+      crate(53.5, 21.5, 1, 0.8),
+      crate(43, 21.5, 1.4, 1.1),
+      // 사무실 B: 칸막이 부스 4개
+      ...pod(22, 16),
+      ...pod(29, 16),
+      ...pod(22, 23.5),
+      ...pod(29, 23.5),
+      plant(38.5, 15),
+      lamp(38.5, 28.5),
+      // 휴게실
+      B(40.5, 24.4, 1, 0.8, "#2a2a2a", { h: 1.9, collide: true }),
+      B(41.8, 24.4, 1, 0.8, "#8b1e1e", { h: 1.9, collide: true }),
+      table(46, 26),
+      chair(44.5, 27.8),
+      chair(48, 27.8),
+      sofa(51, 24.5, "#365b78"),
+      plant(54.3, 28.3),
+      // 복도 C
+      cabinet(54.5, 30.4),
+      B(30, 33.2, 2, 0.6, "#6d5c3a", { h: 0.9, collide: true, pattern: "wood" }),
+      // 사무실 C: 책상 줄
+      desk(22, 36),
+      chair(22.4, 37.2),
+      desk(26, 36),
+      chair(26.4, 37.2),
+      desk(34, 36),
+      chair(34.4, 37.2),
+      cabinet(38.6, 40.9),
+      cabinet(37.6, 40.9),
+      // 서버실
+      server(42, 35),
+      server(42, 37.5),
+      server(45.5, 35),
+      server(45.5, 37.5),
+      server(49, 35),
+      server(49, 37.5),
+      crate(53, 40),
     ];
   }
   if (map.id === "sewer") {
@@ -595,8 +731,11 @@ function extraCover(map: GameMap): BoxDef[] {
 
 export const droppedExtraCover: Record<string, string[]> = {};
 
-function aabbOverlap(a: Collider, b: Collider) {
-  return a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
+/** Overlap deeper than a touch on both axes (collider outsets make neighbours graze each other). */
+function aabbOverlap(a: Collider, b: Collider, tolerance = 0.12) {
+  const overlapX = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+  const overlapZ = Math.min(a.maxZ, b.maxZ) - Math.max(a.minZ, b.minZ);
+  return overlapX > tolerance && overlapZ > tolerance;
 }
 
 function withExtraCover(map: GameMap): GameMap {
@@ -613,7 +752,7 @@ function withExtraCover(map: GameMap): GameMap {
       dropped.push(`${label}: no collider`);
       continue;
     }
-    const inside = self.minX > 0.6 && self.maxX < map.w - 0.6 && self.minZ > 0.6 && self.maxZ < map.d - 0.6;
+    const inside = self.minX > 0.2 && self.maxX < map.w - 0.2 && self.minZ > 0.2 && self.maxZ < map.d - 0.2;
     const clash = existing.find((c) => aabbOverlap(self, c));
     const nearSpawn = spawns.find((p) => p.x > self.minX - 1.1 && p.x < self.maxX + 1.1 && p.z > self.minZ - 1.1 && p.z < self.maxZ + 1.1);
     if (!inside) dropped.push(`${label}: outside arena`);
@@ -638,7 +777,7 @@ function withRooms(map: GameMap): GameMap {
 }
 
 export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) => {
-  if (m.rooms?.length) return clearSpawns(withRooms(m));
+  if (m.rooms?.length) return clearSpawns(withExtraCover(withRooms(m)));
   const size = ARENA_BY_DIFFICULTY[m.difficulty];
   return clearSpawns(withExtraCover(spreadMapToArena(stageLayout(m), size.width, size.depth)));
 });
