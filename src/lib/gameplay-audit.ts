@@ -112,6 +112,37 @@ export function auditMap(map: GameMap): MapGameplayAudit {
   if (primaryCoverCount < 8) {
     issues.push(issue("warning", "PRIMARY_COVER_TOO_SPARSE", "8인 라운드에서 사용할 주요 은신처가 부족합니다."));
   }
+  // Baseline: 8 primary covers on a 42x32 arena. Bigger arenas need proportionally more.
+  const requiredCover = Math.ceil((8 * map.w * map.d) / (42 * 32));
+  if (primaryCoverCount < requiredCover) {
+    issues.push(
+      issue(
+        "warning",
+        "COVER_DENSITY_LOW",
+        `면적 대비 주요 은신처가 부족합니다 (${primaryCoverCount}/${requiredCover}). 맵을 키웠으면 커버도 늘려야 합니다.`,
+      ),
+    );
+  }
+  const propColliders = map.boxes
+    .filter((box) => Boolean(box.prop) && Boolean(box.collide))
+    .flatMap((box) => mapColliders({ ...map, boxes: [box] }).map((collider) => ({ box, collider })));
+  for (let i = 0; i < propColliders.length; i += 1) {
+    for (let j = i + 1; j < propColliders.length; j += 1) {
+      const a = propColliders[i].collider;
+      const b = propColliders[j].collider;
+      const overlapX = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+      const overlapZ = Math.min(a.maxZ, b.maxZ) - Math.max(a.minZ, b.minZ);
+      if (overlapX > 0.25 && overlapZ > 0.25) {
+        issues.push(
+          issue(
+            "error",
+            "PROP_OVERLAP",
+            `소품이 서로 겹칩니다: ${propColliders[i].box.prop}(${a.minX.toFixed(1)}, ${a.minZ.toFixed(1)}) × ${propColliders[j].box.prop}(${b.minX.toFixed(1)}, ${b.minZ.toFixed(1)}).`,
+          ),
+        );
+      }
+    }
+  }
   if (propCount < 12) {
     issues.push(issue("warning", "SEMANTIC_PROPS_TOO_FEW", "실제 가구·소품 기반의 의미 있는 장애물이 부족합니다."));
   }

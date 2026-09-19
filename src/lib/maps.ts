@@ -527,9 +527,106 @@ function spreadMapToArena(map: GameMap, width: number, depth: number): GameMap {
   };
 }
 
+const partitionTheme = { color: "#e2d36a", pattern: "wallpaper" as Pattern, colors: ["#e2d36a", "#c9b84a"] };
+const partition = (x: number, z: number, w: number, d: number): BoxDef =>
+  B(x, z, w, d, partitionTheme.color, { h: 1.7, collide: true, pattern: partitionTheme.pattern, colors: partitionTheme.colors });
+const desk = (x: number, z: number): BoxDef =>
+  B(x, z, 1.8, 0.9, "#6d5c3a", { h: 0.78, collide: true, prop: "coffeeTable", collider: { w: 1.66, d: 0.8 }, pattern: "wood" });
+const chair = (x: number, z: number, color = "#8c7742"): BoxDef =>
+  B(x, z, 1.4, 0.9, color, { h: 0.95, collide: true, prop: "chair", pattern: "wood" });
+const cabinet = (x: number, z: number, color = "#5a5a5a"): BoxDef =>
+  B(x, z, 0.9, 0.6, color, { h: 1.5, collide: true });
+const barrel = (x: number, z: number, color = "#b03a2e", size = 1.3): BoxDef =>
+  B(x, z, size, size, color, { h: 1.2, collide: true, prop: "barrel", shape: "cylinder" });
+
+/**
+ * Extra cover for the larger (harder) arenas, placed in arena coordinates after the
+ * spread so cover density stays close to the 8-player baseline as the area grows.
+ * Candidates that would overlap existing colliders or crowd a spawn are dropped;
+ * `droppedExtraCover` lets the audit script report them.
+ */
+function extraCover(map: GameMap): BoxDef[] {
+  if (map.id === "backrooms") {
+    return [
+      // 사무실 칸막이: 시야를 끊는 낮은 벽으로 구역을 늘린다.
+      partition(20, 15.5, 9, 0.16),
+      partition(44, 6, 0.16, 7),
+      partition(13, 33.2, 8, 0.16),
+      partition(37, 34, 9, 0.16),
+      partition(6, 28.5, 0.16, 6),
+      partition(50, 24, 0.16, 8),
+      // 북쪽 사무 구역
+      desk(10.5, 4.5),
+      chair(11, 5.6),
+      cabinet(3, 9.5),
+      desk(47.5, 4.5),
+      chair(48, 5.6),
+      cabinet(52.5, 9),
+      B(2.5, 15.5, 1.3, 1.3, "#53734c", { h: 1.5, collide: true, prop: "plant", pattern: "leaves", colors: ["#53734c", "#354e30"] }),
+      desk(23, 17),
+      chair(23.4, 18.2),
+      B(38.5, 5, 3.4, 1.25, "#8c7742", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.2, d: 1.12 } }),
+      // 남쪽 휴게·창고 구역
+      desk(13.5, 36.5),
+      chair(14, 37.7),
+      desk(40.5, 36.5),
+      chair(41, 37.7),
+      cabinet(3, 37),
+      cabinet(52, 37),
+      B(52.5, 27, 1.0, 0.8, "#2a2a2a", { h: 1.9, collide: true }),
+      B(3.5, 30, 1.1, 1.1, "#d6c57c", { h: 3.0, collide: true, prop: "floorLamp", shape: "cylinder" }),
+      B(30, 35.5, 1.6, 1.4, "#8c7742", { h: 0.95, collide: true, prop: "armchair" }),
+      B(22.5, 33, 2.4, 0.65, "#6d5c3a", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 2.2, d: 0.58 }, pattern: "wood" }),
+    ];
+  }
+  if (map.id === "sewer") {
+    return [
+      barrel(41, 5),
+      B(20, 5, 2.0, 1.2, "#2c3e50", { h: 1.1, collide: true, pattern: "graffiti", colors: ["#2c3e50", "#e74c3c"] }),
+      barrel(10.5, 15, "#922b21", 1.2),
+      B(40, 30.2, 3.4, 1.25, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.2, d: 1.12 } }),
+      B(44, 20, 1.6, 1.4, "#5b6b58", { h: 0.95, collide: true, prop: "armchair" }),
+      B(27, 30.5, 1.8, 1.1, "#7f8c8d", { h: 1.2, collide: true, pattern: "stripes", colors: ["#7f8c8d", "#111"] }),
+    ];
+  }
+  return [];
+}
+
+export const droppedExtraCover: Record<string, string[]> = {};
+
+function aabbOverlap(a: Collider, b: Collider) {
+  return a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
+}
+
+function withExtraCover(map: GameMap): GameMap {
+  const candidates = extraCover(map);
+  if (candidates.length === 0) return map;
+  const spawns = [...map.spawns, ...map.hunterSpawns];
+  let boxes = [...map.boxes];
+  const dropped: string[] = [];
+  for (const candidate of candidates) {
+    const existing = mapColliders({ ...map, boxes }).filter((c) => c.minY < 1.5);
+    const [self] = mapColliders({ ...map, boxes: [candidate] });
+    const label = `${candidate.prop ?? candidate.pattern ?? "box"}@(${candidate.x.toFixed(1)}, ${candidate.z.toFixed(1)})`;
+    if (!self) {
+      dropped.push(`${label}: no collider`);
+      continue;
+    }
+    const inside = self.minX > 0.6 && self.maxX < map.w - 0.6 && self.minZ > 0.6 && self.maxZ < map.d - 0.6;
+    const clash = existing.find((c) => aabbOverlap(self, c));
+    const nearSpawn = spawns.find((p) => p.x > self.minX - 1.1 && p.x < self.maxX + 1.1 && p.z > self.minZ - 1.1 && p.z < self.maxZ + 1.1);
+    if (!inside) dropped.push(`${label}: outside arena`);
+    else if (clash) dropped.push(`${label}: overlaps (${clash.minX.toFixed(1)}..${clash.maxX.toFixed(1)}, ${clash.minZ.toFixed(1)}..${clash.maxZ.toFixed(1)})`);
+    else if (nearSpawn) dropped.push(`${label}: crowds spawn (${nearSpawn.x.toFixed(1)}, ${nearSpawn.z.toFixed(1)})`);
+    else boxes = [...boxes, candidate];
+  }
+  if (dropped.length) droppedExtraCover[map.id] = dropped;
+  return { ...map, boxes };
+}
+
 export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) => {
   const size = ARENA_BY_DIFFICULTY[m.difficulty];
-  return clearSpawns(spreadMapToArena(stageLayout(m), size.width, size.depth));
+  return clearSpawns(withExtraCover(spreadMapToArena(stageLayout(m), size.width, size.depth)));
 });
 
 function rotY(x: number, z: number, ang: number) {

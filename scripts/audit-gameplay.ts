@@ -1,5 +1,5 @@
 import { auditMaps } from "../src/lib/gameplay-audit";
-import { MAPS } from "../src/lib/maps";
+import { droppedExtraCover, MAPS } from "../src/lib/maps";
 import { beginRound, emptyRoom, sanitizeRoom } from "../src/lib/round";
 
 const report = auditMaps(MAPS);
@@ -12,6 +12,9 @@ for (const map of report.maps) {
   );
   for (const problem of map.issues) {
     console.log(`  ${problem.severity.toUpperCase()} ${problem.code}: ${problem.message}`);
+  }
+  for (const dropped of droppedExtraCover[map.mapId] ?? []) {
+    console.log(`  DROPPED extra cover ${dropped}`);
   }
 }
 
