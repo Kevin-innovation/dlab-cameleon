@@ -5,14 +5,11 @@ import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
   MAX_BLOBS,
-  MAX_PLAYERS,
-  REVEAL_TIME,
   SHOT_COOLDOWN,
   SYNC_HZ,
   TAUNT_COOLDOWN,
@@ -25,25 +22,33 @@ import {
 import { drawBodyPreview } from "@/lib/engine/character";
 import { GameWorld } from "@/lib/engine/world";
 import { camouflageMeter, tagRangeForCamouflage } from "@/lib/camouflage";
-import { getMap, MAPS } from "@/lib/maps";
+import { getMap } from "@/lib/maps";
 import { joystickInput, MOBILE_PORTRAIT_QUERY, requestMobileLandscape } from "@/lib/mobile";
 import { GameInputState } from "@/lib/input";
 import {
   beginRound,
   canStartRound,
+  claimHost,
   hiderAlive,
+  isGhost,
   isHunter,
+  isParticipant,
   remaining,
   reconcileRoomPlayers,
   roleOf,
   tickRoom,
   processFire,
 } from "@/lib/round";
-import { snapsFrom, type Session } from "@/lib/session";
+import { hudSignature, snapsFrom, type Session } from "@/lib/session";
 import { resetSoloBots, tickSoloBots } from "@/lib/ai";
-import type { PaintBlob, PlayerSnap, Pose, RoomState } from "@/lib/types";
+import type { PaintBlob, PlayerSnap, Pose } from "@/lib/types";
 import { POSES } from "@/lib/types";
 import { AccessibleModal } from "./AccessibleModal";
+import { Lobby } from "./game/Lobby";
+import { ResultPanel, RevealPanel } from "./game/ResultPanel";
+import { RoomSocialPanel } from "./game/RoomSocialPanel";
+import { ScoreTab } from "./game/ScoreTab";
+import { useRoomDirectorySync } from "./game/useRoomDirectorySync";
 
 type Tool = "brush" | "dropper" | "fill";
 
@@ -80,11 +85,6 @@ const KEY_BY_CODE: Record<string, string> = {
   Digit7: "7",
   Digit8: "8",
 };
-
-const CHAT_TIME_FORMAT = new Intl.DateTimeFormat("ko-KR", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 function normalizeKey(e: KeyboardEvent) {
   return KEY_BY_CODE[e.code] ?? e.key.toLowerCase();
@@ -209,6 +209,7 @@ export function GameView({
     let seenRound = session.getRoom().round;
     let bakedId = startMap.id;
     const hostTauntSeq = new Map<string, number>();
+    let wasHost = false;
 
     const typing = (e: Event) => {
       const el = e.target as HTMLElement | null;
@@ -655,12 +656,7 @@ export function GameView({
       world.syncDoors(room.doors ?? {});
       const hunterWait = !!(me && isHunter(room, me.id) && (room.phase === "prepare" || room.phase === "hide"));
       const pose = ((session.me().get("pose") as Pose) || "stand") as Pose;
-      const ghost =
-        !!me &&
-        room.phase === "hunt" &&
-        room.mode === "normal" &&
-        room.caughtIds.includes(me.id) &&
-        !isHunter(room, me.id);
+      const ghost = !!me && isGhost(room, me.id);
       if (watchingRef.current && !mobilePortraitRef.current) world.stepSpectate(dt, frameKeys);
       const localMoving =
         !mobilePortraitRef.current &&
@@ -710,8 +706,16 @@ export function GameView({
 
       if (session.isHost()) {
         const livePlayers = snapsFrom(session);
+        if (!wasHost) {
+          // Host acquisition (initial or migration): adopt every player's current
+          // sequence so already-played taunts are not replayed by the new host.
+          wasHost = true;
+          for (const p of session.players()) hostTauntSeq.set(p.id, Number(p.get("tauntSeq") ?? 0));
+        }
         const reconciled = reconcileRoomPlayers(room, livePlayers);
         let next = tickRoom(reconciled, livePlayers, Date.now());
+        const myName = String(session.me().get("name") ?? "").trim().slice(0, 12);
+        next = claimHost(next, session.myId(), myName, Date.now());
         for (const p of session.players()) {
           const seq = Number(p.get("tauntSeq") ?? 0);
           const prev = hostTauntSeq.get(p.id) ?? 0;
@@ -750,6 +754,8 @@ export function GameView({
           next.taunts.length !== room.taunts.length ||
           next.winner !== room.winner ||
           next.round !== room.round ||
+          next.hostId !== room.hostId ||
+          next.hostName !== room.hostName ||
           next.lastTag?.at !== room.lastTag?.at ||
           (next.feed?.length ?? 0) !== (room.feed?.length ?? 0) ||
           JSON.stringify(next.ammo) !== JSON.stringify(room.ammo) ||
@@ -758,6 +764,8 @@ export function GameView({
           session.setRoom(next);
           if (closeIds.length) world.syncDoors(next.doors ?? {});
         }
+      } else {
+        wasHost = false;
       }
 
       const fpsHunt = !!(me && isHunter(room, me.id) && room.phase === "hunt");
@@ -774,10 +782,29 @@ export function GameView({
     };
     raf = requestAnimationFrame(loop);
 
+    // HUD refresh: only publish new React state when the UI-relevant part changed,
+    // so memoized panels keep their props stable between frames (B8).
+    let lastRoomSig = "";
+    let lastPeopleSig = "";
+    let lastTickBucket = 0;
     const hudIv = window.setInterval(() => {
-      setHud({ ...session.getRoom() });
-      setPeople(snapsFrom(session));
-      setNowTick(Date.now());
+      const room = session.getRoom();
+      const roomSig = JSON.stringify(room);
+      if (roomSig !== lastRoomSig) {
+        lastRoomSig = roomSig;
+        setHud({ ...room });
+      }
+      const snaps = snapsFrom(session);
+      const peopleSig = hudSignature(snaps);
+      if (peopleSig !== lastPeopleSig) {
+        lastPeopleSig = peopleSig;
+        setPeople(snaps);
+      }
+      const bucket = Math.floor(Date.now() / 500);
+      if (bucket !== lastTickBucket) {
+        lastTickBucket = bucket;
+        setNowTick(bucket * 500);
+      }
       setAtDoor(!!worldRef.current?.nearDoor());
     }, 120);
 
@@ -826,6 +853,8 @@ export function GameView({
     const me = people.find((p) => p.id === session.myId());
     drawBodyPreview(ctx, me?.fill ?? WHITE, me?.blobs ?? []);
   }, [people, session, paintOpen]);
+
+  useRoomDirectorySync(session, hud, people.length);
 
   const me = people.find((p) => p.id === session.myId());
   const myRole = me ? roleOf(hud, me.id) : "spectator";
@@ -1194,7 +1223,22 @@ export function GameView({
           </div>
         )}
 
-        {myRole === "spectator" && hud.phase === "hunt" && (
+        {me && hud.phase !== "lobby" && !isParticipant(hud, me.id) && (
+          <div
+            className="pointer-events-none absolute left-1/2 top-36 z-30 -translate-x-1/2 rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="font-display text-2xl text-cyan-100">관전 중</div>
+            <p className="text-sm text-cyan-50/80">
+              라운드가 진행 중입니다. 다음 라운드부터 참가해요.
+              {hud.phase === "hunt" || hud.phase === "hide" || hud.phase === "prepare" ? ` 이번 단계 종료까지 ${timeLeft}초.` : ""}
+            </p>
+            <p className="mt-1 text-[11px] text-cyan-50/60">벽을 지나 맵을 둘러볼 수 있어요.</p>
+          </div>
+        )}
+
+        {me && myRole === "spectator" && hud.phase === "hunt" && isParticipant(hud, me.id) && (
           <div className="pointer-events-none absolute left-1/2 top-36 z-30 -translate-x-1/2 rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm">
             <div className="font-display text-2xl text-cyan-100">유령</div>
             <p className="text-sm text-cyan-50/80">잡혔습니다. 몸은 투명하고, 벽을 지나 맵을 둘러볼 수 있어요.</p>
@@ -1751,510 +1795,4 @@ function cyclePose(session: Session, world: GameWorld, dir: number) {
   const i = POSES.findIndex((p) => p.id === cur);
   const next = POSES[(i + dir + POSES.length) % POSES.length];
   applyPosePick(session, world, next.id);
-}
-
-function Lobby({
-  session,
-  room,
-  people,
-  serverName,
-  roomLabel,
-  onStart,
-}: {
-  session: Session;
-  room: RoomState;
-  people: PlayerSnap[];
-  serverName: string;
-  roomLabel: string;
-  onStart: () => void;
-}) {
-  const host = session.isHost();
-  const me = people.find((p) => p.id === session.myId());
-  const readyCount = people.filter((p) => p.ready).length;
-  const allReady = people.length >= 2 && readyCount === people.length;
-  return (
-    <aside className="z-20 flex max-h-[46dvh] w-full shrink-0 flex-col overflow-y-auto overscroll-contain border-b border-white/10 bg-[#121c17] p-4 md:h-full md:max-h-none md:w-[min(100%,360px)] md:border-b-0 md:border-r">
-      <p className="text-xs text-lime">
-        {serverName} · {roomLabel}
-      </p>
-      <h2 className="text-wrap-balance font-display text-3xl">방 대기실</h2>
-      <p className="mt-1 text-sm text-white/65">맵에서 WASD 또는 가로 화면 조이스틱으로 이동해 보세요. 전원 준비 완료 후에만 호스트가 시작할 수 있습니다.</p>
-      <ul className="mt-4 space-y-2">
-        {people.map((p) => (
-          <li key={p.id} className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
-            <span>
-              {p.name}
-              {p.id === session.myId() ? " (나)" : ""}
-              {host && p.id === session.myId() ? " · 호스트" : ""}
-            </span>
-            <span className={p.ready ? "text-lime" : "text-white/60"}>{p.ready ? "준비" : "대기"}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          className={`flex-1 rounded-full py-2 font-display ${me?.ready ? "bg-lime text-black" : "bg-white/10"}`}
-          onClick={() => session.me().set("ready", !me?.ready, true)}
-        >
-          {me?.ready ? "준비 완료" : "준비"}
-        </button>
-        <button type="button" className="rounded-full bg-white/10 px-4" onClick={() => session.leave()}>
-          나가기
-        </button>
-      </div>
-      <div className="mt-4 rounded-2xl bg-black/25 p-3">
-          <div id="map-label" className="text-xs text-white/60">맵</div>
-          <div className="mt-1 grid grid-cols-1 gap-2" role="group" aria-labelledby="map-label">
-            {MAPS.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                disabled={!host}
-                aria-pressed={room.mapId === m.id}
-                onClick={() => session.patchRoom({ mapId: m.id })}
-                className={`rounded-xl px-3 py-2 text-left ${room.mapId === m.id ? "bg-lime text-black" : "bg-white/8"}`}
-            >
-              <div className="font-display">
-                {m.name} · {m.difficulty}
-              </div>
-              <div className={`text-xs ${room.mapId === m.id ? "text-black/70" : "text-white/65"}`}>{m.blurb}</div>
-            </button>
-          ))}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <label className="rounded-xl bg-white/8 p-2">
-            모드
-            <select
-              name="mode"
-              autoComplete="off"
-              className="mt-1 w-full bg-[#121c17] text-paper"
-              disabled={!host}
-              value={room.mode}
-              onChange={(e) => session.patchRoom({ mode: e.target.value as RoomState["mode"] })}
-            >
-              <option value="normal">기본 숨바꼭질</option>
-              <option value="infection">감염 (커스텀)</option>
-            </select>
-          </label>
-          {session.kind === "practice" && (
-            <label className="rounded-xl bg-white/8 p-2">
-              술래 설정
-              <select
-                name="hunterMode"
-                autoComplete="off"
-                className="mt-1 w-full bg-[#121c17] text-paper"
-                value={room.hunterMode ?? "ai"}
-                onChange={(e) => {
-                  const hunterMode = e.target.value as RoomState["hunterMode"];
-                  session.patchRoom({
-                    hunterMode,
-                    hunterPlayerId: hunterMode === "random" ? undefined : session.myId(),
-                  });
-                }}
-              >
-                <option value="ai">AI 술래 (내가 숨기)</option>
-                <option value="human">내가 술래</option>
-                <option value="random">랜덤</option>
-              </select>
-            </label>
-          )}
-          <label className="rounded-xl bg-white/8 p-2">
-            술래 수
-            <input
-              type="number"
-              name="hunterCount"
-              autoComplete="off"
-              inputMode="numeric"
-              min={1}
-              max={3}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.hunterCount}
-              onChange={(e) => session.patchRoom({ hunterCount: Number(e.target.value) || 1 })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            역할 확인(초)
-            <input
-              type="number"
-              name="prepareTime"
-              autoComplete="off"
-              inputMode="numeric"
-              min={3}
-              max={20}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.prepareTime || 8}
-              onChange={(e) => session.patchRoom({ prepareTime: Math.max(3, Math.min(20, Number(e.target.value) || 8)) })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            위장(초)
-            <input
-              type="number"
-              name="hideTime"
-              autoComplete="off"
-              inputMode="numeric"
-              min={30}
-              max={180}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.hideTime}
-              onChange={(e) => session.patchRoom({ hideTime: Number(e.target.value) || 70 })}
-            />
-          </label>
-          <label className="rounded-xl bg-white/8 p-2">
-            수색(초)
-            <input
-              type="number"
-              name="huntTime"
-              autoComplete="off"
-              inputMode="numeric"
-              min={60}
-              max={300}
-              disabled={!host}
-              className="mt-1 w-full bg-transparent"
-              value={room.huntTime}
-              onChange={(e) => session.patchRoom({ huntTime: Number(e.target.value) || 150 })}
-            />
-          </label>
-          <label className="col-span-2 flex items-center justify-between rounded-xl bg-white/8 p-2">
-            <span>
-              <input
-                type="checkbox"
-                name="ammoEnabled"
-                className="mr-2 accent-lime"
-                disabled={!host}
-                checked={Boolean(room.ammoEnabled)}
-                onChange={(e) => session.patchRoom({ ammoEnabled: e.target.checked })}
-              />
-              탄약 제한 사용
-            </span>
-            <span className="text-[11px] text-white/55">기본 모드는 제한 없음</span>
-          </label>
-          <label className="col-span-2 rounded-xl bg-white/8 p-2">
-            술래 탄 수 (옵션)
-            <input
-              type="number"
-              name="ammoCount"
-              autoComplete="off"
-              inputMode="numeric"
-              min={3}
-              max={12}
-              disabled={!host || !room.ammoEnabled}
-              className="mt-1 w-full bg-transparent"
-              value={room.ammoCount || 6}
-              onChange={(e) =>
-                session.patchRoom({ ammoCount: Math.max(3, Math.min(12, Number(e.target.value) || 6)) })
-              }
-            />
-          </label>
-        </div>
-        {host ? (
-          <>
-            <button
-              type="button"
-              onClick={onStart}
-              aria-describedby="round-start-status"
-              disabled={!allReady}
-              className="mt-4 w-full rounded-full bg-lime py-3 font-display text-lg text-black disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {people.length < 2 ? "2인 이상 필요" : "라운드 시작"}
-            </button>
-            <p id="round-start-status" className="mt-2 text-center text-xs text-white/65">
-              {people.length < 2
-                ? "2인 이상 참가해야 라운드를 시작할 수 있습니다"
-                : allReady
-                  ? "전원 준비됨"
-                  : `준비 ${readyCount}/${people.length} — 모두 준비해야 시작됩니다`}
-            </p>
-            <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mt-4 text-center text-sm text-white/65">
-              호스트 시작 대기 · 준비 {readyCount}/{people.length}
-            </p>
-            <p className="mt-2 text-center text-[11px] text-white/60">
-              점수: 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승 +{SCORE_HUNT_WIN} · Tab 현황
-            </p>
-          </>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function RoomSocialPanel({
-  session,
-  room,
-  people,
-  nowTick,
-  open,
-  onToggle,
-}: {
-  session: Session;
-  room: RoomState;
-  people: PlayerSnap[];
-  nowTick: number;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const messages = (room.chat ?? []).slice(-24);
-  const lastMessageId = messages[messages.length - 1]?.id ?? "";
-  const chatLogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const log = chatLogRef.current;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [open, lastMessageId]);
-
-  const send = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text) return;
-    session.sendChat(text);
-    setDraft("");
-  };
-
-  return (
-    <aside className="room-social-shell pointer-events-auto absolute bottom-24 left-3 right-3 top-auto z-30 max-h-[calc(100dvh-11rem)] w-auto overflow-y-auto overscroll-contain md:bottom-auto md:left-auto md:right-3 md:top-[5.5rem] md:w-[min(calc(100vw-1.5rem),320px)] md:max-h-none md:overflow-visible">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls="room-social-panel"
-        onClick={onToggle}
-        className="ml-auto flex items-center gap-2 rounded-full border border-lime/30 bg-[#101a14]/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
-      >
-        <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_rgba(198,255,74,0.8)]" aria-hidden="true" />
-        <span>접속자 {people.length}/{MAX_PLAYERS}</span>
-        <span className="text-white/60">·</span>
-        <span>{open ? "패널 닫기" : "채팅 열기"}</span>
-      </button>
-
-      {open && (
-        <section
-          id="room-social-panel"
-          aria-labelledby="room-social-title"
-          className="mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#101a14]/95 shadow-2xl backdrop-blur-md"
-        >
-          <div className="border-b border-white/10 px-3 py-2">
-            <div className="flex items-center justify-between">
-              <h2 id="room-social-title" className="text-wrap-balance font-display text-lg">통합 룸</h2>
-              <span className="text-xs text-lime">최대 {MAX_PLAYERS}인</span>
-            </div>
-            <p className="mt-0.5 text-[11px] text-white/60">현재 접속 중인 플레이어</p>
-            <ul className="mt-2 grid grid-cols-2 gap-1.5" aria-label="접속자 목록">
-              {people.map((person) => {
-                const status = presenceStatus(room, person, session.myId(), nowTick, session.kind === "online");
-                return (
-                  <li
-                    key={person.id}
-                    className="flex min-w-0 items-center gap-1.5 rounded-lg bg-white/5 px-2 py-1.5 text-xs"
-                    title={`${person.name} · ${status}`}
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-lime" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate">{person.name}</span>
-                    <span className="shrink-0 text-[10px] text-white/60">{status}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          <div className="px-3 pt-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold tracking-wide text-white/65">방 채팅</h3>
-              <span className="text-[10px] text-white/55">최근 {messages.length}개</span>
-            </div>
-            <div
-              ref={chatLogRef}
-              className="mt-1.5 h-40 overflow-y-auto rounded-xl bg-black/25 p-2"
-              role="log"
-              aria-live="polite"
-              aria-label="방 채팅 메시지"
-            >
-              {messages.length === 0 ? (
-                <p className="grid h-full place-items-center text-xs text-white/55">첫 인사를 남겨보세요.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {messages.map((message) => (
-                    <li key={message.id} className="text-xs leading-snug">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-semibold text-lime">{message.senderName}</span>
-                        <time className="text-[10px] text-white/55" dateTime={new Date(message.at).toISOString()}>
-                          {CHAT_TIME_FORMAT.format(message.at)}
-                        </time>
-                      </div>
-                      <p className="break-words text-white/80">{message.text}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <form className="mt-2 flex gap-1.5 pb-3" onSubmit={send}>
-              <label className="sr-only" htmlFor="room-chat-input">
-                채팅 메시지
-              </label>
-              <input
-                id="room-chat-input"
-                name="message"
-                autoComplete="off"
-                enterKeyHint="send"
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                maxLength={120}
-                placeholder="예: 여기로 와!…"
-                aria-label="채팅 메시지"
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-xs outline-none focus-visible:border-lime/50 focus-visible:ring-1 focus-visible:ring-lime/40"
-              />
-              <button type="submit" className="rounded-lg bg-lime px-3 py-2 text-xs font-semibold text-black">
-                전송
-              </button>
-            </form>
-          </div>
-        </section>
-      )}
-    </aside>
-  );
-}
-
-function presenceStatus(room: RoomState, person: PlayerSnap, myId: string, nowTick: number, checkConnection: boolean) {
-  if (person.id === myId) return "나";
-  if (checkConnection && person.presenceAt && nowTick - person.presenceAt > 4500) return "응답 없음";
-  if (room.phase === "lobby") return person.ready ? "준비" : "대기";
-  if (room.phase === "reveal") return "공개됨";
-  if (room.phase === "result") return "결과";
-  if (room.mode === "normal" && room.caughtIds.includes(person.id)) return "탈락";
-  return "플레이 중";
-}
-
-function ScoreTab({
-  room,
-  people,
-  myId,
-}: {
-  room: RoomState;
-  people: PlayerSnap[];
-  myId: string;
-}) {
-  const survivors = people.filter((p) => hiderAlive(room, p.id));
-  const dead = people.filter((p) => room.caughtIds.includes(p.id));
-  const ranked = [...people].sort((a, b) => (room.scores[b.id] ?? 0) - (room.scores[a.id] ?? 0));
-  const row = (p: PlayerSnap) => (
-    <li
-      key={p.id}
-      className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm ${
-        p.id === myId ? "bg-lime/15" : "bg-white/5"
-      }`}
-    >
-      <span className="truncate">
-        {p.name}
-        {p.id === myId ? " (나)" : ""}
-        {room.phase !== "lobby" && isHunter(room, p.id) ? " · 술래" : ""}
-      </span>
-      <span className="ml-2 shrink-0 tabular-nums text-lime">{room.scores[p.id] ?? 0}</span>
-    </li>
-  );
-  return (
-    <section
-      className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-black/55 p-4"
-      aria-label="게임 현황"
-      aria-live="polite"
-    >
-      <div className="w-full max-w-4xl rounded-3xl border border-white/10 bg-[#121c17]/95 p-5 shadow-2xl">
-        <div className="flex items-end justify-between">
-          <h2 className="text-wrap-balance font-display text-3xl">현황</h2>
-          <p className="text-xs text-white/60">Tab을 떼면 닫힙니다</p>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <section className="rounded-2xl bg-black/30 p-3">
-            <h4 className="text-xs tracking-wide text-white/55">참여자 {ranked.length}</h4>
-            <ul className="mt-2 space-y-1">{ranked.map(row)}</ul>
-          </section>
-          <section className="rounded-2xl bg-black/30 p-3">
-            <h4 className="text-xs tracking-wide text-lime/80">생존자 {survivors.length}</h4>
-            <ul className="mt-2 space-y-1">
-              {survivors.length ? survivors.map(row) : <li className="text-sm text-white/60">없음</li>}
-            </ul>
-          </section>
-          <section className="rounded-2xl bg-black/30 p-3">
-            <h4 className="text-xs tracking-wide text-pink/80">죽은자 {dead.length}</h4>
-            <ul className="mt-2 space-y-1">
-              {dead.length ? dead.map(row) : <li className="text-sm text-white/60">없음</li>}
-            </ul>
-          </section>
-        </div>
-        <p className="mt-4 text-center text-xs text-white/65">
-          점수 기준 · 발견 +{SCORE_TAG} · 카멜레온 생존 승리 +{SCORE_SURVIVE} · 술래 팀 승리 +{SCORE_HUNT_WIN}
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function ResultPanel({
-  room,
-  people,
-  host,
-  onNext,
-}: {
-  room: RoomState;
-  people: PlayerSnap[];
-  host: boolean;
-  onNext: () => void;
-}) {
-  const ranked = [...people].sort((a, b) => (room.scores[b.id] ?? 0) - (room.scores[a.id] ?? 0));
-  return (
-    <AccessibleModal
-      titleId="result-title"
-      panelClassName="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl bg-[#121c17] p-6 text-center shadow-2xl"
-    >
-        <p className="text-lime">라운드 {room.round}</p>
-        <h2 id="result-title" className="text-wrap-balance font-display text-4xl">{room.winner === "hiders" ? "카멜레온 승!" : "술래 승!"}</h2>
-        <p className="mt-2 text-xs text-white/65">
-          발견 +{SCORE_TAG} · 생존 승리 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN}
-        </p>
-        <ul className="mt-4 space-y-1 text-left">
-          {ranked.map((p, i) => (
-            <li key={p.id} className="flex justify-between rounded-lg bg-white/5 px-3 py-1">
-              <span>
-                {i + 1}. {p.name}
-              </span>
-              <span className="text-lime">{room.scores[p.id] ?? 0}</span>
-            </li>
-          ))}
-        </ul>
-        {host && (
-          <button type="button" onClick={onNext} className="mt-5 w-full rounded-full bg-lime py-2 font-display text-black">
-            다음 라운드
-          </button>
-        )}
-    </AccessibleModal>
-  );
-}
-
-function RevealPanel({ room, timeLeft }: { room: RoomState; timeLeft: number }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center bg-black/25 p-4">
-      <div className="w-full max-w-md rounded-3xl border border-lime/25 bg-[#121c17]/90 p-6 text-center shadow-2xl backdrop-blur-sm">
-        <p className="text-sm tracking-[0.18em] text-lime">마지막 {REVEAL_TIME}초</p>
-        <h2 className="text-wrap-balance mt-2 font-display text-4xl">검증 라운드</h2>
-        <p className="mt-3 text-sm text-white/75">
-          모든 카멜레온의 위치가 공개됩니다.
-          <br />
-          숨은 장소를 감상하고 다음 라운드를 준비하세요.
-        </p>
-        <div className="mt-5 font-display text-6xl tabular-nums text-lime">{timeLeft}</div>
-        <p className="mt-2 text-xs text-white/60">
-          {room.winner === "hiders" ? "카멜레온 팀 승리" : "술래 팀 승리"} · Tab으로 현황 보기
-        </p>
-      </div>
-    </div>
-  );
 }

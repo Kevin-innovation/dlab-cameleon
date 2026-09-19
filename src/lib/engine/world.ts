@@ -4,7 +4,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GRAVITY, JUMP_SPEED, LOOK_SENS, PAINT_SPEED, PLAYER_SPEED, RUN_SPEED, SNEAK_SPEED, WHITE } from "../config";
 import { BOX_COLLIDE_OUTSET, doorColliders, getMap, mapColliders } from "../maps";
 import type { BodyPart, BoxDef, Collider, DoorDef, GameMap, PaintBlob, PlayerSnap, Pose, PropKind, RoomState } from "../types";
-import { hiderAlive, isHunter } from "../round";
+import { hiderAlive, isGhost, isHunter } from "../round";
 import {
   blocked,
   edgeMargin,
@@ -964,11 +964,7 @@ export class GameWorld {
         this.players.set(p.id, rig);
         this.scene.add(rig.group);
       }
-      const ghost =
-        room.phase === "hunt" &&
-        room.mode === "normal" &&
-        room.caughtIds.includes(p.id) &&
-        !isHunter(room, p.id);
+      const ghost = isGhost(room, p.id);
       const show = canSee(room, self, p) && !(opts.hideLocal && p.id === myId);
       rig.group.visible = show;
       applyPaint(rig, p.fill || WHITE, p.blobs || []);
@@ -1486,6 +1482,7 @@ function canSee(room: RoomState, self: PlayerSnap | undefined, other: PlayerSnap
   if (!self) return true;
   if (other.id === self.id) return true;
   if (room.phase === "lobby" || room.phase === "reveal" || room.phase === "result") return true;
+  if (isGhost(room, other.id)) return true;
   if (isHunter(room, self.id) || !hiderAlive(room, self.id)) return true;
   if (room.phase === "prepare" || room.phase === "hide") return !isHunter(room, other.id);
   if (isHunter(room, other.id)) return true;

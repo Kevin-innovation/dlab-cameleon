@@ -117,7 +117,26 @@ export type GameMap = {
   hunterSpawns: { x: number; z: number }[];
 };
 
+export type SystemMessage = {
+  id: string;
+  kind: "host" | "join" | "leave" | "kick" | "info";
+  text: string;
+  at: number;
+};
+
 export type RoomState = {
+  /** Room identity and lobby metadata (Phase 0 online-rooms plan §2.4). */
+  channelId: string;
+  roomName: string;
+  maxPlayers: number;
+  isPrivate: boolean;
+  hostId: string;
+  hostName: string;
+  directoryToken: string;
+  createdAt: number;
+  /** Ids locked in by beginRound; anyone else is a spectator until the next lobby. */
+  participantIds: string[];
+  system: SystemMessage[];
   phase: Phase;
   mode: Mode;
   mapId: string;

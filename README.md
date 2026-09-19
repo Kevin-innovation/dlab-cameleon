@@ -1,5 +1,7 @@
 # 카멜론
 
+> 온라인 방 구조(채널 1개 + 방 여러 개, 방장·강퇴·관전 입장)를 [온라인 방 시스템 개편 계획서](docs/online-rooms-plan.md)에 따라 개편 중입니다. 아래 "한국 서버 통합 룸 1개" 설명은 개편 전 기준입니다.
+>
 > 현재 게임 규칙을 실제 MECCHA CHAMELEON 기준으로 재정렬하는 작업을 진행 중입니다. 원작 고증과 웹판 확장 기능의 구분은 [Phase 0 기준 문서](docs/meccha-reference.md)를 따릅니다. 현재 README의 일부 기능 설명은 Phase 1 이전의 기준 구현을 포함할 수 있습니다.
 
 메챠 카멜레온의 핵심 플레이를 브라우저로 옮긴 **Three.js 3D** IO 숨바꼭질입니다. 닉네임을 정하면 한국 서버 통합 룸에 바로 입장하고, 최대 8명이 한 공간에서 라운드마다 술래와 카멜레온으로 나뉩니다.
@@ -41,6 +43,13 @@ npm run dev
 npm run audit:gameplay
 ```
 
+순수 로직(라운드 규칙, 방 상태 검증)은 Vitest 단위 테스트로 검증합니다.
+
+```bash
+npm test          # 1회 실행
+npm run test:watch
+```
+
 현재 감사는 맵 크기, 8인 스폰, 스폰 충돌, 주요 은신처 수, 실제 소품 수, 회전 충돌, 공중 오브젝트를 검사합니다. 경고는 Phase 4 맵 리빌드의 작업 목록이며, 오류가 있으면 통과하지 않습니다.
 
 AI 연습전 대기실에서는 **술래 설정**을 `AI 술래`, `내가 술래`, `랜덤` 중에서 고를 수 있습니다.
@@ -64,4 +73,6 @@ AI 연습전 대기실에서는 **술래 설정**을 `AI 술래`, `내가 술래
 - `src/lib/round.ts` — 역할 배정, 태그, 승패
 - `src/lib/session.ts` — Playroom 세션, 접속자 동기화, 호스트 채팅 RPC, 로컬 연습
 - `src/lib/gameplay-audit.ts` — 게임성 기준선과 맵·방 상태 감사
+- `src/lib/__tests__/` — Vitest 단위 테스트 (round 규칙, 방 상태 검증)
 - `docs/gameplay-contract.md` — 전체 리빌드용 게임 규칙·맵 KPI·완료 기준
+- `docs/online-rooms-plan.md` — 온라인 방 시스템 개편 페이즈·태스크 목록

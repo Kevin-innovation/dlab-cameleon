@@ -7,10 +7,49 @@ import {
   setState,
   getState,
   getParticipants,
+  getRoomCode,
+  onDisconnect,
 } from "playroomkit";
-import { BOT_NAMES, MAX_PLAYERS, SHOT_COOLDOWN, WHITE } from "./config";
+import {
+  BOT_NAMES,
+  DEFAULT_CHANNEL_ID,
+  LEAVE_REASON_KEY,
+  MAX_PLAYERS,
+  RECONNECT_GRACE_MS,
+  ROOM_NAME_MAX,
+  SHOT_COOLDOWN,
+  SYSTEM_MESSAGE_MAX,
+  WHITE,
+} from "./config";
+import { uniqueNickname } from "./nickname";
+import { closeRoom, generateDirectoryToken } from "./rooms/client";
 import { emptyRoom, patchRoom, sanitizeRoom, type RoomConfigPatch } from "./round";
-import type { ChatMessage, PaintBlob, PlayerSnap, Pose, Role, RoomState } from "./types";
+import type { PlayerState } from "playroomkit";
+import type { ChatMessage, PaintBlob, PlayerSnap, Pose, Role, RoomState, SystemMessage } from "./types";
+
+export type LeaveReason = "kicked" | "lost";
+export type LeaveRecord = { reason: LeaveReason; code: string; at: number };
+
+export function readLeaveRecord(): LeaveRecord | null {
+  try {
+    const raw = window.sessionStorage.getItem(LEAVE_REASON_KEY);
+    if (!raw) return null;
+    window.sessionStorage.removeItem(LEAVE_REASON_KEY);
+    const parsed = JSON.parse(raw) as Partial<LeaveRecord>;
+    if ((parsed.reason !== "kicked" && parsed.reason !== "lost") || typeof parsed.code !== "string") return null;
+    return { reason: parsed.reason, code: parsed.code, at: Number(parsed.at) || 0 };
+  } catch {
+    return null;
+  }
+}
+
+function writeLeaveRecord(record: LeaveRecord) {
+  try {
+    window.sessionStorage.setItem(LEAVE_REASON_KEY, JSON.stringify(record));
+  } catch {
+    // Storage can be blocked; the home screen then shows no reason, which is acceptable.
+  }
+}
 
 export type SessionPlayer = {
   id: string;
@@ -18,8 +57,17 @@ export type SessionPlayer = {
   set: (key: string, value: unknown, reliable?: boolean) => void;
 };
 
+export type RoomMeta = {
+  roomName: string;
+  maxPlayers: number;
+  isPrivate: boolean;
+  channelId: string;
+};
+
 export type Session = {
   kind: "online" | "practice";
+  /** Playroom room code; empty for practice. */
+  roomCode: string;
   myId: () => string;
   isHost: () => boolean;
   getRoom: () => RoomState;
@@ -32,6 +80,8 @@ export type Session = {
   callDoor: (id: string) => void;
   onDoor: (cb: (id: string, actorId?: string) => void) => () => void;
   sendChat: (text: string) => void;
+  /** Host only. Removes the player from the room; they land on the home screen with a notice. */
+  kick: (playerId: string) => void;
   leave: () => void;
 };
 
@@ -59,7 +109,24 @@ export function snapsFrom(session: Session): PlayerSnap[] {
   return session.players().map(readSnap);
 }
 
+/** Cheap fingerprint of the fields the HUD renders; positions and paint strokes are excluded. */
+export function hudSignature(snaps: PlayerSnap[]): string {
+  return snaps
+    .map(
+      (p) =>
+        `${p.id}|${p.name}|${p.ready ? 1 : 0}|${p.pose}|${p.fill}|${p.camoScore ?? 0}|${p.presenceAt ?? 0}|${p.blobs.length}`,
+    )
+    .join(";");
+}
+
 const joined = new Map<string, { id: string; get: SessionPlayer["get"]; set: SessionPlayer["set"] }>();
+
+/** Playroom's typings say Record<id, PlayerState>, but the runtime hands back an array; key by `.id` ourselves. */
+function participantsById(): Map<string, PlayerState> {
+  const map = new Map<string, PlayerState>();
+  for (const player of Object.values(getParticipants())) map.set(player.id, player);
+  return map;
+}
 
 function registerPlayer(player: {
   id: string;
@@ -76,13 +143,18 @@ function registerPlayer(player: {
 export async function connectOnline(opts: {
   roomCode: string;
   nickname: string;
+  /** Room capacity to request from Playroom; the creator's value is what the room enforces. */
+  maxPlayers?: number;
+  /** Present when this client is creating the room; also used as the fallback if we end up host of an empty room. */
+  meta?: Partial<RoomMeta>;
 }): Promise<Session> {
   joined.clear();
+  const maxPlayers = Math.max(2, Math.min(MAX_PLAYERS, opts.maxPlayers ?? MAX_PLAYERS));
   await insertCoin({
     skipLobby: true,
     roomCode: opts.roomCode,
-    maxPlayersPerRoom: MAX_PLAYERS,
-    reconnectGracePeriod: 4000,
+    maxPlayersPerRoom: maxPlayers,
+    reconnectGracePeriod: RECONNECT_GRACE_MS,
     gameId: process.env.NEXT_PUBLIC_PLAYROOM_GAME_ID,
     defaultStates: { room: emptyRoom() },
     defaultPlayerStates: {
@@ -108,7 +180,24 @@ export async function connectOnline(opts: {
 
   const me = myPlayer();
   registerPlayer(me);
-  me.setState("name", opts.nickname, true);
+  const others = () =>
+    Object.values(getParticipants())
+      .filter((p) => p.id !== me.id)
+      .map((p) => ({ id: p.id, name: String(p.getState("name") ?? "") }))
+      .filter((p) => p.name);
+  me.setState("name", uniqueNickname(opts.nickname, others().map((p) => p.name)), true);
+  // Remote player states can arrive a moment after insertCoin resolves. Re-check once;
+  // on a simultaneous collision only the larger id renames so the two never ping-pong.
+  window.setTimeout(() => {
+    try {
+      const current = String(me.getState("name") ?? opts.nickname);
+      const clash = others().find((p) => p.name.trim().toLowerCase() === current.trim().toLowerCase());
+      if (!clash || clash.id > me.id) return;
+      me.setState("name", uniqueNickname(opts.nickname, others().map((p) => p.name)), true);
+    } catch {
+      // Participant snapshot can be unavailable during reconnect; the initial name stands.
+    }
+  }, 1500);
   me.setState("ready", false, true);
   me.setState("fill", WHITE, true);
   me.setState("blobs", [], true);
@@ -120,8 +209,26 @@ export async function connectOnline(opts: {
   me.setState("z", 3.4, true);
   me.setState("yaw", 0, true);
 
-  if (isHost() && !getState("room")) {
-    setState("room", emptyRoom(), true);
+  // The host of a fresh room (creator, or first back after everyone left) seeds the room metadata.
+  // Playroom clears state when a room empties, so a stale directory entry can lead a joiner here too.
+  const current = (getState("room") as RoomState | undefined) ?? emptyRoom();
+  if (isHost() && !current.directoryToken) {
+    const nickname = String(me.getState("name") ?? opts.nickname);
+    const roomName = (opts.meta?.roomName ?? "").trim().slice(0, ROOM_NAME_MAX) || `${nickname}의 방`;
+    setState(
+      "room",
+      sanitizeRoom({
+        ...emptyRoom(),
+        ...current,
+        roomName,
+        maxPlayers,
+        isPrivate: Boolean(opts.meta?.isPrivate),
+        channelId: opts.meta?.channelId ?? DEFAULT_CHANNEL_ID,
+        directoryToken: generateDirectoryToken(),
+        createdAt: Date.now(),
+      }),
+      true,
+    );
   }
 
   const shotListeners = new Set<(hunterId: string, targetId: string) => void>();
@@ -169,8 +276,46 @@ export async function connectOnline(opts: {
     setState("room", sanitizeRoom({ ...room, chat: [...(room.chat ?? []), message].slice(-60) }), true);
   });
 
+  const roomCode = getRoomCode() ?? opts.roomCode;
+  let leavingOnPurpose = false;
+
+  // Playroom reports the final disconnect (after its own retries) with a reason string.
+  onDisconnect((event) => {
+    if (leavingOnPurpose) return;
+    const reason = String((event as { reason?: unknown }).reason ?? "");
+    if (reason === "PLAYER_LEAVED") return;
+    writeLeaveRecord({ reason: reason === "PLAYER_KICKED" ? "kicked" : "lost", code: roomCode, at: Date.now() });
+    window.location.assign(window.location.origin + "/");
+  });
+
+  const leaveKicked = () => {
+    leavingOnPurpose = true;
+    writeLeaveRecord({ reason: "kicked", code: roomCode, at: Date.now() });
+    try {
+      myPlayer().leaveRoom();
+    } catch {
+      /* ignore */
+    }
+    window.location.assign(window.location.origin + "/");
+  };
+  // Playroom's player.kick() only broadcasts; the kicked client itself has to act on it.
+  RPC.register("kick", async (payload, sender) => {
+    const targetId = String(payload?.targetId ?? "");
+    const room = (getState("room") as RoomState | undefined) ?? emptyRoom();
+    if (targetId !== myPlayer().id) return;
+    if (sender.id !== room.hostId) return;
+    leaveKicked();
+  });
+
+  const appendSystem = (message: SystemMessage) => {
+    if (!isHost()) return;
+    const room = sanitizeRoom((getState("room") as RoomState) || emptyRoom());
+    setState("room", sanitizeRoom({ ...room, system: [...room.system, message].slice(-SYSTEM_MESSAGE_MAX) }), true);
+  };
+
   return {
     kind: "online",
+    roomCode,
     myId: () => myPlayer().id,
     isHost: () => isHost(),
     getRoom: () => (getState("room") as RoomState) || emptyRoom(),
@@ -185,12 +330,13 @@ export async function connectOnline(opts: {
     },
     players: () => {
       try {
-        const participants = getParticipants();
-        const activeIds = new Set(Object.keys(participants));
+        const participants = participantsById();
         for (const id of joined.keys()) {
-          if (!activeIds.has(id)) joined.delete(id);
+          if (!participants.has(id)) joined.delete(id);
         }
-        for (const player of Object.values(participants)) registerPlayer(player);
+        for (const player of participants.values()) {
+          if (!joined.has(player.id)) registerPlayer(player);
+        }
       } catch {
         // Playroom can briefly have no participant snapshot during reconnect.
       }
@@ -222,13 +368,44 @@ export async function connectOnline(opts: {
     sendChat: (text) => {
       void RPC.call("chat", { text: text.slice(0, 120) }, RPC.Mode.HOST);
     },
+    kick: (playerId) => {
+      if (!isHost() || playerId === myPlayer().id) return;
+      const target = participantsById().get(playerId);
+      if (!target) return;
+      const name = String(target.getState("name") ?? "손님").trim().slice(0, 12) || "손님";
+      appendSystem({
+        id: `sys-kick-${Date.now()}-${playerId.slice(0, 8)}`,
+        kind: "kick",
+        text: `${name}님이 강퇴되었습니다`,
+        at: Date.now(),
+      });
+      void RPC.call("kick", { targetId: playerId }, RPC.Mode.ALL);
+      void Promise.resolve(target.kick()).catch(() => {
+        // Best effort only; the RPC above is what actually removes the player.
+      });
+    },
     leave: () => {
-      try {
-        myPlayer().leaveRoom();
-      } catch {
-        /* ignore */
+      leavingOnPurpose = true;
+      const room = (getState("room") as RoomState | undefined) ?? emptyRoom();
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        try {
+          myPlayer().leaveRoom();
+        } catch {
+          /* ignore */
+        }
+        window.location.assign(window.location.origin + "/");
+      };
+      // The host closes the listing on the way out. If others remain, the next host's first
+      // heartbeat (triggered by the host-name change) re-registers it within seconds.
+      if (isHost() && room.directoryToken) {
+        void closeRoom(roomCode, room.directoryToken).finally(finish);
+        window.setTimeout(finish, 1500);
+      } else {
+        finish();
       }
-      window.location.assign(window.location.origin + "/");
     },
   };
 }
@@ -274,6 +451,7 @@ export function createPractice(nickname: string): Session {
   const lastShotAt = new Map<string, number>();
   return {
     kind: "practice",
+    roomCode: "",
     myId: () => id,
     isHost: () => true,
     getRoom: () => room,
@@ -306,6 +484,7 @@ export function createPractice(nickname: string): Session {
       doorListeners.add(cb);
       return () => doorListeners.delete(cb);
     },
+    kick: () => {},
     sendChat: (text) => {
       const clean = text.trim().slice(0, 120);
       if (!clean) return;

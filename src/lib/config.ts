@@ -1,8 +1,17 @@
 export const APP_NAME = "카멜론";
 export const MAX_PLAYERS = 8;
-export const ROOMS_PER_SERVER = 1;
-export const DEFAULT_SERVER_ID = "kr1";
-export const DEFAULT_ROOM_NUMBER = 1;
+export const MIN_PLAYERS = 2;
+export const ROOM_NAME_MAX = 20;
+/** Heartbeat cadence and TTL are tuned to stay inside the Upstash free tier (500K commands/month). */
+export const DIRECTORY_HEARTBEAT_MS = 10000;
+export const DIRECTORY_TTL_S = 25;
+export const DIRECTORY_POLL_MS = 5000;
+export const RECONNECT_GRACE_MS = 20000;
+export const SYSTEM_MESSAGE_MAX = 30;
+export const DEFAULT_CHANNEL_ID = "kr1";
+export const CHANNELS = [{ id: DEFAULT_CHANNEL_ID, name: "한국 서버", city: "서울" }] as const;
+export type ChannelId = (typeof CHANNELS)[number]["id"];
+
 export const PLAYER_SPEED = 5.6;
 export const RUN_SPEED = 9.4;
 export const SNEAK_SPEED = 3.2;
@@ -27,19 +36,8 @@ export const SCORE_TAG = 80;
 export const SCORE_SURVIVE = 150;
 export const SCORE_HUNT_WIN = 40;
 
-export const SERVERS = [
-  { id: DEFAULT_SERVER_ID, name: "한국 서버", city: "서울", ping: "9ms", flavor: "통합 플레이 룸" },
-] as const;
-
-export type ServerId = (typeof SERVERS)[number]["id"];
-
-export function makeRoomCode(serverId: string, roomIndex: number) {
-  const raw = `DLABCM${serverId}${roomIndex}`.toUpperCase();
-  return raw.replace(/[^A-Z0-9]/g, "").slice(0, 16);
-}
-
-export const DEFAULT_ROOM_CODE = makeRoomCode(DEFAULT_SERVER_ID, DEFAULT_ROOM_NUMBER);
 
 export const NICK_KEY = "camelon-nick";
+export const LEAVE_REASON_KEY = "camelon-leave";
 
 export const BOT_NAMES = ["미호", "준혁", "하늘", "소윤", "태민", "리안", "고은"];

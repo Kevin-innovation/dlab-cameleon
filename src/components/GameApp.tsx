@@ -2,18 +2,32 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { APP_NAME, DEFAULT_ROOM_CODE, MAX_PLAYERS, NICK_KEY, SERVERS } from "@/lib/config";
+import { APP_NAME, CHANNELS, DEFAULT_CHANNEL_ID, MAX_PLAYERS, NICK_KEY } from "@/lib/config";
 import { MAPS } from "@/lib/maps";
 import { requestMobileLandscape } from "@/lib/mobile";
-import { connectOnline, createPractice, type Session } from "@/lib/session";
+import { generateRoomCode, parseRoomCode } from "@/lib/rooms/code";
+import { fetchRoom } from "@/lib/rooms/client";
+import { hasOpenSlot, type RoomListing } from "@/lib/rooms/listing";
+import { connectOnline, createPractice, readLeaveRecord, type RoomMeta, type Session } from "@/lib/session";
 import { AccessibleModal } from "./AccessibleModal";
 import { GameView } from "./GameView";
+import { CreateRoomModal, type CreateRoomInput } from "./screens/CreateRoomModal";
+import { Home } from "./screens/Home";
+import { JoinByCodeModal } from "./screens/JoinByCodeModal";
+import { RoomBrowser } from "./screens/RoomBrowser";
+import { useRoomList } from "./screens/useRoomList";
 
 type Screen =
   | { t: "home" }
-  | { t: "connecting" }
+  | { t: "rooms" }
+  | { t: "connecting"; label: string }
   | { t: "play" }
   | { t: "practice" };
+
+type Modal = "none" | "create" | "code";
+
+const CHANNEL = CHANNELS[0];
+const CONNECT_TIMEOUT_MS = 15000;
 
 function readStoredNickname() {
   if (typeof window === "undefined") return "";
@@ -42,9 +56,15 @@ function storeNickname(name: string) {
   }
 }
 
-function hasRoomHash() {
-  if (typeof window === "undefined") return false;
-  return /^#r=R?[A-Za-z0-9_-]{4,32}$/.test(window.location.hash);
+/** Playroom keeps `#r=CODE` in the URL while in a room; a reload lands here with it. */
+function roomCodeFromHash() {
+  if (typeof window === "undefined") return null;
+  return parseRoomCode(window.location.hash);
+}
+
+function clearRoomHash() {
+  if (typeof window === "undefined") return;
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
@@ -63,87 +83,180 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   });
 }
 
+function describeConnectError(error: unknown) {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (msg.includes("ROOM_LIMIT") || msg.includes("full")) return `방이 가득 찼습니다 (최대 ${MAX_PLAYERS}인). 다른 방을 골라 주세요.`;
+  if (msg === "CONNECT_TIMEOUT") return "서버 응답이 늦습니다. 네트워크를 확인하고 다시 입장해 주세요.";
+  if (/SecurityError|QuotaExceeded|storage/i.test(msg)) return "브라우저 저장소 접근이 제한되어 있습니다. Safari 설정을 확인한 뒤 다시 시도해 주세요.";
+  return "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+function validNickname(raw: string) {
+  const name = raw.trim().slice(0, 12);
+  return name.length >= 2 ? name : null;
+}
+
+type ConnectTarget = { roomCode: string; maxPlayers: number; meta?: Partial<RoomMeta>; label: string };
+
+/** A kick or a lost connection redirects here with a record; read it once at mount. */
+function readLeaveNotice(): { notice: string; rejoinCode: string } {
+  if (typeof window === "undefined") return { notice: "", rejoinCode: "" };
+  const left = readLeaveRecord();
+  if (!left) return { notice: "", rejoinCode: "" };
+  clearRoomHash();
+  if (left.reason === "kicked") return { notice: "방장이 당신을 방에서 내보냈습니다.", rejoinCode: "" };
+  return { notice: "방과의 연결이 끊겼습니다. 네트워크를 확인한 뒤 다시 입장할 수 있습니다.", rejoinCode: left.code };
+}
+
 export default function GameApp() {
   const [nick, setNick] = useState(readStoredNickname);
   const [screen, setScreen] = useState<Screen>({ t: "home" });
+  const [modal, setModal] = useState<Modal>("none");
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState("");
+  const [leaveNotice] = useState(readLeaveNotice);
+  const [notice, setNotice] = useState(leaveNotice.notice);
+  const [rejoinCode, setRejoinCode] = useState(leaveNotice.rejoinCode);
+  const [busy, setBusy] = useState(false);
   const [howto, setHowto] = useState(false);
   const reconnectAttempted = useRef(false);
+  const roomList = useRoomList(DEFAULT_CHANNEL_ID, screen.t === "rooms");
 
-  const connectToRoom = useCallback(async (name: string) => {
-    setError("");
-    setScreen({ t: "connecting" });
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      setError("인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
-      setScreen({ t: "home" });
-      return;
-    }
-    void requestMobileLandscape().catch(() => false);
-    try {
-      const s = await withTimeout(
-        connectOnline({
-          roomCode: DEFAULT_ROOM_CODE,
-          nickname: name,
-        }),
-        15000,
-      );
-      setSession(s);
-      setScreen({ t: "play" });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(
-        msg.includes("ROOM_LIMIT") || msg.includes("full")
-          ? `통합 룸이 가득 찼습니다 (최대 ${MAX_PLAYERS}인). 잠시 후 다시 시도해 주세요.`
-          : msg === "CONNECT_TIMEOUT"
-            ? "서버 응답이 늦습니다. 네트워크를 확인하고 다시 입장해 주세요."
-            : /SecurityError|QuotaExceeded|storage/i.test(msg)
-              ? "브라우저 저장소 접근이 제한되어 있습니다. Safari 설정을 확인한 뒤 다시 시도해 주세요."
-          : "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-      );
-      setScreen({ t: "home" });
-    }
-  }, []);
+  const connect = useCallback(
+    async (name: string, target: ConnectTarget) => {
+      setError("");
+      setBusy(true);
+      setScreen({ t: "connecting", label: target.label });
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setError("인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
+        setScreen({ t: "rooms" });
+        setBusy(false);
+        return;
+      }
+      void requestMobileLandscape().catch(() => false);
+      try {
+        const s = await withTimeout(
+          connectOnline({ roomCode: target.roomCode, nickname: name, maxPlayers: target.maxPlayers, meta: target.meta }),
+          CONNECT_TIMEOUT_MS,
+        );
+        setSession(s);
+        setModal("none");
+        setScreen({ t: "play" });
+      } catch (e) {
+        setError(describeConnectError(e));
+        clearRoomHash();
+        setScreen({ t: "rooms" });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
 
+  // Reload inside a room: rejoin the same code within Playroom's reconnect grace period.
+  // A kick or a lost connection lands here too; then we explain instead of auto-rejoining.
   useEffect(() => {
-    if (reconnectAttempted.current || !hasRoomHash()) return;
-    const saved = readStoredNickname().trim().slice(0, 12);
-    if (saved.length < 2) return;
+    if (reconnectAttempted.current) return;
     reconnectAttempted.current = true;
-    window.setTimeout(() => void connectToRoom(saved), 0);
-  }, [connectToRoom]);
-
-  const joinGame = () => {
-    const name = nick.trim().slice(0, 12);
-    if (name.length < 2) {
-      setError("닉네임은 2~12자로 입력해 주세요.");
+    if (leaveNotice.notice) return;
+    const code = roomCodeFromHash();
+    if (!code) return;
+    const saved = validNickname(readStoredNickname());
+    if (!saved) {
+      clearRoomHash();
       return;
+    }
+    window.setTimeout(() => void connect(saved, { roomCode: code, maxPlayers: MAX_PLAYERS, label: "이전 방으로 돌아가는 중" }), 0);
+  }, [connect, leaveNotice.notice]);
+
+  const requireNick = () => {
+    const name = validNickname(nick);
+    if (!name) {
+      setError("닉네임은 2~12자로 입력해 주세요.");
+      return null;
     }
     storeNickname(name);
     setNick(name);
-    void connectToRoom(name);
+    setError("");
+    return name;
+  };
+
+  const enterRooms = () => {
+    if (!requireNick()) return;
+    setNotice("");
+    setRejoinCode("");
+    setScreen({ t: "rooms" });
+  };
+
+  const rejoin = () => {
+    const name = requireNick();
+    if (!name || !rejoinCode) return;
+    const code = rejoinCode;
+    setNotice("");
+    setRejoinCode("");
+    void connect(name, { roomCode: code, maxPlayers: MAX_PLAYERS, label: "이전 방으로 돌아가는 중" });
   };
 
   const startPractice = () => {
-    const name = nick.trim().slice(0, 12);
-    if (name.length < 2) {
-      setError("닉네임은 2~12자로 입력해 주세요.");
-      return;
-    }
-    setError("");
-    storeNickname(name);
-    setNick(name);
+    const name = requireNick();
+    if (!name) return;
     void requestMobileLandscape().catch(() => false);
     setSession(createPractice(name));
     setScreen({ t: "practice" });
+  };
+
+  const joinListing = (room: RoomListing) => {
+    const name = requireNick();
+    if (!name) return;
+    void connect(name, { roomCode: room.code, maxPlayers: room.maxPlayers, label: `${room.name}에 입장하는 중` });
+  };
+
+  const createRoom = (input: CreateRoomInput) => {
+    const name = requireNick();
+    if (!name) return;
+    const meta: RoomMeta = { ...input, channelId: DEFAULT_CHANNEL_ID };
+    void connect(name, { roomCode: generateRoomCode(DEFAULT_CHANNEL_ID), maxPlayers: input.maxPlayers, meta, label: "방을 만드는 중" });
+  };
+
+  const quickJoin = () => {
+    const open = roomList.rooms.find((room) => room.phase === "lobby" && hasOpenSlot(room));
+    if (open) {
+      joinListing(open);
+      return;
+    }
+    createRoom({ roomName: `${nick.trim()}의 방`, maxPlayers: MAX_PLAYERS, isPrivate: false });
+  };
+
+  const joinByCode = async (code: string) => {
+    const name = requireNick();
+    if (!name) return;
+    setBusy(true);
+    setError("");
+    const lookup = await fetchRoom(code);
+    setBusy(false);
+    if (lookup.ok) {
+      const room = lookup.value.room;
+      if (!hasOpenSlot(room)) {
+        setError(`${room.name}은(는) 가득 찼습니다 (${room.players}/${room.maxPlayers}).`);
+        return;
+      }
+      void connect(name, { roomCode: room.code, maxPlayers: room.maxPlayers, label: `${room.name}에 입장하는 중` });
+      return;
+    }
+    if (lookup.status === 404) {
+      setError("그 코드의 방을 찾을 수 없습니다. 코드를 다시 확인해 주세요.");
+      return;
+    }
+    // Directory unreachable: still try the code directly so a friend's room stays joinable.
+    void connect(name, { roomCode: code, maxPlayers: MAX_PLAYERS, label: `${code} 방에 입장하는 중` });
   };
 
   if ((screen.t === "play" || screen.t === "practice") && session) {
     return (
       <GameView
         session={session}
-        serverName={screen.t === "practice" ? "AI 매치" : SERVERS[0].name}
-        roomLabel={screen.t === "practice" ? "호스트 + AI 7인" : `통합 룸 · 최대 ${MAX_PLAYERS}인`}
+        serverName={screen.t === "practice" ? "AI 매치" : CHANNEL.name}
+        roomLabel={screen.t === "practice" ? "호스트 + AI 7인" : `코드 ${session.roomCode}`}
       />
     );
   }
@@ -184,108 +297,48 @@ export default function GameApp() {
             nick={nick}
             setNick={setNick}
             error={error}
-            onPlay={() => void joinGame()}
+            notice={notice}
+            rejoinCode={rejoinCode}
+            onRejoin={rejoin}
+            onEnter={enterRooms}
             onPractice={startPractice}
+          />
+        )}
+        {screen.t === "rooms" && (
+          <RoomBrowser
+            channelName={CHANNEL.name}
+            list={roomList}
+            busy={busy}
+            error={error}
+            onRefresh={roomList.refresh}
+            onJoin={joinListing}
+            onQuickJoin={quickJoin}
+            onCreate={() => {
+              setError("");
+              setModal("create");
+            }}
+            onJoinByCode={() => {
+              setError("");
+              setModal("code");
+            }}
+            onBack={() => setScreen({ t: "home" })}
           />
         )}
         {screen.t === "connecting" && (
           <div className="flex flex-1 flex-col items-center justify-center" role="status" aria-live="polite" aria-busy="true">
             <Image src="/mascot.jpg" alt="" width={96} height={96} priority className="h-24 w-24 animate-pulse rounded-3xl object-cover" />
-            <p className="mt-4 font-display text-2xl">방 입장 중…</p>
-            <p className="text-white/60">한국 서버 통합 룸에 접속하고 있습니다</p>
+            <p className="mt-4 font-display text-2xl">{screen.label}…</p>
+            <p className="text-white/60">{CHANNEL.name}에 접속하고 있습니다</p>
           </div>
         )}
       </div>
 
+      {modal === "create" && <CreateRoomModal nick={nick.trim()} busy={busy} onClose={() => setModal("none")} onCreate={createRoom} />}
+      {modal === "code" && (
+        <JoinByCodeModal busy={busy} error={error} onClose={() => setModal("none")} onJoin={(code) => void joinByCode(code)} />
+      )}
       {howto && <HowTo onClose={() => setHowto(false)} />}
     </div>
-  );
-}
-
-function Home({
-  nick,
-  setNick,
-  error,
-  onPlay,
-  onPractice,
-}: {
-  nick: string;
-  setNick: (v: string) => void;
-  error: string;
-  onPlay: () => void;
-  onPractice: () => void;
-}) {
-  const nicknameRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (error) nicknameRef.current?.focus();
-  }, [error]);
-
-  return (
-    <main id="main-content" className="flex flex-1 flex-col items-start justify-center gap-8 py-10 md:flex-row md:items-center md:justify-between">
-      <div className="max-w-xl">
-        <p className="text-sm text-lime">IO 숨바꼭질 · 페인트 위장</p>
-        <h1 className="text-wrap-balance mt-2 font-display text-5xl leading-tight md:text-7xl">
-          흰 몸으로 들어가
-          <br />
-          배경이 되어 나와라
-        </h1>
-        <p className="mt-4 text-base text-white/75">
-          닉네임만 정하면 한국 서버 통합 룸에 바로 입장합니다. 최대 8명이 한 공간에서 만나 라운드마다
-          술래와 카멜레온으로 나뉩니다. 배경에서 색을 찍고, 몸을 칠하고, 자세를 맞춰 술래의 눈을 속이세요.
-        </p>
-        <form
-          className="mt-8 flex w-full max-w-md flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onPlay();
-          }}
-        >
-          <label htmlFor="nickname" className="text-xs tracking-wide text-white/60">
-            닉네임
-          </label>
-          <input
-            ref={nicknameRef}
-            id="nickname"
-            name="nickname"
-            type="text"
-            inputMode="text"
-            autoComplete="nickname"
-            spellCheck={false}
-            value={nick}
-            onChange={(e) => setNick(e.target.value)}
-            maxLength={12}
-            placeholder="예: 초록커튼…"
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? "nickname-error" : undefined}
-            className="rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-lg outline-none ring-lime/40 focus-visible:ring-2"
-          />
-          {error && (
-            <p id="nickname-error" className="text-sm text-pink" aria-live="polite">
-              {error}
-            </p>
-          )}
-          <button type="submit" className="rounded-full bg-lime py-3 font-display text-xl text-black">
-            한국 서버 입장
-          </button>
-          <button
-            type="button"
-            onClick={onPractice}
-            className="rounded-full border border-white/20 py-3 text-sm"
-          >
-            AI와 플레이 (나 + AI 7인)
-          </button>
-        </form>
-      </div>
-      <Image
-        src="/mascot.jpg"
-        alt="카멜론"
-        width={288}
-        height={288}
-        priority
-        className="mx-auto h-56 w-56 rounded-[2.2rem] object-cover shadow-2xl ring-4 ring-lime/30 md:h-72 md:w-72"
-      />
-    </main>
   );
 }
 

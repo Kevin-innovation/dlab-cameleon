@@ -1,18 +1,33 @@
 import {
   DEFAULT_AMMO,
+  DEFAULT_CHANNEL_ID,
   DEFAULT_HIDE,
   DEFAULT_HUNT,
   DEFAULT_PREPARE,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
   REVEAL_TIME,
+  ROOM_NAME_MAX,
+  SYSTEM_MESSAGE_MAX,
   SCORE_HUNT_WIN,
   SCORE_SURVIVE,
   SCORE_TAG,
 } from "./config";
 import { tagRangeForCamouflage } from "./camouflage";
-import type { PlayerSnap, RoomState } from "./types";
+import type { PlayerSnap, RoomState, SystemMessage } from "./types";
 
 export function emptyRoom(): RoomState {
   return {
+    channelId: DEFAULT_CHANNEL_ID,
+    roomName: "",
+    maxPlayers: MAX_PLAYERS,
+    isPrivate: false,
+    hostId: "",
+    hostName: "",
+    directoryToken: "",
+    createdAt: 0,
+    participantIds: [],
+    system: [],
     phase: "lobby",
     mode: "normal",
     mapId: "mansion",
@@ -53,6 +68,7 @@ export type RoomConfigPatch = Partial<
 >;
 
 const PHASES: RoomState["phase"][] = ["lobby", "prepare", "hide", "hunt", "reveal", "result"];
+const SYSTEM_KINDS: SystemMessage["kind"][] = ["host", "join", "leave", "kick", "info"];
 const MODES: RoomState["mode"][] = ["normal", "infection"];
 const HUNTER_MODES: RoomState["hunterMode"][] = ["random", "human", "ai"];
 
@@ -61,9 +77,13 @@ function bounded(value: unknown, fallback: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function safeText(value: unknown, max: number) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
 function safeIds(value: unknown, max: number) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((id): id is string => typeof id === "string" && id.length > 0).slice(0, max))];
+  return [...new Set(value.filter((id): id is string => typeof id === "string" && id.length > 0))].slice(0, max);
 }
 
 export function sanitizeRoom(input: RoomState): RoomState {
@@ -85,9 +105,31 @@ export function sanitizeRoom(input: RoomState): RoomState {
         )
         .slice(-60)
     : [];
+  const system = Array.isArray(source.system)
+    ? source.system
+        .filter(
+          (message): message is SystemMessage =>
+            !!message &&
+            typeof message.id === "string" &&
+            SYSTEM_KINDS.includes(message.kind) &&
+            typeof message.text === "string" &&
+            Number.isFinite(message.at),
+        )
+        .slice(-SYSTEM_MESSAGE_MAX)
+    : [];
   return {
     ...defaults,
     ...source,
+    channelId: safeText(source.channelId, 16) || defaults.channelId,
+    roomName: safeText(source.roomName, ROOM_NAME_MAX),
+    maxPlayers: Math.floor(bounded(source.maxPlayers, defaults.maxPlayers, MIN_PLAYERS, MAX_PLAYERS)),
+    isPrivate: Boolean(source.isPrivate),
+    hostId: safeText(source.hostId, 80),
+    hostName: safeText(source.hostName, 12),
+    directoryToken: safeText(source.directoryToken, 64),
+    createdAt: bounded(source.createdAt, defaults.createdAt, 0, Number.MAX_SAFE_INTEGER),
+    participantIds: safeIds(source.participantIds, MAX_PLAYERS),
+    system,
     phase,
     mode,
     hunterMode,
@@ -116,6 +158,24 @@ export function sanitizeRoom(input: RoomState): RoomState {
 export function patchRoom(prev: RoomState, patch: RoomConfigPatch) {
   if (prev.phase !== "lobby") return prev;
   return sanitizeRoom({ ...prev, ...patch });
+}
+
+/** Host writes its own id into the room so every client can show who is in charge. */
+export function claimHost(room: RoomState, hostId: string, hostName: string, now: number): RoomState {
+  if (room.hostId === hostId && room.hostName === hostName) return room;
+  const takeover = room.hostId !== "" && room.hostId !== hostId;
+  const system = takeover
+    ? [
+        ...room.system,
+        {
+          id: `sys-${now}-${hostId.slice(0, 8)}`,
+          kind: "host" as const,
+          text: `${hostName}님이 방장이 되었습니다`,
+          at: now,
+        },
+      ].slice(-SYSTEM_MESSAGE_MAX)
+    : room.system;
+  return { ...room, hostId, hostName, system };
 }
 
 export function reconcileRoomPlayers(room: RoomState, players: PlayerSnap[]) {
@@ -180,6 +240,7 @@ export function beginRound(
     round: prev.round + 1,
     phaseEndsAt: now + (prev.prepareTime || DEFAULT_PREPARE) * 1000,
     hunterIds,
+    participantIds: ids,
     caughtIds: [],
     winner: undefined,
     lastTag: undefined,
@@ -192,8 +253,15 @@ export function beginRound(
   };
 }
 
+/** In the lobby everyone is a participant-to-be; once a round starts only the locked-in ids play. */
+export function isParticipant(room: RoomState, id: string) {
+  if (room.phase === "lobby") return true;
+  return room.participantIds.includes(id);
+}
+
 export function roleOf(room: RoomState, id: string): PlayerSnap["role"] {
   if (room.phase === "lobby") return "spectator";
+  if (!isParticipant(room, id)) return "spectator";
   if (room.hunterIds.includes(id)) return "hunter";
   if (room.caughtIds.includes(id) && room.mode === "normal") return "spectator";
   if (room.caughtIds.includes(id) && room.mode === "infection") return "hunter";
@@ -206,8 +274,16 @@ export function isHunter(room: RoomState, id: string) {
 }
 
 export function hiderAlive(room: RoomState, id: string) {
+  if (!isParticipant(room, id)) return false;
   if (isHunter(room, id)) return false;
   return !room.caughtIds.includes(id);
+}
+
+/** Ghosts drift through walls, are translucent and cannot be tagged: late joiners and caught hiders. */
+export function isGhost(room: RoomState, id: string) {
+  if (room.phase === "lobby") return false;
+  if (!isParticipant(room, id)) return true;
+  return room.phase === "hunt" && room.mode === "normal" && room.caughtIds.includes(id) && !isHunter(room, id);
 }
 
 export function huntersHaveAmmo(room: RoomState, players: PlayerSnap[]) {
@@ -325,7 +401,19 @@ export function tickRoom(room: RoomState, players: PlayerSnap[], now: number): R
     return { ...room, phase: "result", phaseEndsAt: now + 12000 };
   }
   if (room.phase === "result" && now >= room.phaseEndsAt) {
-    return { ...room, phase: "lobby", winner: undefined, hunterIds: [], caughtIds: [] };
+    return {
+      ...room,
+      phase: "lobby",
+      winner: undefined,
+      hunterIds: [],
+      caughtIds: [],
+      participantIds: [],
+      ammo: {},
+      doors: {},
+      lastTag: undefined,
+      feed: [],
+      taunts: [],
+    };
   }
   const taunts = room.taunts.filter((t) => now - t.at < 1600);
   if (taunts.length !== room.taunts.length) return { ...room, taunts };
