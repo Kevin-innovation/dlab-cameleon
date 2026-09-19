@@ -1,17 +1,18 @@
 # 카멜론
 
-> 온라인 방 구조(채널 1개 + 방 여러 개, 방장·강퇴·관전 입장)를 [온라인 방 시스템 개편 계획서](docs/online-rooms-plan.md)에 따라 개편 중입니다. 아래 "한국 서버 통합 룸 1개" 설명은 개편 전 기준입니다.
->
 > 현재 게임 규칙을 실제 MECCHA CHAMELEON 기준으로 재정렬하는 작업을 진행 중입니다. 원작 고증과 웹판 확장 기능의 구분은 [Phase 0 기준 문서](docs/meccha-reference.md)를 따릅니다. 현재 README의 일부 기능 설명은 Phase 1 이전의 기준 구현을 포함할 수 있습니다.
 
-메챠 카멜레온의 핵심 플레이를 브라우저로 옮긴 **Three.js 3D** IO 숨바꼭질입니다. 닉네임을 정하면 한국 서버 통합 룸에 바로 입장하고, 최대 8명이 한 공간에서 라운드마다 술래와 카멜레온으로 나뉩니다.
+메챠 카멜레온의 핵심 플레이를 브라우저로 옮긴 **Three.js 3D** IO 숨바꼭질입니다. 닉네임을 정하고 한국 서버의 방 목록에서 방을 고르거나 직접 만들면, 한 방에 최대 8명이 모여 라운드마다 술래와 카멜레온으로 나뉩니다.
 
-- DB 없음 (방 상태는 메모리·실시간 세션에만 존재, 모두 나가면 사라집니다)
+- 게임 DB 없음 (방 상태는 Playroom 실시간 세션에만 존재, 모두 나가면 사라집니다)
+- 방 목록만 Upstash Redis에 TTL 캐시로 유지 (방장이 10초마다 heartbeat, 25초 뒤 자동 소멸)
 - Vercel 배포용 Next.js 앱
 - 렌더: Three.js 3인칭 (WASD + 마우스 시점)
 - 실시간은 [Playroom Kit](https://joinplayroom.com/) 세션 (우리 서버/DB가 아님)
-- 한국 서버 통합 룸 1개 · 최대 8인
-- 접속자 목록과 최근 60개 방 채팅 제공 (대기실·라운드 중 열람 가능)
+- 채널 1개(한국 서버) · 방 여러 개 · 방마다 2~8인 · 공개/비공개(코드 입장)
+- 방 만들기 / 빠른 참가 / 코드로 참가 / 초대 링크(`/#r=코드`) 복사
+- 방장 표시(👑)와 자동 승계, 방장 강퇴, 라운드 중 입장은 관전 후 다음 라운드 참가
+- 접속자 목록과 최근 32개 방 채팅 + 시스템 메시지(승계·강퇴) 제공
 - 라운드 종료 후 30초 공개 라운드에서 모든 플레이어 위치 공개
 - 생성형 맨션 벽지 텍스처 적용 (`public/textures/mansion-wallpaper-v1.png`)
 - 스포이드 표면 색 저장 · 추천 색 전체 칠하기 · 색상/범위 기반 위장도 피드백
@@ -35,7 +36,9 @@ npm run dev
 ```
 
 브라우저에서 http://localhost:4881
-멀티플레이는 탭/기기에서 홈의 **한국 서버 입장**을 누르면 같은 통합 룸으로 만납니다. 혼자 페인트 연습은 홈의 **AI와 플레이**로.
+멀티플레이는 홈의 **한국 서버 입장** → 방 목록에서 **방 만들기**를 하고, 다른 탭/기기에서 목록의 방에 **입장**하거나 코드로 참가합니다. 혼자 페인트 연습은 홈의 **AI와 플레이**로.
+
+방 목록 API(`/api/rooms*`)는 `KV_REST_API_URL`/`KV_REST_API_TOKEN`이 없으면 로컬에서 메모리 스토어로 동작합니다(같은 dev 서버 안에서만 공유). Vercel 프로젝트에 연결하면 `vercel env pull`로 `.env.local`을 받을 수 있습니다.
 
 게임성 기준선과 맵·스폰 검증은 다음 명령으로 실행합니다.
 
@@ -58,20 +61,24 @@ AI 연습전 대기실에서는 **술래 설정**을 `AI 술래`, `내가 술래
 
 1. 이 저장소를 GitHub에 올립니다.
 2. [Vercel](https://vercel.com)에서 Import → Framework Preset은 Next.js.
-3. 환경 변수는 필요 없습니다.
+3. Storage → **Upstash for Redis**(무료 플랜)를 프로젝트에 연결합니다. `KV_REST_API_URL`, `KV_REST_API_TOKEN`이 자동 주입되며, 없으면 production에서 방 목록 API가 503을 반환합니다.
 4. Deploy.
 
-원하면 Playroom 개발자 포털에서 게임 ID를 받아 `NEXT_PUBLIC_PLAYROOM_GAME_ID`를 넣을 수 있습니다. 없어도 동작합니다.
+Playroom 개발자 포털에서 게임 ID를 받아 `NEXT_PUBLIC_PLAYROOM_GAME_ID`를 넣는 것을 권장합니다. 없어도 동작하지만 Playroom이 DAU 제한을 적용할 수 있습니다.
 
 ## 구조
 
-- `src/components/GameApp.tsx` — 닉네임 / 한국 서버 통합 룸 입장
-- `src/components/GameView.tsx` — 대기실, 접속자, 방 채팅, 페인트, 라운드
+- `src/components/GameApp.tsx` — 닉네임, 방 목록/만들기/코드 입장, 해시 재접속, 강퇴·끊김 안내
+- `src/components/screens/` — 홈, 방 목록(5초 폴링), 방 만들기·코드 입장 모달
+- `src/components/GameView.tsx` — 3D 화면 조립, 입력, 게임 루프, 페인트, 라운드
+- `src/components/game/` — 대기실(방장·강퇴), 접속자·채팅 패널, 현황, 결과, 디렉터리 heartbeat 훅
+- `src/lib/rooms/` — 방 코드, 디렉터리 리스팅 검증, 스토어(메모리·Redis), API 핸들러, 클라이언트, 레이트리밋
+- `src/app/api/rooms/` — 방 목록 Route Handler (`GET /api/rooms`, `POST /api/rooms/heartbeat`, `GET/DELETE /api/rooms/[code]`)
 - `src/lib/engine/world.ts` — Three.js 씬, 카메라, 레이캐스트, 오브젝트 텍스처
 - `src/lib/camouflage.ts` — 표면 색상 일치도와 칠한 범위 기반 위장도 계산
 - `src/lib/maps.ts` — 3D 저택 / 농장 / 하수도
 - `src/lib/round.ts` — 역할 배정, 태그, 승패
-- `src/lib/session.ts` — Playroom 세션, 접속자 동기화, 호스트 채팅 RPC, 로컬 연습
+- `src/lib/session/` — Playroom 세션(방 메타 시드, 닉네임 중복 처리, 강퇴 RPC, 끊김 사유), 로컬 연습
 - `src/lib/gameplay-audit.ts` — 게임성 기준선과 맵·방 상태 감사
 - `src/lib/__tests__/` — Vitest 단위 테스트 (round 규칙, 방 상태 검증)
 - `docs/gameplay-contract.md` — 전체 리빌드용 게임 규칙·맵 KPI·완료 기준
