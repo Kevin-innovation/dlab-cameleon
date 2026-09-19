@@ -9,7 +9,8 @@
     "lint": "eslint",
     "audit:gameplay": "jiti scripts/audit-gameplay.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "audit:placement": "jiti scripts/audit-placement.ts"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.4",
