@@ -266,7 +266,8 @@ export function auditMap(map: GameMap): MapGameplayAudit {
   }
   // Indoor room maps: every full wall must reach the ceiling, otherwise the "dollhouse" look returns.
   if (map.rooms?.length && (map.kind ?? "indoor") !== "outdoor") {
-    const short = map.boxes.filter((box) => box.role === "wall" && box.y - box.h / 2 < 0.05 && box.y + box.h / 2 < map.ceiling - 0.05);
+    const lowestCeiling = Math.min(...map.rooms.map((room) => room.ceiling?.height ?? room.wall?.height ?? map.ceiling));
+    const short = map.boxes.filter((box) => box.role === "wall" && box.y - box.h / 2 < 0.05 && box.y + box.h / 2 < lowestCeiling - 0.05);
     if (short.length > 0) {
       issues.push(issue("error", "WALL_BELOW_CEILING", `${short.length}개 벽이 천장(${map.ceiling}m)에 닿지 않습니다.`));
     }

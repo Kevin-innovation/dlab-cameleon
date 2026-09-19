@@ -32,18 +32,6 @@ function B(
   };
 }
 
-const wall = (
-  x: number,
-  z: number,
-  w: number,
-  d: number,
-  color = "#4a3428",
-  h = 3.8,
-  pattern: Pattern = "bricks",
-  colors: string[] = [color, "#3a281e"],
-): BoxDef =>
-  B(x, z, w, d, color, { h, y: 0, collide: true, pattern, colors });
-
 export const BOX_COLLIDE_OUTSET = 0.06;
 
 const MANSION = {
@@ -259,66 +247,127 @@ const farm: GameMap = {
   boxes: [],
 };
 
+const CONCRETE_WALL = { color: "#6b6f68", pattern: "bricks" as Pattern, colors: ["#6b6f68", "#565a53"], thickness: 0.4 };
+const MOSS_WALL = { color: "#4f6b4a", pattern: "bricks" as Pattern, colors: ["#4f6b4a", "#3a5236"], thickness: 0.4 };
+const GRAFFITI_WALL = { color: "#5a5f5c", pattern: "graffiti" as Pattern, colors: ["#5a5f5c", "#c0392b", "#3498db", "#f1c40f"], thickness: 0.4 };
+
+/**
+ * 하수도: 낮은 콘크리트 터널이 동서로 지나고, 북쪽에 펌프실·자재 창고(어둠)·맨홀 수직갱(빛 기둥),
+ * 남쪽에 수로 통로·제어실·막다른 곳이 붙는다. 맨홀 빛 바깥의 어둠과 파이프 뒤가 은신처다.
+ */
 const sewer: GameMap = {
   id: "sewer",
   name: "하수도",
-  blurb: "파이프·드럼·그래피티. 어두운 구석보다 무늬에 녹으세요.",
+  blurb: "낮은 터널과 맨홀 빛. 파이프 뒤와 어둠에 녹아드세요.",
   difficulty: "보통",
-  w: 46,
-  d: 34,
-  ceiling: 4.4,
-  fog: "#101816",
+  kind: "indoor",
+  lighting: "dim",
+  ceilingStyle: "concrete",
+  w: 48,
+  d: 36,
+  ceiling: 2.8,
+  fog: "#1c2320",
   floor: "#3d4a43",
   floorTexture: "/textures/sewer-concrete-v1.png",
+  rooms: [
+    {
+      id: "pump",
+      x: 0,
+      z: 0,
+      w: 22,
+      d: 14,
+      wall: CONCRETE_WALL,
+      light: 0.4,
+      openings: [
+        { kind: "arch", side: "s", at: 11, width: 3 },
+        { kind: "door", side: "e", at: 7, width: 1.8 },
+      ],
+      ceiling: { style: "concrete", color: "#4f534d", height: 3.2, fixtures: [{ x: 6, z: 4, kind: "spot" }, { x: 16, z: 10, kind: "spot" }] },
+    },
+    {
+      id: "store",
+      x: 22,
+      z: 0,
+      w: 16,
+      d: 14,
+      wall: MOSS_WALL,
+      light: 0.12,
+      openings: [{ kind: "door", side: "s", at: 8, width: 1.8 }],
+      ceiling: { style: "concrete", color: "#3d423d", height: 2.8, fixtures: [{ x: 30, z: 7, kind: "spot", on: false }] },
+    },
+    {
+      id: "shaft",
+      x: 38,
+      z: 0,
+      w: 10,
+      d: 14,
+      wall: CONCRETE_WALL,
+      light: 0.9,
+      openings: [{ kind: "arch", side: "s", at: 5, width: 2.6 }],
+      ceiling: { style: "concrete", color: "#4f534d", height: 3.2, fixtures: [{ x: 43, z: 7, kind: "spot" }] },
+    },
+    {
+      id: "tunnel",
+      x: 0,
+      z: 14,
+      w: 48,
+      d: 6,
+      wall: GRAFFITI_WALL,
+      light: 0.3,
+      ceiling: { style: "concrete", color: "#3a3f3b", height: 2.6, fixtures: [{ x: 8, z: 17, kind: "spot" }, { x: 24, z: 17, kind: "spot", on: false }, { x: 40, z: 17, kind: "spot" }] },
+    },
+    {
+      id: "channel",
+      x: 0,
+      z: 20,
+      w: 24,
+      d: 16,
+      wall: MOSS_WALL,
+      light: 0.35,
+      openings: [{ kind: "arch", side: "n", at: 12, width: 3 }],
+      ceiling: { style: "concrete", color: "#3d423d", height: 2.8, fixtures: [{ x: 6, z: 24, kind: "spot" }, { x: 18, z: 24, kind: "spot", on: false }] },
+    },
+    {
+      id: "control",
+      x: 24,
+      z: 20,
+      w: 14,
+      d: 16,
+      wall: CONCRETE_WALL,
+      light: 0.5,
+      openings: [
+        { kind: "door", side: "n", at: 7, width: 1.8 },
+        { kind: "door", side: "e", at: 8, width: 1.8 },
+      ],
+      ceiling: { style: "concrete", color: "#4f534d", height: 2.8, fixtures: [{ x: 28, z: 25, kind: "fluorescent" }, { x: 34, z: 31, kind: "fluorescent" }] },
+    },
+    {
+      id: "deadend",
+      x: 38,
+      z: 20,
+      w: 10,
+      d: 16,
+      wall: GRAFFITI_WALL,
+      light: 0.1,
+      openings: [{ kind: "arch", side: "n", at: 5, width: 2.4 }],
+      ceiling: { style: "concrete", color: "#2f3431", height: 2.6, fixtures: [{ x: 43, z: 30, kind: "spot", on: false }] },
+    },
+  ],
   doors: [],
-  hunterSpawns: [{ x: 23, z: 31.5 }],
+  hunterSpawns: [{ x: 43, z: 6 }],
   spawns: [
-    { x: 7, z: 7 },
-    { x: 16, z: 10 },
-    { x: 24, z: 8 },
-    { x: 34, z: 11 },
-    { x: 39, z: 18 },
-    { x: 32, z: 24 },
-    { x: 18, z: 22 },
-    { x: 8, z: 20 },
+    { x: 3, z: 12.5 },
+    { x: 18, z: 11 },
+    { x: 30, z: 4 },
+    { x: 4, z: 17 },
+    { x: 6, z: 24 },
+    { x: 18, z: 32 },
+    { x: 31, z: 30 },
+    { x: 44, z: 28 },
   ],
   boxes: [
-    B(1, 1, 44, 32, "#3d4a43", { h: 0.05, pattern: "bricks", colors: ["#3d4a43", "#2f3a34"] }),
-    B(2, 2, 8, 0.22, "#c0392b", {
-      h: 3.2,
-      collide: true,
-      pattern: "graffiti",
-      colors: ["#c0392b", "#f1c40f", "#3498db", "#2ecc71"],
-    }),
-    B(14, 2, 10, 0.22, "#1f6f4a", { h: 3.0, collide: true, pattern: "graffiti", colors: ["#1f6f4a", "#f39c12", "#e74c3c"] }),
-    B(30, 2, 12, 0.22, "#8e44ad", { h: 3.0, collide: true, pattern: "graffiti", colors: ["#8e44ad", "#f1c40f", "#1abc9c"] }),
-    B(12, 12, 0.22, 8, "#1f6f4a", { h: 2.8, collide: true, pattern: "graffiti", colors: ["#1f6f4a", "#f39c12"] }),
-    B(24, 14, 8, 0.22, "#2c3e50", { h: 2.6, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] }),
-    B(6, 14, 1.3, 1.3, "#b03a2e", { h: 1.2 }),
-    B(34, 16, 2.2, 1.5, "#8e44ad", { h: 1.5, pattern: "graffiti", colors: ["#8e44ad", "#f1c40f"] }),
-    B(8, 6, 8, 0.55, "#c47a3a", { h: 0.5, y: 3.2, pattern: "pipes" }),
-    B(22, 8, 10, 0.55, "#6e8b73", { h: 0.5, y: 3.0, pattern: "pipes" }),
-    B(4, 8, 1.2, 1.2, "#b03a2e", { h: 1.15 }),
-    B(7, 10, 1.2, 1.2, "#922b21", { h: 1.15 }),
-    B(10, 8, 1.2, 1.2, "#c0392b", { h: 1.15 }),
-    B(16, 12, 4.2, 2.8, "#4a5c3a", { h: 1.4, pattern: "leaves" }),
-    B(24, 10, 3.4, 2.6, "#2c3e50", { h: 2.0, pattern: "graffiti", colors: ["#e74c3c", "#3498db", "#f1c40f"] }),
-    B(32, 12, 2.4, 0.55, "#d35400", { h: 0.55, y: 2.4, pattern: "pipes" }),
-    B(36, 10, 5, 2.8, "#8e44ad", { h: 1.8, pattern: "graffiti", colors: ["#8e44ad", "#f1c40f"] }),
-    B(22.5, 17, 1.2, 1.2, "#1b2420", { h: 4.0, collide: true, pattern: "bricks" }),
-    B(6, 22, 1.3, 4, "#c47a3a", { h: 0.6, y: 2.8, pattern: "pipes" }),
-    B(12, 24, 3.6, 3.2, "#f1c40f", { h: 2.2, pattern: "stripes", colors: ["#f1c40f", "#111"] }),
-    B(20, 22, 2.6, 2.0, "#27ae60", { h: 1.6, pattern: "graffiti" }),
-    B(30, 24, 1.3, 1.3, "#b03a2e", { h: 1.2 }),
-    B(34, 24, 1.3, 1.3, "#922b21", { h: 1.2 }),
-    B(38, 22, 1.4, 4, "#c47a3a", { h: 0.6, y: 2.6, pattern: "pipes" }),
-    wall(0, 0, 46, 0.4, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
-    wall(0, 33.6, 18, 0.4, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
-    wall(28, 33.6, 18, 0.4, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
-    wall(0, 0, 0.4, 34, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
-    wall(45.6, 0, 0.4, 34, "#1b2420", 4.2, "bricks", ["#1b2420", "#2a3830"]),
-    B(18, 18, 1.1, 0.7, "#2c3e50", { h: 1.8, collide: true }),
-    B(28, 20, 1.4, 0.8, "#c0392b", { h: 1.7, collide: true, pattern: "dots", colors: ["#c0392b", "#111"] }),
+    // 맨홀: 천장의 빛 원판이 수직갱 바닥을 비춘다.
+    { x: 43, y: 3.08, z: 7, w: 1.6, h: 0.08, d: 1.6, color: "#fff8d8", emissive: "#fff8d8", emissiveIntensity: 1.2, shape: "cylinder", collide: false, role: "fixture" },
   ],
 };
 
@@ -410,131 +459,6 @@ const backrooms: GameMap = {
   ],
 };
 
-function wallTheme(id: string): { color: string; pattern: Pattern; colors: string[] } {
-  if (id === "farm") return { color: "#6d4420", pattern: "wood", colors: ["#6d4420", "#8b5a2b"] };
-  if (id === "sewer") return { color: "#1b2420", pattern: "bricks", colors: ["#1b2420", "#2a3830"] };
-  if (id === "backrooms") return { color: "#d4c56a", pattern: "wallpaper", colors: ["#e2d36a", "#c9b84a"] };
-  return { color: "#4a3428", pattern: "wallpaper", colors: ["#4a3428", "#6b3a2a"] };
-}
-
-function wallWithDoor(
-  mapId: string,
-  along: "x" | "z",
-  plane: number,
-  a0: number,
-  a1: number,
-  thick: number,
-  h: number,
-  theme: { color: string; pattern: Pattern; colors: string[] },
-): { walls: BoxDef[]; door: DoorDef } {
-  const gap = 1.82;
-  const mid = (a0 + a1) / 2;
-  const door: DoorDef = {
-    id: `${mapId}-${along}-${plane.toFixed(1)}-${mid.toFixed(1)}`,
-    x: along === "z" ? plane : mid,
-    z: along === "z" ? mid : plane,
-    w: gap - 0.08,
-    h: Math.min(2.32, h - 0.15),
-    d: thick + 0.05,
-    along,
-    color: "#5c3a22",
-  };
-  const walls: BoxDef[] = [];
-  const leftLen = mid - gap / 2 - a0;
-  const rightLen = a1 - (mid + gap / 2);
-  if (along === "z") {
-    if (leftLen > 0.35) walls.push(B(plane - thick / 2, a0, thick, leftLen, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }));
-    if (rightLen > 0.35)
-      walls.push(
-        B(plane - thick / 2, mid + gap / 2, thick, rightLen, theme.color, {
-          h,
-          collide: true,
-          pattern: theme.pattern,
-          colors: theme.colors,
-        }),
-      );
-  } else {
-    if (leftLen > 0.35) walls.push(B(a0, plane - thick / 2, leftLen, thick, theme.color, { h, collide: true, pattern: theme.pattern, colors: theme.colors }));
-    if (rightLen > 0.35)
-      walls.push(
-        B(mid + gap / 2, plane - thick / 2, rightLen, thick, theme.color, {
-          h,
-          collide: true,
-          pattern: theme.pattern,
-          colors: theme.colors,
-        }),
-      );
-  }
-  return { walls, door };
-}
-
-function touchesPerimeter(map: GameMap, box: BoxDef) {
-  const left = box.x - box.w / 2;
-  const right = box.x + box.w / 2;
-  const front = box.z - box.d / 2;
-  const back = box.z + box.d / 2;
-  return left <= 0.7 || right >= map.w - 0.7 || front <= 0.7 || back >= map.d - 0.7;
-}
-
-function isDisconnectedWallPanel(map: GameMap, box: BoxDef) {
-  const isThin = Math.min(box.w, box.d) <= 0.3;
-  return isThin && box.h >= 1.6 && !touchesPerimeter(map, box);
-}
-
-function placeOnStage(map: GameMap, box: BoxDef) {
-  const bottom = box.y - box.h / 2;
-  const isOverheadPipe = box.pattern === "pipes" && bottom > 1.4;
-  const isWallMountedPainting = box.prop === "painting";
-  if (isOverheadPipe) return { ...box, y: map.ceiling - box.h / 2 - 0.06 };
-  if (bottom <= 0.08 || isWallMountedPainting) return box;
-  return { ...box, y: box.h / 2 };
-}
-
-function landmarkProps(map: GameMap): BoxDef[] {
-  if (map.id === "sewer") {
-    return [
-      // 남쪽 정비 구역: 원형 드럼과 가구를 섞어 시야·이동 속도를 동시에 바꾼다.
-      B(7.5, 24, 3.8, 1.35, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.56, d: 1.2 } }),
-      B(12, 26, 1.6, 1.4, "#5b6b58", { h: 0.95, collide: true, prop: "armchair" }),
-      B(14.5, 25.5, 2.4, 1.3, "#6d4420", { h: 0.72, collide: true, prop: "coffeeTable", collider: { w: 2.2, d: 1.12 }, pattern: "wood" }),
-      B(24, 23, 3.6, 1.3, "#6a3d4b", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.16 } }),
-      B(29, 25, 1.6, 1.4, "#5b6b58", { h: 0.95, collide: true, prop: "armchair" }),
-      B(35, 18, 2.6, 0.7, "#6d4420", { h: 2.15, collide: true, prop: "bookshelf", collider: { w: 2.4, d: 0.62 }, pattern: "wood" }),
-      B(3.5, 25.5, 1.35, 1.35, "#922b21", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
-      B(5.1, 25.8, 1.25, 1.25, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
-      B(38.2, 26, 1.35, 1.35, "#b03a2e", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
-      B(16.5, 27, 1.35, 1.35, "#922b21", { h: 1.25, collide: true, prop: "barrel", shape: "cylinder" }),
-      B(18.1, 27.4, 1.25, 1.25, "#c0392b", { h: 1.15, collide: true, prop: "barrel", shape: "cylinder" }),
-      B(31.5, 5.5, 1.3, 1.3, "#b03a2e", { h: 1.2, collide: true, prop: "barrel", shape: "cylinder" }),
-      B(34, 26, 2.2, 1.5, "#2c3e50", { h: 1.35, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] }),
-    ];
-  }
-  return [];
-}
-
-function stageLayout(map: GameMap): GameMap {
-  const theme = wallTheme(map.id);
-  const h = Math.min(map.ceiling - 0.24, 2.45);
-  const thick = 0.36;
-  const runs: { along: "x" | "z"; plane: number; a0: number; a1: number }[] =
-    map.id === "mansion"
-      ? [{ along: "x", plane: 18, a0: 9, a1: 39 }]
-      : map.id === "farm"
-        ? [{ along: "x", plane: 20, a0: 10, a1: 42 }]
-        : map.id === "sewer"
-          ? [{ along: "z", plane: 29, a0: 8, a1: 26 }]
-          : [{ along: "x", plane: 15, a0: 7, a1: 33 }];
-  const baseBoxes = map.boxes.filter((box) => !isDisconnectedWallPanel(map, box)).map((box) => placeOnStage(map, box));
-  const walls: BoxDef[] = [];
-  const doors: DoorDef[] = [...(map.doors ?? [])];
-  for (const run of runs) {
-    const part = wallWithDoor(map.id, run.along, run.plane, run.a0, run.a1, thick, h, theme);
-    walls.push(...part.walls);
-    doors.push(part.door);
-  }
-  return { ...map, boxes: [...baseBoxes, ...landmarkProps(map), ...walls], doors };
-}
-
 function clearSpawns(map: GameMap): GameMap {
   const cols = [...mapColliders(map), ...(map.doors ?? []).flatMap((d) => doorColliders(d))];
   const bounds = { w: map.w, d: map.d };
@@ -543,60 +467,6 @@ function clearSpawns(map: GameMap): GameMap {
     ...map,
     spawns: map.spawns.map(fix),
     hunterSpawns: map.hunterSpawns.map(fix),
-  };
-}
-
-/**
- * Arena size by difficulty. Harder maps are larger: more ground for hiders to
- * spread across and more area for the hunter to sweep in the same hunt time.
- */
-export const ARENA_BY_DIFFICULTY: Record<GameMap["difficulty"], { width: number; depth: number }> = {
-  쉬움: { width: 42, depth: 32 },
-  보통: { width: 48, depth: 36 },
-  어려움: { width: 56, depth: 42 },
-};
-
-/** Long, thin, tall boxes are walls; their length follows the arena. Everything else is a prop that keeps its size. */
-function isWallRun(box: BoxDef, axis: "x" | "z") {
-  const length = axis === "x" ? box.w : box.d;
-  const thickness = axis === "x" ? box.d : box.w;
-  return box.h >= 1.2 && length >= 3 && thickness <= 0.6;
-}
-
-function isFloorSheet(box: BoxDef) {
-  return box.h <= 0.1 && box.w >= 4 && box.d >= 4;
-}
-
-/**
- * Spreads a hand-built layout to the arena size: positions (and wall lengths)
- * scale, furniture keeps its real dimensions so cover stays believable.
- */
-function spreadMapToArena(map: GameMap, width: number, depth: number): GameMap {
-  const sx = width / map.w;
-  const sz = depth / map.d;
-  const spreadBox = (box: BoxDef): BoxDef => {
-    const floor = isFloorSheet(box);
-    const wallX = isWallRun(box, "x");
-    const wallZ = isWallRun(box, "z");
-    const w = floor || wallX ? box.w * sx : box.w;
-    const d = floor || wallZ ? box.d * sz : box.d;
-    return { ...box, x: box.x * sx, z: box.z * sz, w, d };
-  };
-  // The wall segments beside a door stretch with the arena, so the leaf must too or a gap opens.
-  const spreadDoor = (door: DoorDef): DoorDef => ({
-    ...door,
-    x: door.x * sx,
-    z: door.z * sz,
-    w: door.w * (door.along === "x" ? sx : sz),
-  });
-  return {
-    ...map,
-    w: width,
-    d: depth,
-    boxes: map.boxes.map(spreadBox),
-    doors: map.doors.map(spreadDoor),
-    spawns: map.spawns.map((point) => ({ x: point.x * sx, z: point.z * sz })),
-    hunterSpawns: map.hunterSpawns.map((point) => ({ x: point.x * sx, z: point.z * sz })),
   };
 }
 
@@ -889,13 +759,67 @@ function extraCover(map: GameMap): BoxDef[] {
     ];
   }
   if (map.id === "sewer") {
+    const pipe = (x: number, z: number, w: number, d: number, y: number, color = "#8a4a2a") =>
+      B(x, z, w, d, color, { h: 0.5, y, pattern: "pipes" });
+    const machine = (x: number, z: number, w: number, d: number, h = 1.8, color = "#2c3e50") =>
+      B(x, z, w, d, color, { h, collide: true, pattern: "dots", colors: [color, "#95a5a6"] });
+    const crate = (x: number, z: number, size = 1.2, h = 1) => B(x, z, size, size, "#5b4b32", { h, collide: true, pattern: "wood" });
+    const curb = (x: number, z: number, w: number, d: number) => B(x, z, w, d, "#7d837b", { h: 0.3, collide: true });
     return [
-      barrel(41, 5),
-      B(20, 5, 2.0, 1.2, "#2c3e50", { h: 1.1, collide: true, pattern: "graffiti", colors: ["#2c3e50", "#e74c3c"] }),
-      barrel(10.5, 15, "#922b21", 1.2),
-      B(40, 30.2, 3.4, 1.25, "#365b78", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.2, d: 1.12 } }),
-      B(44, 20, 1.6, 1.4, "#5b6b58", { h: 0.95, collide: true, prop: "armchair" }),
-      B(27, 30.5, 1.8, 1.1, "#7f8c8d", { h: 1.2, collide: true, pattern: "stripes", colors: ["#7f8c8d", "#111"] }),
+      // 펌프실: 대형 펌프와 파이프
+      machine(2, 8, 3.2, 2.2, 1.9),
+      machine(7, 8, 3.2, 2.2, 1.9),
+      B(4.6, 2, 1.4, 1.4, "#7f8c8d", { h: 2.4, collide: true, shape: "cylinder" }),
+      B(12, 2, 1.4, 1.4, "#7f8c8d", { h: 2.4, collide: true, shape: "cylinder" }),
+      pipe(2, 4.5, 10, 0.5, 2.5),
+      pipe(14, 1, 0.5, 8, 2.4, "#6e8b73"),
+      barrel(15, 4),
+      barrel(16.6, 4.3, "#c0392b", 1.2),
+      B(18.5, 1, 2.2, 0.9, "#34495e", { h: 1.5, collide: true, pattern: "graffiti", colors: ["#34495e", "#e74c3c"] }),
+      // 자재 창고(어둠): 선반과 상자
+      B(23, 1, 4, 0.6, "#7a7f86", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 3.8, d: 0.54 } }),
+      B(28, 1, 4, 0.6, "#7a7f86", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 3.8, d: 0.54 } }),
+      B(33, 1, 4, 0.6, "#7a7f86", { h: 2.2, collide: true, prop: "bookshelf", collider: { w: 3.8, d: 0.54 } }),
+      crate(24, 6),
+      crate(25.4, 6.2, 1, 0.8),
+      crate(34, 9, 1.4, 1.2),
+      barrel(35.8, 5.5, "#922b21"),
+      barrel(23.5, 11, "#b03a2e"),
+      B(29, 9.5, 2.6, 1.3, "#2c3e50", { h: 1.35, collide: true, pattern: "graffiti", colors: ["#e74c3c", "#3498db"] }),
+      // 맨홀 수직갱: 사다리와 배수 격자
+      { x: 47.6, y: 1.5, z: 7, w: 0.2, h: 3, d: 0.8, color: "#9aa0a6", pattern: "stripes" as Pattern, colors: ["#9aa0a6", "#4a4f54"], collide: false, role: "trim" as const },
+      { x: 43, y: 0.02, z: 7, w: 2.2, h: 0.04, d: 2.2, color: "#2b2f2c", collide: false, role: "decal" as const },
+      barrel(40, 12),
+      // 터널: 천장 파이프와 벽가의 드럼
+      pipe(2, 14.6, 44, 0.55, 2.2, "#c47a3a"),
+      barrel(1, 15, "#922b21", 1.2),
+      barrel(21, 18.3, "#b03a2e", 1.2),
+      barrel(46, 18.3, "#c0392b", 1.2),
+      crate(30, 14.8, 1.1, 0.9),
+      // 수로 통로: 물과 연석, 이끼 벽
+      { x: 12, y: 0.02, z: 32, w: 24, h: 0.04, d: 6, color: "#2f5d5a", collide: false, role: "decal" as const },
+      curb(0.5, 28.6, 23, 0.4),
+      B(2, 21, 2.2, 1.2, "#365b78", { h: 1.1, collide: true, pattern: "graffiti", colors: ["#365b78", "#f1c40f"] }),
+      B(9, 25, 3.6, 1.3, "#6a3d4b", { h: 0.95, collide: true, prop: "sofa", collider: { w: 3.38, d: 1.16 } }),
+      barrel(14, 21, "#922b21"),
+      barrel(15.6, 21.3, "#c0392b", 1.2),
+      pipe(20, 20.6, 0.5, 8, 2.3),
+      crate(21, 25.5),
+      // 제어실: 제어반과 책상
+      machine(24.6, 20.6, 4.4, 0.9, 1.6, "#3b4a3f"),
+      machine(33, 20.6, 4.4, 0.9, 1.6, "#3b4a3f"),
+      desk(27, 26),
+      chair(27.4, 27.2, "#5b6b58"),
+      B(31, 33, 1.6, 1.4, "#5b6b58", { h: 0.95, collide: true, prop: "armchair" }),
+      crate(36, 33.5, 1.2, 1),
+      barrel(25, 33.5, "#b03a2e", 1.2),
+      // 막다른 곳(어둠): 잔해와 무너진 상자
+      crate(39, 33, 1.6, 1.4),
+      crate(41, 33.5, 1.2, 0.9),
+      crate(46, 30, 1.4, 1.2),
+      barrel(45.5, 22, "#922b21"),
+      B(39, 24, 1.4, 4, "#c47a3a", { h: 0.6, y: 2.0, pattern: "pipes" }),
+      B(43, 34.5, 3, 0.6, "#2c3e50", { h: 1.5, collide: true, pattern: "graffiti", colors: ["#2c3e50", "#e74c3c", "#f1c40f"] }),
     ];
   }
   return [];
@@ -927,6 +851,11 @@ function withExtraCover(map: GameMap): GameMap {
       continue;
     }
     const inside = self.minX > 0.2 && self.maxX < map.w - 0.2 && self.minZ > 0.2 && self.maxZ < map.d - 0.2;
+    if (inside && self.minY > 1.8) {
+      // Overhead pipes and ducts never touch the floor plan; only keep them in bounds.
+      boxes = [...boxes, candidate];
+      continue;
+    }
     const clash = existing.find((c) => aabbOverlap(self, c));
     const nearSpawn = spawns.find((p) => p.x > self.minX - 1.1 && p.x < self.maxX + 1.1 && p.z > self.minZ - 1.1 && p.z < self.maxZ + 1.1);
     if (!inside) dropped.push(`${label}: outside arena`);
@@ -950,11 +879,8 @@ function withRooms(map: GameMap): GameMap {
   };
 }
 
-export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) => {
-  if (m.rooms?.length) return clearSpawns(withExtraCover(withRooms(m)));
-  const size = ARENA_BY_DIFFICULTY[m.difficulty];
-  return clearSpawns(withExtraCover(spreadMapToArena(stageLayout(m), size.width, size.depth)));
-});
+/** Every map is authored as rooms at its final size; cover is validated on top of the built walls. */
+export const MAPS: GameMap[] = [mansion, farm, sewer, backrooms].map((m) => clearSpawns(withExtraCover(withRooms(m))));
 
 function rotY(x: number, z: number, ang: number) {
   const c = Math.cos(ang);

@@ -355,7 +355,7 @@ export class GameWorld {
     // Room lights: a few real point lights on desktop, emissive fixtures only on mobile.
     const lightBudget = this.isMobile ? 0 : 6;
     for (const light of (map.lights ?? []).slice(0, lightBudget)) {
-      const point = new THREE.PointLight(light.color, light.intensity, light.distance, 1.6);
+      const point = new THREE.PointLight(light.color, light.intensity, light.distance, 1.2);
       point.position.set(light.x, light.y, light.z);
       this.mapGroup.add(point);
     }
@@ -1531,7 +1531,7 @@ type LightingRig = { hemi: number; sun: number; skyColor: string; groundColor: s
 const LIGHTING_PRESETS: Record<NonNullable<GameMap["lighting"]>, LightingRig> = {
   day: { hemi: 1.05, sun: 1.35, skyColor: "#f2efe6", groundColor: "#3d2a1c", sunColor: "#fff4e0" },
   fluorescent: { hemi: 0.9, sun: 0.5, skyColor: "#eef2e4", groundColor: "#5a5340", sunColor: "#f6f8ec" },
-  dim: { hemi: 0.42, sun: 0.38, skyColor: "#bcc4c9", groundColor: "#1c1f22", sunColor: "#cfd8dc" },
+  dim: { hemi: 0.95, sun: 0.6, skyColor: "#c9d2d6", groundColor: "#30363a", sunColor: "#d5dde0" },
   dusk: { hemi: 0.6, sun: 0.95, skyColor: "#f5cfa0", groundColor: "#2b1d24", sunColor: "#ffb36b" },
 };
 

@@ -29,9 +29,9 @@ const PLANE_EPS = 0.02;
 const MIN_SEGMENT = 0.12;
 
 const FIXTURE_LOOK: Record<Fixture["kind"], { w: number; h: number; d: number; color: string; emissive: string; light: { color: string; intensity: number; distance: number } }> = {
-  fluorescent: { w: 1.2, h: 0.08, d: 0.32, color: "#f2f5ea", emissive: "#f4f8e4", light: { color: "#f4f6df", intensity: 0.55, distance: 9 } },
-  pendant: { w: 0.42, h: 0.42, d: 0.42, color: "#f2e3bd", emissive: "#ffd9a0", light: { color: "#ffd7a3", intensity: 0.7, distance: 10 } },
-  spot: { w: 0.24, h: 0.14, d: 0.24, color: "#f0ede4", emissive: "#fff5dc", light: { color: "#fff0d0", intensity: 0.5, distance: 7 } },
+  fluorescent: { w: 1.2, h: 0.08, d: 0.32, color: "#f2f5ea", emissive: "#f4f8e4", light: { color: "#f4f6df", intensity: 1.4, distance: 12 } },
+  pendant: { w: 0.42, h: 0.42, d: 0.42, color: "#f2e3bd", emissive: "#ffd9a0", light: { color: "#ffd7a3", intensity: 1.8, distance: 14 } },
+  spot: { w: 0.24, h: 0.14, d: 0.24, color: "#f0ede4", emissive: "#fff5dc", light: { color: "#fff0d0", intensity: 1.6, distance: 11 } },
 };
 
 function sideLine(room: RoomDef, side: WallSide): { axis: "x" | "z"; plane: number; a0: number; a1: number } {
@@ -223,7 +223,7 @@ function ceilingPanel(room: RoomDef, ceiling: number): BoxDef {
     h: thickness,
     color: room.ceiling?.color ?? "#e8e2d4",
     emissive: room.ceiling?.color ?? "#e8e2d4",
-    emissiveIntensity: 0.18,
+    emissiveIntensity: 0.26,
     pattern: room.ceiling?.style === "tiles" ? "tiles" : room.ceiling?.style === "beams" ? "wood" : undefined,
     collide: false,
     role: "ceiling",
