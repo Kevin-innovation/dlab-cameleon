@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { uniqueNickname } from "../nickname";
+import { randomNickname, uniqueNickname } from "../nickname";
 
 describe("uniqueNickname", () => {
   it("keeps a name nobody else uses", () => {
@@ -27,3 +27,12 @@ describe("uniqueNickname", () => {
     expect(uniqueNickname("   ", [])).toBe("손님");
   });
 });
+
+describe("randomNickname", () => {
+  it("builds a short adjective+noun name within the limit", () => {
+    expect(randomNickname(() => 0)).toBe("초록커튼");
+    expect(randomNickname(() => 0.999)).toBe("용감한상자");
+    for (let i = 0; i < 50; i++) expect(randomNickname().length).toBeLessThanOrEqual(12);
+  });
+});
+

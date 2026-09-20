@@ -293,7 +293,26 @@ label:has(> select:focus-visible) {
   }
 }
 
+/* Start page mascot bobs gently; still under reduced motion. */
+@keyframes home-mascot-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.home-mascot-float {
+  animation: home-mascot-float 3.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .home-mascot-float {
+    animation: none;
+  }
+
   html {
     scroll-behavior: auto;
   }
