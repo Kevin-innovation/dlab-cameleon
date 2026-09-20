@@ -14,7 +14,14 @@ export const metadata: Metadata = {
   title: "카멜론 — 몸에 색을 칠해 숨는다",
   description:
     "카멜론 룰의 브라우저 숨바꼭질. 한국 서버에서 방을 만들거나 골라 최대 8명이 술래와 카멜레온으로 나뉘어 위장하세요.",
-  icons: { icon: "/mascot.jpg" },
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://playcamelon.vercel.app"),
+  openGraph: {
+    title: "카멜론 — 몸에 색을 칠해 숨는다",
+    description: "최대 8명이 함께하는 브라우저 숨바꼭질. 몸을 칠하고 자세를 맞춰 술래를 속이세요.",
+    images: [{ url: "/hero.jpg", width: 1280, height: 720, alt: "카멜론" }],
+    locale: "ko_KR",
+    type: "website",
+  },
   appleWebApp: {
     capable: true,
     title: "카멜론",
