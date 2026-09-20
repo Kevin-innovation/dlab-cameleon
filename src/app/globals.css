@@ -234,7 +234,7 @@ label:has(> select:focus-visible) {
 
   /* Sits under the pose strip (which ends around 6.6rem) so the two never overlap. */
   .room-social-shell {
-    top: calc(6.9rem + env(safe-area-inset-top));
+    top: calc(6.1rem + env(safe-area-inset-top));
     right: calc(0.75rem + env(safe-area-inset-right));
     bottom: auto;
     left: auto;
@@ -243,10 +243,70 @@ label:has(> select:focus-visible) {
     overflow-y: auto;
   }
 
-  /* Phone: one thin strip under the phase banner — help button + horizontally scrolling poses —
+  /* Phone top bar: every badge is exactly 2.75rem tall inside a 0.5rem gutter, so the rows
+     below it (pose strip at 3.6rem, feed/chat at 6.1rem, centre banners at 6.4rem) are fixed
+     offsets that can never collide with it. */
+  .game-topbar {
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .game-topbar .topbar-right {
+    gap: 0.5rem;
+  }
+
+  .game-topbar > div:not(.topbar-right),
+  .game-topbar .topbar-right > * {
+    height: 2.75rem;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-radius: 0.9rem;
+  }
+
+  .game-topbar div > div {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .game-topbar .text-3xl {
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  .game-topbar .text-lg {
+    font-size: 0.95rem;
+  }
+
+  .game-topbar .text-\[11px\] {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+
+  .game-menu-button {
+    width: 2.75rem;
+    font-size: 1.1rem;
+  }
+
+  .hud-feed {
+    top: 6.1rem;
+    left: 0.75rem;
+    width: min(100%, 220px);
+    font-size: 12px;
+  }
+
+  .hud-center-stack {
+    top: 6.4rem;
+  }
+
+  /* Phone: one thin strip under the top bar — help button + horizontally scrolling poses —
      so the controls never blanket the 3D view. Key badges mean nothing on touch. */
   .game-action-controls {
-    top: 4.4rem;
+    top: 3.6rem;
     right: 0.75rem;
     left: 0.75rem;
     bottom: auto;
@@ -351,8 +411,9 @@ label:has(> select:focus-visible) {
 
   .mobile-touch-actions {
     bottom: calc(0.75rem + env(safe-area-inset-bottom));
-    left: calc(7.75rem + env(safe-area-inset-left));
-    right: calc(10.5rem + env(safe-area-inset-right));
+    /* Clear of the joystick (0.75 + 7rem) and the right thumb cluster (0.75 + 2×5rem + gap). */
+    left: calc(8.1rem + env(safe-area-inset-left));
+    right: calc(12.4rem + env(safe-area-inset-right));
     max-width: none;
     transform: none;
     /* Tailwind v4 centres with the `translate` property, not `transform`; cancel that too. */

@@ -769,16 +769,20 @@ export class GameWorld {
     return [...new Set(close)];
   }
 
+  /** Player-adjustable look sensitivity multiplier (settings menu), 0.4‥2. */
+  lookScale = 1;
+
   lookDelta(dx: number, dy: number) {
     const lim = Math.PI / 2 - 0.04;
+    const LOOK = LOOK_SENS * this.lookScale;
     if (this.watch) {
-      this.specYaw -= dx * LOOK_SENS;
-      this.specPitch = Math.max(-lim, Math.min(lim, this.specPitch - dy * LOOK_SENS));
+      this.specYaw -= dx * LOOK;
+      this.specPitch = Math.max(-lim, Math.min(lim, this.specPitch - dy * LOOK));
       return;
     }
-    if (!this.cling) this.yaw -= dx * LOOK_SENS;
+    if (!this.cling) this.yaw -= dx * LOOK;
     const pitchLim = this.cling ? Math.PI / 5 : lim;
-    this.pitch = Math.max(-pitchLim, Math.min(pitchLim, this.pitch - dy * LOOK_SENS));
+    this.pitch = Math.max(-pitchLim, Math.min(pitchLim, this.pitch - dy * LOOK));
   }
 
   /** Spectator shortcut: cycle the free camera onto each hunter's shoulder. */

@@ -59,6 +59,8 @@ import { useRoomDirectorySync } from "./game/useRoomDirectorySync";
 
 type Tool = "brush" | "dropper" | "fill";
 
+const LOOK_SCALE_KEY = "camelon:lookScale";
+
 const KEY_BY_CODE: Record<string, string> = {
   KeyW: "w",
   KeyA: "a",
@@ -141,6 +143,25 @@ export function GameView({
   const [brush, setBrush] = useState(14);
   const [tool, setTool] = useState<Tool>("dropper");
   const [help, setHelp] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [lookScale, setLookScale] = useState(() => {
+    if (typeof window === "undefined") return 1;
+    try {
+      const saved = Number(window.localStorage.getItem(LOOK_SCALE_KEY));
+      return Number.isFinite(saved) && saved >= 0.4 && saved <= 2 ? saved : 1;
+    } catch {
+      return 1;
+    }
+  });
+  useEffect(() => {
+    lookScaleRef.current = lookScale;
+    if (worldRef.current) worldRef.current.lookScale = lookScale;
+    try {
+      window.localStorage.setItem(LOOK_SCALE_KEY, String(lookScale));
+    } catch {
+      /* storage may be unavailable */
+    }
+  }, [lookScale]);
   const [watching, setWatching] = useState(false);
   const [nowTick, setNowTick] = useState(0);
   const [atDoor, setAtDoor] = useState(false);
@@ -154,6 +175,7 @@ export function GameView({
   const isTouch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse) and (hover: none)").matches;
   const socialVisible = socialOpen;
   const paintOpenRef = useRef(false);
+  const lookScaleRef = useRef(1);
   const tauntRef = useRef<() => void>(() => {});
   const viewActiveRef = useRef(false);
   const watchingRef = useRef(false);
@@ -202,6 +224,7 @@ export function GameView({
       return;
     }
     worldRef.current = world;
+    world.lookScale = lookScaleRef.current;
     if (process.env.NODE_ENV !== "production") {
       // Dev-only handle for the perf audit script (draw calls per map).
       (window as unknown as { __camelonWorld?: GameWorld; __camelonSession?: Session }).__camelonWorld = world;
@@ -1224,7 +1247,7 @@ export function GameView({
           </div>
         )}
 
-        <div aria-live="polite" aria-atomic="false" className="pointer-events-none absolute left-3 top-[4.5rem] z-30 flex w-[min(100%,300px)] flex-col gap-1.5">
+        <div aria-live="polite" aria-atomic="false" className="hud-feed pointer-events-none absolute left-3 top-[4.5rem] z-30 flex w-[min(100%,300px)] flex-col gap-1.5">
           {(hud.feed ?? [])
             .filter((f) => nowTick - f.at < 9000)
             .slice(-6)
@@ -1241,8 +1264,8 @@ export function GameView({
             ))}
         </div>
 
-        <header className="pointer-events-none absolute left-0 right-0 top-0 z-10 flex items-start justify-between p-3">
-          <div className="rounded-2xl bg-black/45 px-3 py-2 backdrop-blur-sm">
+        <header className="game-topbar pointer-events-none absolute left-0 right-0 top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-start gap-2 p-3">
+          <div className="min-w-0 justify-self-start rounded-2xl bg-black/45 px-3 py-2 backdrop-blur-sm">
             <div className="text-[11px] tracking-wide text-lime/80">
               {serverName} · {roomLabel}
               {session.kind === "practice" ? " · AI 매치" : ""} · Three.js
@@ -1256,13 +1279,16 @@ export function GameView({
               {hud.phase === "result" && (hud.winner === "hiders" ? "카멜레온 승리" : "술래 승리")}
             </div>
           </div>
-          {(hud.phase === "prepare" || hud.phase === "hide" || hud.phase === "hunt" || hud.phase === "reveal") && (
+          {hud.phase === "prepare" || hud.phase === "hide" || hud.phase === "hunt" || hud.phase === "reveal" ? (
             <div className="rounded-2xl bg-black/50 px-4 py-2 text-center backdrop-blur-sm">
               <div className="text-[11px] text-white/60">남은 시간</div>
               <div className="font-display text-3xl leading-none text-lime tabular-nums">{timeLeft}</div>
             </div>
+          ) : (
+            <div aria-hidden="true" />
           )}
-          <div className="rounded-2xl bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
+          <div className="topbar-right flex min-w-0 items-start justify-self-end gap-2">
+          <div className="min-w-0 rounded-2xl bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
             <div className="text-[11px] text-white/60">나</div>
             <div className="font-display text-lg leading-none">
               {hud.phase === "lobby"
@@ -1273,6 +1299,17 @@ export function GameView({
                     ? "카멜레온"
                     : "관전"}
             </div>
+          </div>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen}
+            aria-label="메뉴"
+            onClick={() => setMenuOpen(true)}
+            className="game-menu-button pointer-events-auto grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-black/45 text-xl backdrop-blur-sm transition hover:bg-black/65 active:scale-95"
+          >
+            ☰
+          </button>
           </div>
         </header>
 
@@ -1328,23 +1365,23 @@ export function GameView({
           </div>
         )}
 
-        {hud.lastTag && nowTick - hud.lastTag.at < 2200 && hud.phase === "hunt" && (
-          <div className="pointer-events-none absolute left-1/2 top-24 z-30 -translate-x-1/2 rounded-2xl bg-pink px-6 py-2 text-center text-black shadow-lg" role="status" aria-live="polite">
-            <div className="text-[11px] font-semibold tracking-[0.2em]">발견</div>
-            <div className="font-display text-2xl leading-none">
-              {hud.lastTag.byName} → {hud.lastTag.name}
-            </div>
-          </div>
-        )}
-
         {atDoor && !paintOpen && (
           <div className="pointer-events-none absolute left-1/2 bottom-28 z-30 -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-sm">
             <span className="font-display text-lime">E / 문 버튼</span> 문 열기/닫기
           </div>
         )}
 
-        {/* Status banners stack in one column so "벽에 붙음" and "숨은 채 관전" never overlap. */}
-        <div className="pointer-events-none absolute left-1/2 top-28 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+        {/* Every centred status banner lives in this one stack, so none of them can ever overlap. */}
+        <div className="hud-center-stack pointer-events-none absolute left-1/2 top-24 z-30 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-col items-center gap-2">
+          {hud.lastTag && nowTick - hud.lastTag.at < 2200 && hud.phase === "hunt" && (
+            <div className="rounded-2xl bg-pink px-6 py-2 text-center text-black shadow-lg" role="status" aria-live="polite">
+              <div className="text-[11px] font-semibold tracking-[0.2em]">발견</div>
+              <div className="font-display text-2xl leading-none">
+                {hud.lastTag.byName} → {hud.lastTag.name}
+              </div>
+            </div>
+          )}
+
           {clinging && (
             <div className="rounded-2xl bg-black/70 px-5 py-3 text-center">
               <div className="font-display text-xl text-lime">벽에 붙음</div>
@@ -1361,29 +1398,28 @@ export function GameView({
               </p>
             </div>
           )}
+          {me && hud.phase !== "lobby" && !isParticipant(hud, me.id) && (
+            <div
+              className="rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="font-display text-2xl text-cyan-100">관전 중</div>
+              <p className="text-sm text-cyan-50/80">
+                라운드가 진행 중입니다. 다음 라운드부터 참가해요.
+                {hud.phase === "hunt" || hud.phase === "hide" || hud.phase === "prepare" ? ` 이번 단계 종료까지 ${timeLeft}초.` : ""}
+              </p>
+              <p className="mt-1 text-[11px] text-cyan-50/60">벽을 지나 맵을 둘러볼 수 있어요.</p>
+            </div>
+          )}
+          {me && myRole === "spectator" && hud.phase === "hunt" && isParticipant(hud, me.id) && (
+            <div className="rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm">
+              <div className="font-display text-2xl text-cyan-100">유령</div>
+              <p className="text-sm text-cyan-50/80">잡혔습니다. 몸은 투명하고, 벽을 지나 맵을 둘러볼 수 있어요.</p>
+            </div>
+          )}
         </div>
 
-        {me && hud.phase !== "lobby" && !isParticipant(hud, me.id) && (
-          <div
-            className="pointer-events-none absolute left-1/2 top-36 z-30 -translate-x-1/2 rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="font-display text-2xl text-cyan-100">관전 중</div>
-            <p className="text-sm text-cyan-50/80">
-              라운드가 진행 중입니다. 다음 라운드부터 참가해요.
-              {hud.phase === "hunt" || hud.phase === "hide" || hud.phase === "prepare" ? ` 이번 단계 종료까지 ${timeLeft}초.` : ""}
-            </p>
-            <p className="mt-1 text-[11px] text-cyan-50/60">벽을 지나 맵을 둘러볼 수 있어요.</p>
-          </div>
-        )}
-
-        {me && myRole === "spectator" && hud.phase === "hunt" && isParticipant(hud, me.id) && (
-          <div className="pointer-events-none absolute left-1/2 top-36 z-30 -translate-x-1/2 rounded-2xl border border-cyan-200/40 bg-[#123038]/85 px-5 py-3 text-center backdrop-blur-sm">
-            <div className="font-display text-2xl text-cyan-100">유령</div>
-            <p className="text-sm text-cyan-50/80">잡혔습니다. 몸은 투명하고, 벽을 지나 맵을 둘러볼 수 있어요.</p>
-          </div>
-        )}
 
         {hud.phase === "result" && (
           <ResultPanel room={hud} people={people} host={session.isHost()} onNext={() => startRound(true)} />
@@ -1688,6 +1724,65 @@ export function GameView({
         <div className="pointer-events-none absolute right-3 top-16 z-30 rounded-lg bg-black/70 px-2 py-1 font-mono text-[11px] text-lime" aria-hidden="true">
           {perf.avgMs > 0 ? `${(1000 / perf.avgMs).toFixed(0)}fps ${perf.avgMs.toFixed(1)}ms` : "측정 중"} · q{perf.quality} · dpr{perf.pixelRatio.toFixed(2)} · {perf.shadows ? "shadow" : "noshadow"} · {perf.calls}calls · {(perf.triangles / 1000).toFixed(0)}k tri · {perf.lights} lights
         </div>
+      )}
+
+      {menuOpen && (
+        <AccessibleModal titleId="game-menu-title" onClose={() => setMenuOpen(false)} panelClassName="w-full max-w-sm rounded-3xl bg-[#17241c] p-5 shadow-2xl break-keep">
+          <h2 id="game-menu-title" className="font-display text-2xl">메뉴</h2>
+          <p className="mt-1 truncate text-xs text-white/60">
+            {serverName} · {roomLabel} · {hud.phase === "lobby" ? "대기실" : hud.phase === "hunt" ? "수색 중" : hud.phase === "hide" ? "위장 중" : "라운드"}
+          </p>
+          <label className="mt-4 block rounded-xl bg-white/6 p-3">
+            <span className="flex items-center justify-between text-sm">
+              <span>시야 감도</span>
+              <span className="tabular-nums text-lime">{lookScale.toFixed(1)}×</span>
+            </span>
+            <input
+              type="range"
+              name="lookScale"
+              min={0.4}
+              max={2}
+              step={0.1}
+              value={lookScale}
+              onChange={(e) => setLookScale(Number(e.target.value))}
+              className="mt-2 w-full"
+            />
+          </label>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="h-11 rounded-full bg-white/10 text-sm font-semibold transition hover:bg-white/15 active:scale-[0.98]"
+              onClick={() => {
+                setMenuOpen(false);
+                setHelp(true);
+              }}
+            >
+              도움말
+            </button>
+            <button
+              type="button"
+              className="h-11 rounded-full bg-white/10 text-sm font-semibold transition hover:bg-white/15 active:scale-[0.98]"
+              onClick={() => {
+                setMenuOpen(false);
+                setTabOpen(true);
+              }}
+            >
+              현황 (Tab)
+            </button>
+          </div>
+          <button
+            type="button"
+            className="mt-3 h-11 w-full rounded-full border border-pink/50 text-sm font-semibold text-pink transition hover:bg-pink/10 active:scale-[0.98]"
+            onClick={() => {
+              if (window.confirm("방을 나갈까요? 진행 중인 라운드에서는 빠지게 됩니다.")) session.leave();
+            }}
+          >
+            방 나가기
+          </button>
+          <button type="button" className="mt-2 h-11 w-full rounded-full bg-lime font-display text-black transition hover:brightness-110 active:scale-[0.98]" onClick={() => setMenuOpen(false)}>
+            계속하기
+          </button>
+        </AccessibleModal>
       )}
 
       {help && (
