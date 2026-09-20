@@ -99,10 +99,10 @@ function closestSurface(x: number, z: number, b: Collider): SurfacePoint {
 
 /** Collision height per pose; tracks the volume-preserving visual scales in character.ts. */
 export function poseHeight(pose: string) {
-  if (pose === "crouch" || pose === "sit" || pose === "huddle") return 1.35;
-  if (pose === "ball") return 1.4;
+  if (pose === "crouch" || pose === "sit") return 1.25;
+  if (pose === "huddle") return 1.0;
+  if (pose === "ball") return 1.1;
   if (pose === "lie") return 0.6;
-  if (pose === "stretch") return 1.72;
   return 1.72;
 }
 
@@ -259,7 +259,8 @@ export function headHit(x: number, z: number, r: number, prevHead: number, nextH
 export function poseRadius(pose: string) {
   if (pose === "stick") return 0.2;
   if (pose === "stretch") return 0.2;
-  if (pose === "lie" || pose === "ball" || pose === "huddle") return 0.3;
+  if (pose === "ball") return 0.35;
+  if (pose === "lie" || pose === "huddle") return 0.3;
   return 0.26;
 }
 

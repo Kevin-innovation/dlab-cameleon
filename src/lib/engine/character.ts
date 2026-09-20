@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { WHITE } from "../config";
-import { POSE_SHAPES } from "../poses";
+import { PART_BASE, POSE_SHAPES } from "../poses";
 import { BODY_PARTS, BODY_SCALE, type BodyPart, type BodySize, type PaintBlob, type Pose } from "../types";
 
 export type PartLayer = {
@@ -425,6 +425,21 @@ export function animateCharacter(
   const [px, py, pz] = shape.position ?? [0, 0, 0];
   rig.body.rotation.set(rx, ry, rz);
   rig.body.scale.set(shape.scale[0] * size.xz, shape.scale[1] * size.y, shape.scale[2] * size.xz);
+  // Name tag rides above the tallest pose (stretch) instead of through its head.
+  const nameY = Math.max(2.05, 1.72 * shape.scale[1] + 0.35) * size.y;
+  rig.nameSprite.position.y = nameY;
+  rig.ghostBadge.position.y = nameY + 0.37 * size.y;
+
+  // Limbs start from the pose's rest transform every frame; walking/jumping is added on top.
+  for (const [name, part] of Object.entries(rig.parts) as [BodyPart, PartLayer][]) {
+    const limb = shape.parts?.[name];
+    const [bx, by, bz] = limb?.position ?? PART_BASE[name];
+    const [lrx, lry, lrz] = limb?.rotation ?? [0, 0, 0];
+    const [sx, sy, sz] = limb?.scale ?? [1, 1, 1];
+    part.mesh.position.set(bx, by, bz);
+    part.mesh.rotation.set(lrx, lry, lrz);
+    part.mesh.scale.set(sx, sy, sz);
+  }
 
   const airborne = !!opts.airborne;
   const walkOn =
@@ -433,18 +448,19 @@ export function animateCharacter(
     rig.pose !== "lie" &&
     rig.pose !== "sit" &&
     rig.pose !== "ball" &&
-    rig.pose !== "stick";
+    rig.pose !== "stick" &&
+    rig.pose !== "huddle";
   if (walkOn && !reducedMotion) rig.walkT += opts.dt * (opts.ghost ? 6.5 : 10);
   const swing = walkOn && !reducedMotion ? Math.sin(rig.walkT) * 0.7 : 0;
   const bob = walkOn && !reducedMotion ? Math.abs(Math.sin(rig.walkT)) * 0.05 : 0;
   if (airborne) {
-    rig.parts.legL.mesh.rotation.x = 0.42;
-    rig.parts.legR.mesh.rotation.x = -0.18;
-    rig.parts.armL.mesh.rotation.x = -0.95;
+    rig.parts.legL.mesh.rotation.x += 0.42;
+    rig.parts.legR.mesh.rotation.x += -0.18;
+    rig.parts.armL.mesh.rotation.x += -0.95;
   } else {
-    rig.parts.legL.mesh.rotation.x = swing;
-    rig.parts.legR.mesh.rotation.x = -swing;
-    rig.parts.armL.mesh.rotation.x = -swing * 0.85;
+    rig.parts.legL.mesh.rotation.x += swing;
+    rig.parts.legR.mesh.rotation.x += -swing;
+    rig.parts.armL.mesh.rotation.x += -swing * 0.85;
   }
   const shooting = Date.now() < rig.shootUntil;
   const kick = shooting ? Math.min(1, (rig.shootUntil - Date.now()) / 180) : 0;
@@ -458,8 +474,7 @@ export function animateCharacter(
     rig.muzzle.scale.setScalar(0.7 + kick * 1.8);
   } else {
     rig.gun.visible = false;
-    rig.parts.armR.mesh.rotation.x = airborne ? -0.95 : swing * 0.85;
-    rig.parts.armR.mesh.rotation.z = 0;
+    rig.parts.armR.mesh.rotation.x += airborne ? -0.95 : swing * 0.85;
     const flash = rig.muzzle.material as THREE.MeshBasicMaterial;
     flash.opacity = 0;
   }
