@@ -64,6 +64,17 @@ npm test          # 1회 실행
 npm run test:watch
 ```
 
+### 출시 전 자동 플레이(QA)
+
+```bash
+npm run dev -- -p 4881            # 별도 터미널
+NODE_PATH=$(npm root -g) npm run qa:play          # 4개 맵 × 11자세 × 모든 벽 접근 + 천장 점프 + 문 (약 20분)
+NODE_PATH=$(npm root -g) npm run qa:play -- --rounds   # + 맵마다 AI 라운드 1회(태그·연출·결과)
+NODE_PATH=$(npm root -g) npm run qa:online        # 실제 Playroom 방 4명: 생성·코드 입장·목록 입장·강퇴·늦은 입장·방장 승계·퇴장
+```
+
+전역 `playwright`(`npm i -g playwright && npx playwright install chromium`)가 필요합니다. `qa:play`는 몸이 벽·가구 속으로 12cm 이상 들어가면, 점프한 머리가 천장을 넘으면, 문이 E로 안 열리면, 콘솔 에러가 나면 BUG로 보고하고 종료 코드 1을 냅니다.
+
 `npm run audit:placement`는 모든 맵의 소품이 벽·칸막이·서로·문을 침범하는지와 소파·책장이 벽(또는 등을 맞댄 서가) 없이 떠 있는지 검사합니다. 현재 감사(`audit:gameplay`)는 맵 크기, 8인 스폰, 스폰 충돌, 주요 은신처 수, 실제 소품 수, 회전 충돌, 공중 오브젝트를 검사합니다. 경고는 Phase 4 맵 리빌드의 작업 목록이며, 오류가 있으면 통과하지 않습니다.
 
 AI 연습전 대기실에서는 **술래 설정**을 `AI 술래`, `내가 술래`, `랜덤` 중에서 고를 수 있습니다.

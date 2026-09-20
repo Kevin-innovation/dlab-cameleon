@@ -1,7 +1,7 @@
 import { SHOT_COOLDOWN, TAG_RANGE, WHITE } from "./config";
 import { colorMatch, hunterVisibility, lightLevelAt } from "./camouflage";
 import { gatherPositions } from "./gather";
-import { moveWithSlide, poseRadius } from "./engine/collision";
+import { blocked, moveWithSlide, poseHeight, poseRadius } from "./engine/collision";
 import { doorColliders, mapColliders } from "./maps";
 import { findPath, NAV_HEAD_HEIGHT, NAV_STEP_HEIGHT, navGridFor, sightClear, sightGridFor, type NavGrid } from "./nav";
 import { hiderAlive, isHunter, roleOf } from "./round";
@@ -260,10 +260,14 @@ export function hideSpot(map: GameMap, i: number, round: number): HideSpot {
       Math.round(72 + Math.min(12, distanceFromHunter * 0.45) + (covered ? 8 : 0) + paletteMatch * 0.08 + shade),
     ),
   );
+  // A pose whose collision footprint does not fit here (lying between a wall and a
+  // cabinet) would render inside the furniture; fall back to a compact pose.
+  const wanted = poses[Math.floor(rnd() * poses.length)];
+  const fits = !blocked(x, z, poseRadius(wanted), mapColliders(map), { w: map.w, d: map.d }, 0, poseHeight(wanted));
   return {
     x,
     z,
-    pose: poses[Math.floor(rnd() * poses.length)],
+    pose: fits ? wanted : "crouch",
     fill,
     palette,
     quality,

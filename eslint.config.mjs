@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Headless QA drivers run under plain Node with a global playwright (CommonJS).
+    "scripts/qa/**",
   ]),
 ]);
 

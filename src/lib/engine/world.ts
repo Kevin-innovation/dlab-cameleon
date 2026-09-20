@@ -1612,6 +1612,38 @@ export class GameWorld {
     return { calls: info.calls, triangles: info.triangles, meshes: this.mapGroup.children.length };
   }
 
+  /** Whether the local body can take `pose` here without its collision footprint entering a solid. */
+  poseFits(pose: Pose) {
+    return !blockedByBoxes(this.localX, this.localZ, poseRadius(pose), this.colliders, this.localY, this.localY + poseHeight(pose));
+  }
+
+  /**
+   * QA helper: how far each body part of a player sinks into any solid collider (metres,
+   * 0 = clean). Used by the headless play-through to catch "pose clips through wall" bugs.
+   */
+  clipReport(playerId: string, tolerance = 0.06) {
+    const rig = this.players.get(playerId);
+    if (!rig) return [];
+    rig.group.updateMatrixWorld(true);
+    const box = new THREE.Box3();
+    const out: { part: string; depth: number; box: { x: number; z: number } }[] = [];
+    for (const [name, part] of Object.entries(rig.parts)) {
+      // Geometry only: the (hidden) gun hangs off the right arm and must not count as body.
+      const geo = part.mesh.geometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      box.copy(geo.boundingBox!).applyMatrix4(part.mesh.matrixWorld);
+      for (const c of this.colliders) {
+        if (c.rotation) continue;
+        const dx = Math.min(box.max.x, c.maxX) - Math.max(box.min.x, c.minX);
+        const dz = Math.min(box.max.z, c.maxZ) - Math.max(box.min.z, c.minZ);
+        const dy = Math.min(box.max.y, c.maxY) - Math.max(box.min.y, c.minY);
+        const depth = Math.min(dx, dz, dy);
+        if (depth > tolerance) out.push({ part: name, depth: Math.round(depth * 100) / 100, box: { x: (c.minX + c.maxX) / 2, z: (c.minZ + c.maxZ) / 2 } });
+      }
+    }
+    return out;
+  }
+
   /** One-line performance snapshot: frame time, adaptive step, pixel ratio, draw calls, lights. */
   perfSnapshot() {
     const info = this.renderer.info.render;

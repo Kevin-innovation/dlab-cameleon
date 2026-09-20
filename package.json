@@ -10,7 +10,9 @@
     "audit:gameplay": "jiti scripts/audit-gameplay.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "audit:placement": "jiti scripts/audit-placement.ts"
+    "audit:placement": "jiti scripts/audit-placement.ts",
+    "qa:play": "node scripts/qa/playthrough.cjs",
+    "qa:online": "node scripts/qa/online.cjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.4",

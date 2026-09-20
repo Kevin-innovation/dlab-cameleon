@@ -144,6 +144,18 @@ export function GameView({
   const [tool, setTool] = useState<Tool>("dropper");
   const [help, setHelp] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [poseRefusedAt, setPoseRefusedAt] = useState(0);
+  const pickPose = useCallback(
+    (pose: Pose) => {
+      const w = worldRef.current;
+      if (!w) {
+        session.me().set("pose", pose, true);
+        return;
+      }
+      if (!applyPosePick(session, w, pose)) setPoseRefusedAt(Date.now());
+    },
+    [session],
+  );
   const [lookScale, setLookScale] = useState(() => {
     if (typeof window === "undefined") return 1;
     try {
@@ -347,7 +359,7 @@ export function GameView({
         const poseIndex = (POSE_KEYS as readonly string[]).indexOf(k);
         if (poseIndex >= 0) {
           const pose = POSES[poseIndex]?.id;
-          if (pose) applyPosePick(session, world, pose);
+          if (pose) pickPose(pose);
         }
         if (k === "c" && !watchingRef.current) {
           const room = session.getRoom();
@@ -997,7 +1009,7 @@ export function GameView({
       viewActiveRef.current = false;
       worldRef.current = null;
     };
-  }, [session, toggleNearbyDoor, pickColor, showStats]);
+  }, [session, toggleNearbyDoor, pickColor, showStats, pickPose]);
 
   useEffect(() => {
     const c = previewRef.current;
@@ -1387,6 +1399,11 @@ export function GameView({
             </div>
           )}
 
+          {nowTick - poseRefusedAt < 1800 && (
+            <div className="rounded-2xl bg-black/70 px-5 py-2 text-center" role="status">
+              <div className="font-display text-base text-pink">공간이 좁아 이 자세를 취할 수 없어요</div>
+            </div>
+          )}
           {clinging && (
             <div className="rounded-2xl bg-black/70 px-5 py-3 text-center">
               <div className="font-display text-xl text-lime">벽에 붙음</div>
@@ -1511,14 +1528,7 @@ export function GameView({
                   aria-label={p.label}
                   aria-pressed={me?.pose === p.id}
                   title={`${p.hint} · ${POSE_KEYS[index]} 키`}
-                  onClick={() => {
-                    const w = worldRef.current;
-                    if (!w) {
-                      session.me().set("pose", p.id, true);
-                      return;
-                    }
-                    applyPosePick(session, w, p.id);
-                  }}
+                  onClick={() => pickPose(p.id)}
                   className={`shortcut-control hud-button ${me?.pose === p.id ? "bg-lime text-black" : "bg-black/45"}`}
                 >
                   <span className="shortcut-key-badge" aria-hidden="true">{POSE_KEYS[index]}</span>
@@ -2103,20 +2113,24 @@ function TouchControls({
  * axis-aligned wall is within reach the body also snaps onto it (E/Q climb, Space detach).
  * Picking it again lets go and stands up.
  */
-function applyPosePick(session: Session, world: GameWorld, pose: Pose) {
+function applyPosePick(session: Session, world: GameWorld, pose: Pose): boolean {
   const cur = ((session.me().get("pose") as Pose) || "stand") as Pose;
+  // Poses with a wider footprint (lying, ball) are refused where they would not fit,
+  // otherwise the body renders inside the wall or furniture next to it.
+  if (pose !== "stick" && pose !== cur && !world.poseFits(pose)) return false;
   if (pose === "stick") {
     if (cur === "stick") {
       world.exitCling();
       session.me().set("pose", "stand", true);
-      return;
+      return true;
     }
     world.tryCling(cur);
     session.me().set("pose", "stick", true);
-    return;
+    return true;
   }
   world.exitCling();
   session.me().set("pose", pose, true);
+  return true;
 }
 
 /** Human label for a 0‥1 roughness value (0 = mirror-like, 1 = chalky). */
