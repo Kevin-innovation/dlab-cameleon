@@ -90,7 +90,7 @@ export const Lobby = memo(function Lobby({
   const readyCount = people.filter((p) => p.ready).length;
   const allReady = people.length >= 2 && readyCount === people.length;
   return (
-    <aside className="z-20 flex max-h-[46dvh] w-full shrink-0 flex-col overflow-y-auto overscroll-contain border-b border-white/10 bg-[#121c17] p-4 md:h-full md:max-h-none md:w-[min(100%,360px)] md:border-b-0 md:border-r">
+    <aside className="z-20 flex max-h-[46dvh] w-full shrink-0 flex-col overflow-y-auto overscroll-contain border-b border-white/10 bg-[#121c17] p-3 md:h-full md:max-h-none md:w-[300px] lg:w-[360px] md:border-b-0 md:border-r">
       <p className="text-xs text-lime">
         {serverName} · {roomLabel}
       </p>

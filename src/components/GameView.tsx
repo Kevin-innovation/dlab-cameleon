@@ -151,6 +151,7 @@ export function GameView({
   // `?stats` shows renderer numbers so a laggy machine can be diagnosed without dev tools.
   const [perf, setPerf] = useState<ReturnType<GameWorld["perfSnapshot"]> | null>(null);
   const showStats = typeof window !== "undefined" && /[?&]stats/.test(window.location.search);
+  const isTouch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse) and (hover: none)").matches;
   const socialVisible = socialOpen;
   const paintOpenRef = useRef(false);
   const tauntRef = useRef<() => void>(() => {});
@@ -503,7 +504,9 @@ export function GameView({
         return;
       }
       if (e.button !== 0) return;
-      if (e.pointerType && e.pointerType !== "mouse") return;
+      // Touch drives movement/look through the on-screen pads, so stage taps are ignored —
+      // except while painting, where the finger is the dropper/brush.
+      if (e.pointerType && e.pointerType !== "mouse" && !paintOpenRef.current) return;
       const el = e.target as HTMLElement;
       if (el.closest('[data-touch-control="true"]')) {
         viewActiveRef.current = false;
@@ -536,6 +539,8 @@ export function GameView({
           return;
         }
         paintHeld = true;
+        // Keep the browser from turning a brush drag into a scroll/zoom gesture.
+        if (e.pointerType !== "mouse") e.preventDefault();
         try {
           stage?.setPointerCapture(e.pointerId);
         } catch {
@@ -1339,7 +1344,7 @@ export function GameView({
         {me?.pose === "stick" && (
           <div className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
             <div className="font-display text-xl text-lime">벽에 붙음</div>
-            <p className="text-sm text-white/75">A/D 좌우 · E 오르기 · Q 내려가기 · Space 떼기</p>
+            <p className="text-sm text-white/75">{isTouch ? "조이스틱 좌우 · 오르기 · 내려가기 · 떼기 버튼" : "A/D 좌우 · E 오르기 · Q 내려가기 · Space 떼기"}</p>
           </div>
         )}
 
@@ -1443,7 +1448,7 @@ export function GameView({
                 type="button"
                 aria-keyshortcuts="F"
                 aria-pressed={paintOpen}
-                className={`shortcut-control hud-button ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
+                className={`shortcut-control hud-button desktop-only ${paintOpen ? "bg-lime text-black" : "bg-black/50"}`}
                 onClick={() => setPaintOpen((v) => !v)}
               >
                 <span className="shortcut-key-badge" aria-hidden="true">F</span>
@@ -1507,19 +1512,19 @@ export function GameView({
 
         {paintOpen && myRole !== "hunter" && hud.phase !== "result" && hud.phase !== "reveal" && (
           <aside
-            className="absolute bottom-24 right-3 z-20 max-h-[calc(100dvh-6rem)] w-[230px] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#121a16]/95 p-3 shadow-xl"
+            className="paint-panel absolute bottom-24 right-3 z-20 max-h-[calc(100dvh-6rem)] w-[230px] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#121a16]/95 p-3 shadow-xl"
             role="dialog"
             aria-modal="false"
             aria-labelledby="paint-panel-title"
           >
-            <div className="mb-2 flex items-center justify-between text-sm">
+            <div className="paint-head mb-2 flex items-center justify-between text-sm">
               <span id="paint-panel-title" className="font-display">위장 팔레트</span>
               <button type="button" onClick={() => setPaintOpen(false)}>
                 닫기
               </button>
             </div>
-            <canvas ref={previewRef} width={200} height={200} aria-label="현재 내 캐릭터 미리보기" className="w-full rounded-xl bg-[#0b100d]" />
-            <div className="mt-2 flex gap-1">
+            <canvas ref={previewRef} width={200} height={200} aria-label="현재 내 캐릭터 미리보기" className="paint-preview w-full rounded-xl bg-[#0b100d]" />
+            <div className="paint-tools mt-2 flex gap-1">
               {(
                 [
                   ["dropper", "스포이드"],
@@ -1537,8 +1542,10 @@ export function GameView({
                 </button>
               ))}
             </div>
-            <ColorWheel value={color} onChange={pickColor} recent={recentColors} />
-            <label className="mt-1 flex items-center gap-2 whitespace-nowrap text-xs">
+            <div className="paint-wheel">
+              <ColorWheel value={color} onChange={pickColor} recent={recentColors} />
+            </div>
+            <label className="paint-finish mt-1 flex items-center gap-2 whitespace-nowrap text-xs">
               재질
               <input
                 type="range"
@@ -1553,7 +1560,7 @@ export function GameView({
               />
               <span className="w-10 shrink-0 text-right text-[10px] text-white/70">{finishLabel(roughness)}</span>
             </label>
-            <label className="mt-1 flex items-center gap-2 text-xs">
+            <label className="paint-brush mt-1 flex items-center gap-2 text-xs">
               붓
               <input
                 type="range"
@@ -1566,7 +1573,7 @@ export function GameView({
                 className="w-full"
               />
             </label>
-            <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-2.5">
+            <div className="paint-meter mt-3 rounded-xl border border-white/10 bg-white/5 p-2.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold">위장도</span>
                 <span className={camouflage.score !== null && camouflage.score >= 68 ? "text-lime" : "text-pink"}>
@@ -1624,7 +1631,7 @@ export function GameView({
                 </button>
               )}
             </div>
-            <div className="mt-2 flex gap-1">
+            <div className="paint-actions mt-2 flex gap-1">
               <button
                 type="button"
                 className="flex-1 rounded-lg bg-white/10 py-1 text-xs"
@@ -1854,7 +1861,7 @@ function TouchControls({
       type="button"
       aria-label={label}
       data-touch-control="true"
-      className={`mobile-touch-button pointer-events-auto min-h-11 select-none rounded-xl border border-white/15 bg-black/65 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm ${className}`}
+      className={`mobile-touch-button pointer-events-auto h-10 select-none whitespace-nowrap rounded-xl border border-white/15 bg-black/65 px-2.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm ${className}`}
       onPointerDown={(event) => onPress(key, event)}
       onPointerUp={(event) => onRelease(key, event)}
       onPointerCancel={(event) => onRelease(key, event)}
@@ -1870,7 +1877,7 @@ function TouchControls({
     <div className="mobile-touch-controls pointer-events-none absolute inset-0 z-20 select-none" role="group" aria-label="터치 게임 조작">
       <div
         ref={joystickRef}
-        className="mobile-joystick pointer-events-auto absolute bottom-3 left-3 h-32 w-32 touch-none rounded-full border border-white/20 bg-black/35 shadow-lg backdrop-blur-sm"
+        className="mobile-joystick pointer-events-auto absolute bottom-3 left-3 h-28 w-28 touch-none rounded-full border border-white/20 bg-black/35 shadow-lg backdrop-blur-sm"
         data-touch-control="true"
         role="group"
         tabIndex={0}
@@ -1889,7 +1896,7 @@ function TouchControls({
       </div>
 
       <div
-        className="mobile-look-pad pointer-events-auto absolute bottom-3 right-3 flex h-32 w-44 touch-none items-center justify-center rounded-2xl border border-white/15 bg-black/25 text-xs text-white/60 backdrop-blur-sm"
+        className="mobile-look-pad pointer-events-auto absolute bottom-3 right-3 flex h-28 w-36 touch-none items-center justify-center rounded-2xl border border-white/15 bg-black/25 text-xs text-white/60 backdrop-blur-sm"
         data-touch-control="true"
         tabIndex={0}
         aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
@@ -1905,7 +1912,7 @@ function TouchControls({
         시야 드래그
       </div>
 
-      <div className="mobile-touch-actions pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+      <div className="mobile-touch-actions pointer-events-auto absolute bottom-3 flex gap-1.5">
         {clinging ? (
           <>
             {button("e", "오르기")}
@@ -1915,7 +1922,7 @@ function TouchControls({
         ) : (
           <>
             {button("shift", "달리기")}
-            {button(" ", "점프·벽 붙기")}
+            {button(" ", "점프")}
           </>
         )}
         {canOpenDoor && (
@@ -1923,7 +1930,7 @@ function TouchControls({
             type="button"
             data-touch-control="true"
             aria-label="근처 문 열기 또는 닫기"
-            className="mobile-touch-button min-h-11 rounded-xl border border-lime/40 bg-black/65 px-3 py-2 text-xs font-semibold text-lime shadow-lg backdrop-blur-sm"
+            className="mobile-touch-button h-10 whitespace-nowrap rounded-xl border border-lime/40 bg-black/65 px-2.5 text-[11px] font-semibold text-lime shadow-lg backdrop-blur-sm"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1937,7 +1944,7 @@ function TouchControls({
           <button
             type="button"
             data-touch-control="true"
-            className="mobile-touch-button min-h-11 rounded-xl border border-pink/40 bg-pink px-3 py-2 text-xs font-semibold text-black shadow-lg backdrop-blur-sm"
+            className="mobile-touch-button h-10 whitespace-nowrap rounded-xl border border-pink/40 bg-pink px-2.5 text-[11px] font-semibold text-black shadow-lg backdrop-blur-sm"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1952,7 +1959,7 @@ function TouchControls({
             type="button"
             data-touch-control="true"
             aria-pressed={watching}
-            className={`mobile-touch-button min-h-11 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${watching ? "bg-lime text-black" : "bg-black/65 text-white"}`}
+            className={`mobile-touch-button h-10 whitespace-nowrap rounded-xl border border-white/15 px-2.5 text-[11px] font-semibold shadow-lg backdrop-blur-sm ${watching ? "bg-lime text-black" : "bg-black/65 text-white"}`}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1967,7 +1974,7 @@ function TouchControls({
             type="button"
             data-touch-control="true"
             aria-pressed={paintOpen}
-            className={`mobile-touch-button min-h-11 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-sm ${paintOpen ? "bg-lime text-black" : "bg-black/65 text-white"}`}
+            className={`mobile-touch-button h-10 whitespace-nowrap rounded-xl border border-white/15 px-2.5 text-[11px] font-semibold shadow-lg backdrop-blur-sm ${paintOpen ? "bg-lime text-black" : "bg-black/65 text-white"}`}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
