@@ -360,11 +360,12 @@ export default function GameApp() {
   );
 }
 
-const HOWTO_STEPS: { icon: string; title: string; body: string; accent: string }[] = [
-  { icon: "🎰", title: "술래 뽑기", body: "모두 한자리에 모이면 룰렛이 술래를 정해요.", accent: "from-pink/30 to-pink/5" },
-  { icon: "🎨", title: "몸 칠하기", body: "스포이드로 벽·가구 색을 찍고 몸에 발라요. 자세와 몸 크기로 실루엣까지 맞추면 완벽!", accent: "from-lime/30 to-lime/5" },
-  { icon: "🔦", title: "수색", body: "술래는 1인칭으로 돌아다니며 어색한 곳을 조준해 찾아내요. 카멜레온은 휘파람으로 속일 수 있어요.", accent: "from-sky-300/30 to-sky-300/5" },
-  { icon: "🏆", title: "승리", body: "시간 안에 전원 발견되면 술래 승! 한 명이라도 남으면 카멜레온 승!", accent: "from-amber-300/30 to-amber-300/5" },
+/** Each body is exactly two authored lines (≤ 18 chars) so cards never wrap into orphans. */
+const HOWTO_STEPS: { icon: string; title: string; lines: [string, string]; accent: string }[] = [
+  { icon: "🎰", title: "술래 뽑기", lines: ["모두 한자리에 모이면", "룰렛이 술래를 정해요."], accent: "from-pink/30 to-pink/5" },
+  { icon: "🎨", title: "몸 칠하기", lines: ["벽·가구 색을 찍어 몸에 바르고", "자세로 실루엣까지 맞춰요."], accent: "from-lime/30 to-lime/5" },
+  { icon: "🔦", title: "수색", lines: ["술래는 어색한 곳을 조준해 찾고", "카멜레온은 휘파람으로 속여요."], accent: "from-sky-300/30 to-sky-300/5" },
+  { icon: "🏆", title: "승리", lines: ["시간 안에 전원 발견 → 술래 승", "한 명이라도 남으면 카멜레온 승"], accent: "from-amber-300/30 to-amber-300/5" },
 ];
 
 const HOWTO_KEYS: { key: string; label: string }[] = [
@@ -372,7 +373,7 @@ const HOWTO_KEYS: { key: string; label: string }[] = [
   { key: "F", label: "페인트" },
   { key: "1~0 -", label: "자세" },
   { key: "Space", label: "벽 붙기" },
-  { key: "E / Q", label: "오르기 · 내려가기" },
+  { key: "E/Q", label: "오르내리기" },
   { key: "T", label: "휘파람" },
   { key: "V", label: "관전" },
   { key: "Tab", label: "현황" },
@@ -380,12 +381,12 @@ const HOWTO_KEYS: { key: string; label: string }[] = [
 
 function HowTo({ onClose }: { onClose: () => void }) {
   return (
-    <AccessibleModal titleId="howto-title" onClose={onClose} panelClassName="max-h-[90dvh] w-full max-w-xl overflow-y-auto overscroll-contain rounded-3xl bg-[#142019] p-6 shadow-2xl">
+    <AccessibleModal titleId="howto-title" onClose={onClose} panelClassName="max-h-[90dvh] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-3xl bg-[#142019] p-6 shadow-2xl break-keep">
       <div className="flex items-center gap-3">
-        <Image src="/mascot.jpg" alt="" width={56} height={56} className="h-14 w-14 rounded-2xl object-cover ring-2 ring-lime/60" />
+        <Image src="/mascot.jpg" alt="" width={56} height={56} className="h-14 w-14 shrink-0 rounded-2xl object-cover ring-2 ring-lime/60" />
         <div>
           <h2 id="howto-title" className="font-display text-3xl leading-none">카멜론 룰</h2>
-          <p className="mt-1 text-sm text-lime/90">하얀 몸에 색을 칠해 배경이 되자 — 술래를 속이면 이긴다!</p>
+          <p className="mt-1 truncate text-sm text-lime/90">하얀 몸에 색을 칠해 배경이 되자 — 술래를 속이면 이긴다!</p>
         </div>
       </div>
 
@@ -397,22 +398,28 @@ function HowTo({ onClose }: { onClose: () => void }) {
               <span className="text-2xl" aria-hidden="true">{step.icon}</span>
               <span className="font-display text-lg">{step.title}</span>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-white/85">{step.body}</p>
+            <p className="mt-2 text-sm leading-relaxed text-white/85">
+              {step.lines.map((line) => (
+                <span key={line} className="block whitespace-nowrap">
+                  {line}
+                </span>
+              ))}
+            </p>
           </li>
         ))}
       </ol>
 
       <section className="mt-4 rounded-2xl bg-black/30 p-4" aria-labelledby="howto-keys">
         <h3 id="howto-keys" className="text-xs font-semibold tracking-wide text-white/60">조작 (PC)</h3>
-        <ul className="mt-2 flex flex-wrap gap-2">
+        <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {HOWTO_KEYS.map((entry) => (
-            <li key={entry.key} className="flex items-center gap-1.5 rounded-lg bg-white/8 px-2 py-1 text-xs">
+            <li key={entry.key} className="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg bg-white/8 px-2 text-xs">
               <kbd className="rounded-md border border-lime/50 bg-black/60 px-1.5 py-0.5 font-mono text-[11px] font-bold text-lime">{entry.key}</kbd>
               <span className="text-white/85">{entry.label}</span>
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-xs text-white/55">모바일은 가로 화면에서 왼쪽 조이스틱 · 오른쪽 시야 패드 · 화면 버튼을 써요.</p>
+        <p className="mt-2 truncate text-xs text-white/55">모바일: 가로 화면 · 왼쪽 조이스틱 · 오른쪽 시야 패드 · 화면 버튼</p>
       </section>
 
       <section className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4" aria-label="점수">
@@ -423,15 +430,16 @@ function HowTo({ onClose }: { onClose: () => void }) {
           ["눈앞에서 속이기", "초당 최대 10"],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl bg-white/6 px-2 py-2">
-            <div className="font-display text-lg text-lime">{value}</div>
-            <div className="text-[11px] text-white/65">{label}</div>
+            <div className="whitespace-nowrap font-display text-lg text-lime">{value}</div>
+            <div className="whitespace-nowrap text-[11px] text-white/65">{label}</div>
           </div>
         ))}
       </section>
 
-      <p className="mt-3 text-center text-xs text-white/55">
-        탄약 제한(기본 {DEFAULT_AMMO}발: 빗나가면 −1, 맞히면 +1)과 감염 모드는 방 옵션 · 맵 {MAPS.map((m) => m.name).join(" / ")}
-      </p>
+      <div className="mt-3 space-y-0.5 text-center text-xs text-white/55">
+        <p className="truncate">탄약 제한(기본 {DEFAULT_AMMO}발 · 빗나가면 −1 · 맞히면 +1)과 감염 모드는 방 옵션</p>
+        <p className="truncate">맵 · {MAPS.map((m) => m.name).join(" · ")}</p>
+      </div>
 
       <button type="button" onClick={onClose} className="mt-5 h-12 w-full rounded-full bg-lime font-display text-lg text-black transition hover:brightness-110 active:scale-[0.98]">
         알겠어요, 해볼게요!
