@@ -46,10 +46,11 @@ const QUALITY_STEPS: { pixelRatio: number; shadows: boolean }[] = [
   { pixelRatio: 1, shadows: true },
   { pixelRatio: 1, shadows: false },
 ];
-const QUALITY_SAMPLE_FRAMES = 120;
+const QUALITY_SAMPLE_FRAMES = 90;
+const ROAMING_LIGHTS = 3;
 /** How far (surface distance) a wall may be for Space / the stick pose to snap onto it. */
 const CLING_REACH = 0.7;
-const QUALITY_SLOW_FRAME_MS = 26;
+const QUALITY_SLOW_FRAME_MS = 20;
 const SHADOW_REFRESH_EVERY = 2;
 
 const LOCAL_PROP_MODELS: Partial<Record<PropKind, string>> = {
@@ -146,6 +147,11 @@ export class GameWorld {
   private modelTemplates = new Map<string, Promise<THREE.Group>>();
   private mapLoadSeq = 0;
   private modelStats = { pending: 0, loaded: 0, failed: 0 };
+  private roamingLights: { point: THREE.PointLight; index: number }[] = [];
+  private fixtureLights: { x: number; y: number; z: number; color: string; intensity: number; distance: number }[] = [];
+  private roamClock = 0;
+  /** Rolling average frame time from the last quality window, for the ?stats overlay. */
+  private lastAverageMs = 0;
   /** Adaptive quality: index into QUALITY_STEPS, only ever stepped down when frames run long. */
   private qualityStep = 0;
   private frameClock = 0;
@@ -158,7 +164,8 @@ export class GameWorld {
     this.isMobile = window.matchMedia("(max-width: 767px), (pointer: coarse) and (hover: none)").matches;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: !this.isMobile,
+      // MSAA on top of a ≥1.5 device pixel ratio is nearly invisible and costs a lot of fill.
+      antialias: !this.isMobile && (window.devicePixelRatio || 1) < 1.5,
       alpha: false,
       powerPreference: "high-performance",
     });
@@ -237,7 +244,7 @@ export class GameWorld {
     sun.target.position.set(map.w / 2, 0, map.d / 2);
     this.mapGroup.add(sun.target);
     sun.castShadow = !this.isMobile;
-    const shadowMapSize = this.isMobile ? 512 : half > 24 ? 2048 : 1024;
+    const shadowMapSize = this.isMobile ? 512 : 1024;
     sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 40 + half * 2;
@@ -248,12 +255,8 @@ export class GameWorld {
     this.mapGroup.add(hemi, sun);
 
     const accentColor = map.id === "sewer" ? "#65c8ba" : map.id === "backrooms" ? "#fff0a3" : "#ffd1a1";
-    const accentPoints = this.isMobile
-      ? [{ x: map.w * 0.5, z: map.d * 0.42 }]
-      : [
-          { x: map.w * 0.24, z: map.d * 0.28 },
-          { x: map.w * 0.76, z: map.d * 0.7 },
-        ];
+    // One fill light per map; per-room light comes from the roaming fixture lights below.
+    const accentPoints = [{ x: map.w * 0.5, z: map.d * 0.42 }];
     for (const point of accentPoints) {
       const accent = new THREE.PointLight(accentColor, this.isMobile ? 0.42 : 0.72, Math.max(map.w, map.d) * 0.62, 2);
       accent.position.set(point.x, map.ceiling * 0.68, point.z);
@@ -411,12 +414,18 @@ export class GameWorld {
       if (batch.blocker) this.camBlockers.push(mesh);
     }
 
-    // Room lights: a few real point lights on desktop, emissive fixtures only on mobile.
-    const lightBudget = this.isMobile ? 0 : 6;
-    for (const light of (map.lights ?? []).slice(0, lightBudget)) {
+    // Room lights: every fixture glows (emissive), but only ROAMING_LIGHTS real point lights
+    // exist; they follow the player to the nearest fixtures so the light count (and the
+    // shader cost of each lit fragment) stays constant however many rooms a map has.
+    this.roamingLights = [];
+    this.fixtureLights = map.lights ?? [];
+    const lightBudget = this.isMobile ? 0 : Math.min(ROAMING_LIGHTS, this.fixtureLights.length);
+    for (let i = 0; i < lightBudget; i++) {
+      const light = this.fixtureLights[i];
       const point = new THREE.PointLight(light.color, light.intensity, light.distance, 1.2);
       point.position.set(light.x, light.y, light.z);
       this.mapGroup.add(point);
+      this.roamingLights.push({ point, index: i });
     }
 
     this.doorRigs = [];
@@ -1458,9 +1467,38 @@ export class GameWorld {
     });
   }
 
+  /** Re-assign the roaming point lights to the fixtures nearest the camera (cheap; every 0.4s). */
+  private updateRoamingLights() {
+    if (this.roamingLights.length === 0) return;
+    const now = performance.now();
+    if (now - this.roamClock < 400) return;
+    this.roamClock = now;
+    const cx = this.camera.position.x;
+    const cz = this.camera.position.z;
+    const nearest = this.fixtureLights
+      .map((light, index) => ({ index, d: (light.x - cx) ** 2 + (light.z - cz) ** 2 }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, this.roamingLights.length)
+      .map((entry) => entry.index);
+    // Keep lights that are still among the nearest where they are; move the others to the free slots.
+    const free = nearest.filter((index) => !this.roamingLights.some((slot) => slot.index === index));
+    for (const slot of this.roamingLights) {
+      if (nearest.includes(slot.index)) continue;
+      const index = free.shift();
+      if (index === undefined) break;
+      const light = this.fixtureLights[index];
+      slot.index = index;
+      slot.point.position.set(light.x, light.y, light.z);
+      slot.point.color.set(light.color);
+      slot.point.intensity = light.intensity;
+      slot.point.distance = light.distance;
+    }
+  }
+
   render() {
     this.tickTracers();
     this.tickKillFx();
+    this.updateRoamingLights();
     this.shadowFrame = (this.shadowFrame + 1) % SHADOW_REFRESH_EVERY;
     if (this.renderer.shadowMap.enabled && this.shadowFrame === 0) this.renderer.shadowMap.needsUpdate = true;
     this.renderer.render(this.scene, this.camera);
@@ -1482,6 +1520,7 @@ export class GameWorld {
     this.frameClock = now;
     if (this.frameCount < QUALITY_SAMPLE_FRAMES) return;
     const average = this.frameAccum / this.frameCount;
+    this.lastAverageMs = average;
     this.frameAccum = 0;
     this.frameCount = 0;
     if (this.isMobile || average <= QUALITY_SLOW_FRAME_MS || this.qualityStep >= QUALITY_STEPS.length - 1) return;
@@ -1507,6 +1546,20 @@ export class GameWorld {
   frameStats() {
     const info = this.renderer.info.render;
     return { calls: info.calls, triangles: info.triangles, meshes: this.mapGroup.children.length };
+  }
+
+  /** One-line performance snapshot: frame time, adaptive step, pixel ratio, draw calls, lights. */
+  perfSnapshot() {
+    const info = this.renderer.info.render;
+    return {
+      avgMs: this.lastAverageMs,
+      quality: this.qualityStep,
+      pixelRatio: this.renderer.getPixelRatio(),
+      shadows: this.renderer.shadowMap.enabled,
+      calls: info.calls,
+      triangles: info.triangles,
+      lights: this.roamingLights.length + 1,
+    };
   }
 
   /** Colour and surface finish under the pointer; the finish feeds the material axis of camouflage. */

@@ -148,6 +148,9 @@ export function GameView({
   const [tabOpen, setTabOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
   const [graphicsError, setGraphicsError] = useState("");
+  // `?stats` shows renderer numbers so a laggy machine can be diagnosed without dev tools.
+  const [perf, setPerf] = useState<ReturnType<GameWorld["perfSnapshot"]> | null>(null);
+  const showStats = typeof window !== "undefined" && /[?&]stats/.test(window.location.search);
   const socialVisible = socialOpen;
   const paintOpenRef = useRef(false);
   const tauntRef = useRef<() => void>(() => {});
@@ -921,6 +924,7 @@ export function GameView({
       }
       setAtDoor(!!worldRef.current?.nearDoor());
       setClinging(!!worldRef.current?.clinging());
+      if (showStats && worldRef.current) setPerf(worldRef.current.perfSnapshot());
     }, 120);
 
     return () => {
@@ -958,7 +962,7 @@ export function GameView({
       viewActiveRef.current = false;
       worldRef.current = null;
     };
-  }, [session, toggleNearbyDoor, pickColor]);
+  }, [session, toggleNearbyDoor, pickColor, showStats]);
 
   useEffect(() => {
     const c = previewRef.current;
@@ -1667,6 +1671,12 @@ export function GameView({
           open={socialVisible}
           onToggle={() => setSocialOpen((value) => !value)}
         />
+      )}
+
+      {showStats && perf && (
+        <div className="pointer-events-none absolute right-3 top-16 z-30 rounded-lg bg-black/70 px-2 py-1 font-mono text-[11px] text-lime" aria-hidden="true">
+          {perf.avgMs > 0 ? `${(1000 / perf.avgMs).toFixed(0)}fps ${perf.avgMs.toFixed(1)}ms` : "측정 중"} · q{perf.quality} · dpr{perf.pixelRatio.toFixed(2)} · {perf.shadows ? "shadow" : "noshadow"} · {perf.calls}calls · {(perf.triangles / 1000).toFixed(0)}k tri · {perf.lights} lights
+        </div>
       )}
 
       {help && (
