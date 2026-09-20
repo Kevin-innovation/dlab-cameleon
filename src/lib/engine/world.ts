@@ -48,6 +48,8 @@ const QUALITY_STEPS: { pixelRatio: number; shadows: boolean }[] = [
 ];
 const QUALITY_SAMPLE_FRAMES = 90;
 const ROAMING_LIGHTS = 3;
+const KILL_FX_MS = 2400;
+const KILL_DROPS = 28;
 /** How far (surface distance) a wall may be for Space / the stick pose to snap onto it. */
 const CLING_REACH = 0.7;
 const QUALITY_SLOW_FRAME_MS = 20;
@@ -133,7 +135,16 @@ export class GameWorld {
   private muzzleWorld = new THREE.Vector3();
   private tracerEnd = new THREE.Vector3();
   private tracers: { line: THREE.Line; until: number }[] = [];
-  private killFx: { group: THREE.Group; start: number; until: number }[] = [];
+  private killFx: {
+    group: THREE.Group;
+    start: number;
+    until: number;
+    /** Paint droplets flung out of the caught body; each carries its own velocity. */
+    drops: { mesh: THREE.Mesh; v: THREE.Vector3 }[];
+    splat: THREE.Sprite;
+  }[] = [];
+  private shakeUntil = 0;
+  private shakeAmp = 0;
   private seenTagAt = 0;
   private fpGun: THREE.Group;
   private fpMuzzle: THREE.Mesh;
@@ -1253,7 +1264,7 @@ export class GameWorld {
         if (p.id !== myId) this.playShot(p.id, false);
       }
       const caughtT =
-        room.lastTag && room.lastTag.id === p.id ? 1 - (now - room.lastTag.at) / 1800 : 0;
+        room.lastTag && room.lastTag.id === p.id ? 1 - (now - room.lastTag.at) / KILL_FX_MS : 0;
       animateCharacter(rig, {
         moving,
         ghost,
@@ -1271,7 +1282,10 @@ export class GameWorld {
         const vx = vic.id === myId ? this.localX : vic.x;
         const vy = vic.id === myId ? this.localY : vic.y;
         const vz = vic.id === myId ? this.localZ : vic.z;
-        this.spawnKillFx(vx, vy, vz, room.lastTag.byName, room.lastTag.name);
+        const palette = [vic.fill || WHITE, ...(vic.blobs ?? []).slice(-6).map((b) => b.c), "#ff4d6d"];
+        this.spawnKillFx(vx, vy, vz, room.lastTag.byName, room.lastTag.name, palette);
+        // The victim's own camera jolts; everyone else just sees the burst.
+        if (vic.id === myId) this.shake(0.22, 520);
       }
     }
     for (const [id, rig] of this.players) {
@@ -1361,10 +1375,23 @@ export class GameWorld {
       this.camera.position.copy(this.camEye);
     }
     this.camera.position.y = Math.max(0.42, Math.min(this.map.ceiling - 0.28, this.camera.position.y));
+    const shakeLeft = this.shakeUntil - performance.now();
+    if (shakeLeft > 0 && !this.reducedMotion) {
+      const k = (shakeLeft / 520) * this.shakeAmp;
+      this.camera.position.x += (Math.random() - 0.5) * k;
+      this.camera.position.y += (Math.random() - 0.5) * k;
+      this.camera.position.z += (Math.random() - 0.5) * k;
+    }
     this.camera.updateProjectionMatrix();
   }
 
-  private spawnKillFx(x: number, y: number, z: number, killer: string, victim: string) {
+  /** Brief camera jolt (metres, milliseconds) used when the local player is caught. */
+  shake(amplitude: number, ms: number) {
+    this.shakeAmp = amplitude;
+    this.shakeUntil = performance.now() + ms;
+  }
+
+  private spawnKillFx(x: number, y: number, z: number, killer: string, victim: string, palette: string[]) {
     const g = new THREE.Group();
     g.position.set(x, y + 0.15, z);
     const ring = new THREE.Mesh(
@@ -1381,7 +1408,7 @@ export class GameWorld {
     const ball = new THREE.Mesh(
       new THREE.SphereGeometry(0.42, 14, 10),
       new THREE.MeshBasicMaterial({
-        color: 0xffe7a8,
+        color: new THREE.Color(palette[0] || WHITE).lerp(new THREE.Color(0xffffff), 0.35),
         transparent: true,
         opacity: 0.8,
         depthWrite: false,
@@ -1390,15 +1417,34 @@ export class GameWorld {
     ball.position.y = 1.05;
     const spr = makeKillSprite(`${killer}  발견  ${victim}`);
     spr.position.y = 2.15;
-    g.add(ring, ball, spr);
+    // Paint burst: the body "pops" and its own colours spray outwards, then a splat stays behind.
+    const drops: { mesh: THREE.Mesh; v: THREE.Vector3 }[] = [];
+    const dropGeo = new THREE.SphereGeometry(0.09, 6, 5);
+    for (let i = 0; i < KILL_DROPS; i++) {
+      const colour = palette[i % palette.length] || WHITE;
+      const mesh = new THREE.Mesh(dropGeo, new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 1, depthWrite: false }));
+      mesh.position.set(0, 0.7 + Math.random() * 0.8, 0);
+      const size = 0.6 + Math.random() * 1.1;
+      mesh.scale.setScalar(size);
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2.2 + Math.random() * 3.4;
+      const v = new THREE.Vector3(Math.cos(angle) * speed, 2.5 + Math.random() * 3.5, Math.sin(angle) * speed);
+      drops.push({ mesh, v });
+      g.add(mesh);
+    }
+    const splat = makeSplatSprite(palette);
+    splat.position.y = 0.95;
+    splat.scale.setScalar(0.01);
+    g.add(ring, ball, spr, splat);
     this.scene.add(g);
-    this.killFx.push({ group: g, start: Date.now(), until: Date.now() + 1800 });
+    this.killFx.push({ group: g, start: Date.now(), until: Date.now() + KILL_FX_MS, drops, splat });
   }
 
   private tickKillFx() {
     const now = Date.now();
+    const dt = 1 / 60;
     this.killFx = this.killFx.filter((fx) => {
-      const t = Math.min(1, (now - fx.start) / 1800);
+      const t = Math.min(1, (now - fx.start) / KILL_FX_MS);
       const ring = fx.group.children[0] as THREE.Mesh;
       const ball = fx.group.children[1] as THREE.Mesh;
       const spr = fx.group.children[2] as THREE.Sprite;
@@ -1408,6 +1454,20 @@ export class GameWorld {
       (ball.material as THREE.MeshBasicMaterial).opacity = 0.75 * Math.max(0, 1 - t * 1.6);
       spr.position.y = 2.15 + t * 0.9;
       (spr.material as THREE.SpriteMaterial).opacity = 1 - t;
+      for (const drop of fx.drops) {
+        drop.v.y -= 9.8 * dt;
+        drop.mesh.position.addScaledVector(drop.v, dt);
+        if (drop.mesh.position.y < -0.1) {
+          // Landed: stick to the floor as a puddle instead of falling through.
+          drop.mesh.position.y = -0.1;
+          drop.v.set(0, 0, 0);
+          drop.mesh.scale.y = Math.max(0.15, drop.mesh.scale.y * 0.9);
+        }
+        (drop.mesh.material as THREE.MeshBasicMaterial).opacity = t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+      }
+      const splatIn = Math.min(1, (now - fx.start) / 220);
+      fx.splat.scale.setScalar(0.2 + splatIn * 1.6);
+      (fx.splat.material as THREE.SpriteMaterial).opacity = t < 0.65 ? 0.95 : Math.max(0, 0.95 * (1 - (t - 0.65) / 0.35));
       if (now >= fx.until) {
         this.scene.remove(fx.group);
         disposeObject(fx.group);
@@ -1913,6 +1973,33 @@ function makeDoor(def: DoorDef) {
   leaf.add(knob);
   pivot.add(leaf);
   return { pivot, leaf };
+}
+
+/** Irregular multi-colour splat drawn once per catch from the victim's own paint. */
+function makeSplatSprite(palette: string[]) {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 256;
+  const g = c.getContext("2d")!;
+  g.clearRect(0, 0, 256, 256);
+  const blobs = 14;
+  for (let i = 0; i < blobs; i++) {
+    const angle = (i / blobs) * Math.PI * 2 + Math.random() * 0.5;
+    const reach = i % 3 === 0 ? 40 + Math.random() * 70 : 20 + Math.random() * 40;
+    const r = 14 + Math.random() * 26;
+    g.fillStyle = palette[i % palette.length] || WHITE;
+    g.beginPath();
+    g.arc(128 + Math.cos(angle) * reach, 128 + Math.sin(angle) * reach, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = palette[0] || WHITE;
+  g.beginPath();
+  g.arc(128, 128, 52, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  return new THREE.Sprite(mat);
 }
 
 function makeKillSprite(text: string) {

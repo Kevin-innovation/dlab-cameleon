@@ -770,6 +770,8 @@ export function GameView({
         pose,
         ghost,
       );
+      // A caught player bursts off the wall: drop the cling so the ghost can roam.
+      if (ghost && world.clinging()) world.exitCling();
       // Clinging always shows the stick pose; letting go of the wall (Space/E over the top)
       // stands the body back up. A stick pose picked away from any wall is left alone.
       const clingingNow = world.clinging();
@@ -1341,23 +1343,25 @@ export function GameView({
           </div>
         )}
 
-        {me?.pose === "stick" && (
-          <div className="pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
-            <div className="font-display text-xl text-lime">벽에 붙음</div>
-            <p className="text-sm text-white/75">{isTouch ? "조이스틱 좌우 · 오르기 · 내려가기 · 떼기 버튼" : "A/D 좌우 · E 오르기 · Q 내려가기 · Space 떼기"}</p>
-          </div>
-        )}
-
-        {watching && (myRole === "hider" || myRole === "spectator" || hud.phase === "lobby") && (
-          <div className="pointer-events-none absolute left-1/2 top-44 z-30 -translate-x-1/2 rounded-2xl bg-black/70 px-5 py-3 text-center">
-            <div className="font-display text-xl text-lime">{hud.phase === "lobby" ? "대기실 관전" : "숨은 채 관전"}</div>
-            <p className="text-sm text-white/75">
-              {hud.phase === "lobby"
-                ? "WASD·Q/E로 맵 둘러보기 · V 복귀"
-                : "몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · 5 술래 따라가기 · V 복귀"}
-            </p>
-          </div>
-        )}
+        {/* Status banners stack in one column so "벽에 붙음" and "숨은 채 관전" never overlap. */}
+        <div className="pointer-events-none absolute left-1/2 top-28 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+          {clinging && (
+            <div className="rounded-2xl bg-black/70 px-5 py-3 text-center">
+              <div className="font-display text-xl text-lime">벽에 붙음</div>
+              <p className="text-sm text-white/75">{isTouch ? "조이스틱 좌우 · 오르기 · 내려가기 · 떼기 버튼" : "A/D 좌우 · E 오르기 · Q 내려가기 · Space 떼기"}</p>
+            </div>
+          )}
+          {watching && (myRole === "hider" || myRole === "spectator" || hud.phase === "lobby") && (
+            <div className="rounded-2xl bg-black/70 px-5 py-3 text-center">
+              <div className="font-display text-xl text-lime">{hud.phase === "lobby" ? "대기실 관전" : "숨은 채 관전"}</div>
+              <p className="text-sm text-white/75">
+                {hud.phase === "lobby"
+                  ? "WASD·Q/E로 맵 둘러보기 · V 복귀"
+                  : "몸은 그대로 있습니다. WASD·Q/E로 카메라 이동 · 5 술래 따라가기 · V 복귀"}
+              </p>
+            </div>
+          )}
+        </div>
 
         {me && hud.phase !== "lobby" && !isParticipant(hud, me.id) && (
           <div
@@ -1875,6 +1879,23 @@ function TouchControls({
 
   return (
     <div className="mobile-touch-controls pointer-events-none absolute inset-0 z-20 select-none" role="group" aria-label="터치 게임 조작">
+      {/* Whole-screen look surface: dragging anywhere outside a control turns the camera. It sits
+          under every button (z-index) so taps on controls still land on them. */}
+      <div
+        className="mobile-look-layer pointer-events-auto absolute inset-0 touch-none"
+        data-touch-control="true"
+        tabIndex={0}
+        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
+        onPointerDown={onLookStart}
+        onPointerMove={onLookMove}
+        onPointerUp={onLookEnd}
+        onPointerCancel={onLookEnd}
+        onLostPointerCapture={onLookEnd}
+        onKeyDown={onLookKey}
+        aria-label="시야 조작 영역. 화면을 드래그해서 시점을 회전합니다."
+        role="group"
+      />
+
       <div
         ref={joystickRef}
         className="mobile-joystick pointer-events-auto absolute bottom-3 left-3 h-28 w-28 touch-none rounded-full border border-white/20 bg-black/35 shadow-lg backdrop-blur-sm"
@@ -1895,36 +1916,38 @@ function TouchControls({
         <span className="pointer-events-none absolute inset-0 grid place-items-center text-[10px] font-semibold tracking-widest text-white/60">이동</span>
       </div>
 
-      <div
-        className="mobile-look-pad pointer-events-auto absolute bottom-3 right-3 flex h-28 w-36 touch-none items-center justify-center rounded-2xl border border-white/15 bg-black/25 text-xs text-white/60 backdrop-blur-sm"
-        data-touch-control="true"
-        tabIndex={0}
-        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
-        onPointerDown={onLookStart}
-        onPointerMove={onLookMove}
-        onPointerUp={onLookEnd}
-        onPointerCancel={onLookEnd}
-        onLostPointerCapture={onLookEnd}
-        onKeyDown={onLookKey}
-        aria-label="시야 조작 영역. 드래그해서 시점을 회전합니다."
-        role="group"
-      >
-        시야 드래그
-      </div>
-
-      <div className="mobile-touch-actions pointer-events-auto absolute bottom-3 flex gap-1.5">
+      {/* Right thumb: fire / run / jump (or climb controls while stuck to a wall). */}
+      <div className="mobile-right-cluster pointer-events-auto absolute bottom-3 right-3 grid grid-cols-2 gap-1.5" role="group" aria-label="행동 버튼">
+        {canFire && (
+          <button
+            type="button"
+            data-touch-control="true"
+            className="mobile-touch-button col-span-2 h-14 whitespace-nowrap rounded-2xl border border-pink/40 bg-pink text-base font-bold text-black shadow-lg backdrop-blur-sm active:brightness-90"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onFire();
+            }}
+          >
+            발사
+          </button>
+        )}
         {clinging ? (
           <>
-            {button("e", "오르기")}
-            {button("q", "내려가기")}
-            {button(" ", "떼기")}
+            {button("e", "오르기", "h-12")}
+            {button("q", "내려가기", "h-12")}
+            {button(" ", "떼기", "col-span-2 h-12")}
           </>
         ) : (
           <>
-            {button("shift", "달리기")}
-            {button(" ", "점프")}
+            {button("shift", "달리기", "h-12")}
+            {button(" ", "점프", "h-12")}
           </>
         )}
+      </div>
+
+      {/* Middle bar: the occasional actions. */}
+      <div className="mobile-touch-actions pointer-events-auto absolute bottom-3 flex gap-1.5">
         {canOpenDoor && (
           <button
             type="button"
@@ -1938,20 +1961,6 @@ function TouchControls({
             }}
           >
             문 열기/닫기
-          </button>
-        )}
-        {canFire && (
-          <button
-            type="button"
-            data-touch-control="true"
-            className="mobile-touch-button h-10 whitespace-nowrap rounded-xl border border-pink/40 bg-pink px-2.5 text-[11px] font-semibold text-black shadow-lg backdrop-blur-sm"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onFire();
-            }}
-          >
-            발사
           </button>
         )}
         {canWatch && (

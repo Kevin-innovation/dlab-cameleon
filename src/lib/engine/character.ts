@@ -11,6 +11,11 @@ export type PartLayer = {
   mesh: THREE.Mesh;
 };
 
+/** The catch animation spans the room's tag window (see caughtT in world.syncPlayers). */
+const CATCH_WINDOW_S = 2.4;
+const CATCH_SWELL_S = 0.25;
+const CATCH_BURST_S = 0.35;
+
 export type CharacterRig = {
   group: THREE.Group;
   body: THREE.Group;
@@ -320,6 +325,9 @@ export function applyBodySize(rig: CharacterRig, size: BodySize) {
 
 export function applyPose(rig: CharacterRig, pose: Pose) {
   rig.pose = pose;
+  // A body pressed flat on a wall must not throw a shadow onto that wall: the dark rim
+  // reads as a gap and makes the body look like it floats in front of the surface.
+  for (const part of Object.values(rig.parts)) part.mesh.castShadow = !rig.ghost && pose !== "stick";
   const b = rig.body;
   b.rotation.set(0, 0, 0);
   b.scale.set(1, 1, 1);
@@ -355,7 +363,7 @@ export function setGhostLook(rig: CharacterRig, ghost: boolean) {
     mat.depthWrite = ghost ? false : rig.stealthOpacity > 0.72;
     mat.emissive.set(ghost ? "#7ecbff" : "#000000");
     mat.emissiveIntensity = ghost ? 0.45 : 0;
-    part.mesh.castShadow = !ghost;
+    part.mesh.castShadow = !ghost && rig.pose !== "stick";
   }
   const vm = rig.visor.material as THREE.MeshStandardMaterial;
   vm.transparent = true;
@@ -378,34 +386,50 @@ export function animateCharacter(
   const reducedMotion = !!opts.reducedMotion;
   const remain = Math.max(0, Math.min(1, opts.caughtT));
   if (remain > 0) {
+    // Caught: the body swells and shakes, then bursts (shrinks away while spinning) and stays
+    // gone until the tag window ends and the ghost look takes over. Works the same on a wall.
     rig.catching = true;
-    const elapsed = 1 - remain;
-    const impact = Math.max(0, 1 - elapsed / 0.14);
-    const fall = Math.min(1, elapsed / 0.2);
-    rig.body.rotation.x = -1.62 * fall;
-    rig.body.rotation.y = 0.55 * fall;
-    rig.body.rotation.z = 0.72 * fall + (reducedMotion ? 0 : Math.sin(elapsed * 48) * 0.55 * impact);
-    rig.body.position.y = reducedMotion ? 0 : 0.42 * impact;
-    rig.body.position.z = reducedMotion ? 0 : -0.85 * fall;
-    const punch = 1 + 0.22 * impact;
-    rig.body.scale.set(punch, punch, punch);
+    const seconds = (1 - remain) * CATCH_WINDOW_S;
+    const b = rig.body;
+    b.rotation.set(0, 0, 0);
+    b.position.set(0, 0, 0);
+    if (seconds < CATCH_SWELL_S) {
+      const k = seconds / CATCH_SWELL_S;
+      const punch = 1 + 0.4 * k;
+      b.scale.set(punch, punch, punch);
+      b.rotation.z = reducedMotion ? 0 : Math.sin(seconds * 70) * 0.22 * k;
+      b.position.y = 0.12 * k;
+    } else if (seconds < CATCH_SWELL_S + CATCH_BURST_S) {
+      const k = (seconds - CATCH_SWELL_S) / CATCH_BURST_S;
+      const size = Math.max(0.02, 1.4 * (1 - k));
+      b.scale.set(size, size, size);
+      b.rotation.y = reducedMotion ? 0 : k * 7;
+      b.position.y = 0.12 + k * 0.7;
+    } else {
+      b.scale.set(0.02, 0.02, 0.02);
+      b.position.y = 0.8;
+    }
     rig.gun.visible = false;
     for (const part of Object.values(rig.parts)) {
       const mat = part.mesh.material as THREE.MeshStandardMaterial;
-      mat.emissive.set(impact > 0.2 ? "#ffe8a8" : "#ff2a2a");
-      mat.emissiveIntensity = 1.15 * Math.max(impact, 0.35 * (1 - elapsed));
+      // Solid and glowing while it bursts, whatever the ghost/stealth opacity says.
+      mat.transparent = true;
+      mat.opacity = 1;
+      mat.depthWrite = true;
+      mat.emissive.set(seconds < CATCH_SWELL_S ? "#ffe8a8" : "#ff2a2a");
+      mat.emissiveIntensity = seconds < CATCH_SWELL_S ? 1.2 : 0.8;
     }
     return;
   }
   if (rig.catching) {
     rig.catching = false;
     applyPose(rig, rig.pose);
-    if (opts.ghost) {
-      for (const part of Object.values(rig.parts)) {
-        const mat = part.mesh.material as THREE.MeshStandardMaterial;
-        mat.emissive.set("#7ecbff");
-        mat.emissiveIntensity = 0.45;
-      }
+    for (const part of Object.values(rig.parts)) {
+      const mat = part.mesh.material as THREE.MeshStandardMaterial;
+      mat.opacity = opts.ghost ? 0.28 : rig.stealthOpacity;
+      mat.depthWrite = opts.ghost ? false : rig.stealthOpacity > 0.72;
+      mat.emissive.set(opts.ghost ? "#7ecbff" : "#000000");
+      mat.emissiveIntensity = opts.ghost ? 0.45 : 0;
     }
   }
   if (!opts.ghost) {

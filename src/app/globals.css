@@ -142,6 +142,22 @@ label:has(> select:focus-visible) {
   isolation: isolate;
 }
 
+/* The look layer is the lowest thing in the touch overlay; the overlay itself sits under the
+   HUD (pose strip, chat, palette) so those stay tappable, while its own buttons stay above. */
+.mobile-touch-controls {
+  z-index: 5;
+}
+
+.mobile-look-layer {
+  z-index: 0;
+}
+
+.mobile-joystick,
+.mobile-right-cluster,
+.mobile-touch-actions {
+  z-index: 1;
+}
+
 .room-social-shell {
   isolation: isolate;
 }
@@ -336,7 +352,7 @@ label:has(> select:focus-visible) {
   .mobile-touch-actions {
     bottom: calc(0.75rem + env(safe-area-inset-bottom));
     left: calc(7.75rem + env(safe-area-inset-left));
-    right: calc(min(42vw, 9rem) + 0.75rem + env(safe-area-inset-right));
+    right: calc(10.5rem + env(safe-area-inset-right));
     max-width: none;
     transform: none;
     /* Tailwind v4 centres with the `translate` property, not `transform`; cancel that too. */
@@ -346,6 +362,14 @@ label:has(> select:focus-visible) {
     padding: 0.15rem 0;
     pointer-events: none;
     scrollbar-width: none;
+  }
+
+  .mobile-right-cluster .mobile-touch-button {
+    min-width: 5rem;
+    height: 3.25rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-size: 12px;
   }
 
   .mobile-touch-actions > .mobile-touch-button {
