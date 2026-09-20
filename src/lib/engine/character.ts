@@ -217,9 +217,11 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
   const head = makePart("head", new THREE.SphereGeometry(0.2, 16, 12), playerId);
   head.mesh.position.y = 1.52;
   const legL = makePart("legL", new THREE.CapsuleGeometry(0.09, 0.42, 4, 8), playerId);
-  legL.mesh.position.set(-0.11, 0.42, 0);
+  // Leg capsules are 0.6 tall (0.42 + 2×0.09); centred at 0.30 the soles sit exactly on the
+  // floor. Any higher and the body visibly hovers, worst when flat against a wall.
+  legL.mesh.position.set(-0.11, 0.3, 0);
   const legR = makePart("legR", new THREE.CapsuleGeometry(0.09, 0.42, 4, 8), playerId);
-  legR.mesh.position.set(0.11, 0.42, 0);
+  legR.mesh.position.set(0.11, 0.3, 0);
   const armL = makePart("armL", new THREE.CapsuleGeometry(0.07, 0.38, 4, 8), playerId);
   armL.mesh.position.set(-0.32, 1.12, 0);
   const armR = makePart("armR", new THREE.CapsuleGeometry(0.07, 0.38, 4, 8), playerId);

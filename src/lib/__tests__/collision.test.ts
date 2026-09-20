@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { camouflageMeter, hunterVisibility, lightLevelAt, materialMatch } from "../camouflage";
-import { blocked, circleHitsBox, moveWithSlide, nearestSurface, resolveStuck } from "../engine/collision";
+import { blocked, circleHitsBox, moveWithSlide, nearestSurface, probesBlocked, resolveStuck } from "../engine/collision";
 import type { Collider } from "../types";
 
 const BOUNDS = { w: 40, d: 30 };
@@ -107,5 +107,19 @@ describe("material finish", () => {
     const bad = camouflageMeter("#6b8f71", [], "#6b8f71", 0.1, 0.8).score ?? 0;
     expect(good).toBeGreaterThan(bad);
     expect(bad / good).toBeGreaterThan(0.84);
+  });
+});
+
+describe("pose probes", () => {
+  it("flags a wall beside spread arms and ahead of a crouched head, not for a standing body", () => {
+    const wall = { minX: 4.8, maxX: 5.2, minZ: 0, maxZ: 20, minY: 0, maxY: 3 } as Collider;
+    // Standing 0.6m from the wall, facing along it (yaw 0 → forward -z, right +x): arms clear.
+    expect(probesBlocked("stand", 4.2, 10, 0, [wall], 0, 1.72)).toBe(false);
+    // Spread arms reach 0.5 + 0.2 to the right → into the wall.
+    expect(probesBlocked("spread", 4.2, 10, 0, [wall], 0, 1.72)).toBe(true);
+    // Crouching and facing the wall (yaw -π/2 → forward +x): the head probe 0.42 ahead hits it.
+    expect(probesBlocked("crouch", 4.3, 10, -Math.PI / 2, [wall], 0, 1.25)).toBe(true);
+    // Same spot facing away: clear.
+    expect(probesBlocked("crouch", 4.3, 10, Math.PI / 2, [wall], 0, 1.25)).toBe(false);
   });
 });

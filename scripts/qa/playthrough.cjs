@@ -57,8 +57,12 @@ async function poseSweep(page, mapName) {
   await page.click("canvas");
   const points = await wallApproaches(page);
   let checks = 0;
+  // Approach each wall facing it, with the back to it, and with either shoulder to it: poses
+  // that lean or spread sideways clip walls beside the body, not in front of it.
+  const facings = [["front", 0, "w"], ["back", Math.PI, "s"], ["left", Math.PI / 2, "a"], ["right", -Math.PI / 2, "d"]];
   for (const [pose, key] of Object.entries(POSE_KEYS)) {
-    for (const pt of points) {
+    for (const pt0 of points) for (const [side, turn, moveKey] of facings) {
+      const pt = { ...pt0, yaw: pt0.yaw + turn, wall: `${pt0.wall}/${side}` };
       await world(page, ({ x, z, yaw }) => { const w = window.__camelonWorld; w.exitCling(); w.setLocal(x, z); w.yaw = yaw; }, pt);
       await page.keyboard.press("1");
       await page.waitForTimeout(80);
@@ -72,9 +76,9 @@ async function poseSweep(page, mapName) {
       if (posed !== pose && pose !== "stick") continue;
       const preposed = await world(page, () => window.__camelonWorld.clipReport(window.__camelonSession.myId()).some((c) => c.depth > 0.12));
       if (preposed) continue;
-      await page.keyboard.down("w");
+      await page.keyboard.down(moveKey);
       await page.waitForTimeout(700);
-      await page.keyboard.up("w");
+      await page.keyboard.up(moveKey);
       await page.waitForTimeout(150);
       const clip = await world(page, () => window.__camelonWorld.clipReport(window.__camelonSession.myId()));
       checks++;

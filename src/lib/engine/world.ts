@@ -12,6 +12,8 @@ import { ceilingAt } from "../ceiling";
 import {
   blocked,
   blockedByBoxes,
+  probePenetration,
+  probesBlocked,
   edgeMargin,
   headHit,
   landOn,
@@ -1011,8 +1013,21 @@ export class GameWorld {
           if (landed !== null) this.localY = landed;
         }
       } else {
-        this.localX = moved.x;
-        this.localZ = moved.z;
+        // Sideways probes (arms, a leaning head) must be clear too; otherwise slide along
+        // whichever axis keeps them out of the wall.
+        const probePose = this.crouching ? "crouch" : pose;
+        const sink = (x: number, z: number) => probePenetration(probePose, x, z, this.yaw, boxes, feet, head);
+        // A move may never push a probe deeper into a wall than it already is (turning on the
+        // spot can leave one touching); sliding along either axis is tried before giving up.
+        const now = sink(this.localX, this.localZ) + 1e-4;
+        if (sink(moved.x, moved.z) <= now) {
+          this.localX = moved.x;
+          this.localZ = moved.z;
+        } else if (sink(moved.x, this.localZ) <= now) {
+          this.localX = moved.x;
+        } else if (sink(this.localX, moved.z) <= now) {
+          this.localZ = moved.z;
+        }
       }
     }
 
@@ -1614,7 +1629,11 @@ export class GameWorld {
 
   /** Whether the local body can take `pose` here without its collision footprint entering a solid. */
   poseFits(pose: Pose) {
-    return !blockedByBoxes(this.localX, this.localZ, poseRadius(pose), this.colliders, this.localY, this.localY + poseHeight(pose));
+    const head = this.localY + poseHeight(pose);
+    return (
+      !blockedByBoxes(this.localX, this.localZ, poseRadius(pose), this.colliders, this.localY, head) &&
+      !probesBlocked(pose, this.localX, this.localZ, this.yaw, this.colliders, this.localY, head)
+    );
   }
 
   /**

@@ -258,6 +258,62 @@ export function headHit(x: number, z: number, r: number, prevHead: number, nextH
   return best;
 }
 
+/**
+ * Extra collision probes for poses whose silhouette reaches sideways beyond the centre
+ * circle: offsets along the body's right axis (metres, negative = left). Each probe is a
+ * PROBE_RADIUS circle, so spread arms or a leaning head stop at walls beside the body.
+ */
+export const PROBE_RADIUS = 0.2;
+/** [right, forward] offsets in metres for each extra probe of a pose. */
+export function poseProbes(pose: string): [number, number][] {
+  if (pose === "spread") return [[-0.5, 0], [0.5, 0]];
+  if (pose === "stick") return [[-0.38, 0], [0.38, 0]];
+  if (pose === "lean") return [[-0.6, 0]];
+  // Bent poses: head/legs straight ahead plus the hands, which sit ahead and to the sides.
+  if (pose === "crouch") return [[-0.18, 0], [0.18, 0], [0, 0.5], [-0.32, 0.36], [0.32, 0.36]];
+  if (pose === "sit") return [[-0.18, 0], [0.18, 0], [0, 0.56]];
+  if (pose === "huddle") return [[-0.18, 0], [0.18, 0], [0, 0.45], [-0.3, 0.36], [0.3, 0.36]];
+  if (pose === "ball") return [[0, 0.26], [-0.3, 0.2], [0.3, 0.2]];
+  if (pose === "lie" || pose === "stretch") return [];
+  return [[-0.18, 0], [0.18, 0]];
+}
+
+/**
+ * Deepest penetration (metres) of any probe of `pose` into a solid; 0 when all are clear.
+ * Movement may never increase this, which lets a body already touching a wall slide away
+ * from it but not sink further in.
+ */
+export function probePenetration(pose: string, x: number, z: number, yaw: number, boxes: Collider[], feetY: number, headY: number) {
+  const rx = Math.cos(yaw);
+  const rz = -Math.sin(yaw);
+  const fx = -Math.sin(yaw);
+  const fz = -Math.cos(yaw);
+  let worst = 0;
+  for (const [side, ahead] of poseProbes(pose)) {
+    const px = x + rx * side + fx * ahead;
+    const pz = z + rz * side + fz * ahead;
+    for (const b of boxes) {
+      if (!yHitsBox(feetY, headY, b)) continue;
+      const surface = closestSurface(px, pz, b);
+      const depth = surface.inside ? PROBE_RADIUS + surface.dist : PROBE_RADIUS - surface.dist;
+      if (depth > worst) worst = depth;
+    }
+  }
+  return worst;
+}
+
+/** True when any extra probe of `pose` at (x, z, yaw) sits in a solid. */
+export function probesBlocked(pose: string, x: number, z: number, yaw: number, boxes: Collider[], feetY: number, headY: number) {
+  const rx = Math.cos(yaw);
+  const rz = -Math.sin(yaw);
+  const fx = -Math.sin(yaw);
+  const fz = -Math.cos(yaw);
+  for (const [side, ahead] of poseProbes(pose)) {
+    if (blockedByBoxes(x + rx * side + fx * ahead, z + rz * side + fz * ahead, PROBE_RADIUS, boxes, feetY, headY)) return true;
+  }
+  return false;
+}
+
 export function poseRadius(pose: string) {
   if (pose === "stick") return 0.2;
   if (pose === "stretch") return 0.2;
