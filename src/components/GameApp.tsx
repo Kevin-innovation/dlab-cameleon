@@ -360,44 +360,81 @@ export default function GameApp() {
   );
 }
 
+const HOWTO_STEPS: { icon: string; title: string; body: string; accent: string }[] = [
+  { icon: "🎰", title: "술래 뽑기", body: "모두 한자리에 모이면 룰렛이 술래를 정해요.", accent: "from-pink/30 to-pink/5" },
+  { icon: "🎨", title: "몸 칠하기", body: "스포이드로 벽·가구 색을 찍고 몸에 발라요. 자세와 몸 크기로 실루엣까지 맞추면 완벽!", accent: "from-lime/30 to-lime/5" },
+  { icon: "🔦", title: "수색", body: "술래는 1인칭으로 돌아다니며 어색한 곳을 조준해 찾아내요. 카멜레온은 휘파람으로 속일 수 있어요.", accent: "from-sky-300/30 to-sky-300/5" },
+  { icon: "🏆", title: "승리", body: "시간 안에 전원 발견되면 술래 승! 한 명이라도 남으면 카멜레온 승!", accent: "from-amber-300/30 to-amber-300/5" },
+];
+
+const HOWTO_KEYS: { key: string; label: string }[] = [
+  { key: "WASD", label: "이동" },
+  { key: "F", label: "페인트" },
+  { key: "1~0 -", label: "자세" },
+  { key: "Space", label: "벽 붙기" },
+  { key: "E / Q", label: "오르기 · 내려가기" },
+  { key: "T", label: "휘파람" },
+  { key: "V", label: "관전" },
+  { key: "Tab", label: "현황" },
+];
+
 function HowTo({ onClose }: { onClose: () => void }) {
   return (
-    <AccessibleModal titleId="howto-title" onClose={onClose} panelClassName="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-[#142019] p-6 shadow-2xl">
-      <h2 id="howto-title" className="text-wrap-balance font-display text-3xl">
-        카멜론 룰
-      </h2>
-      <div className="mt-4 space-y-3 text-sm leading-relaxed text-white/80">
-        <p>
-          파티형 숨바꼭질입니다. 카멜레온은 새하얀 몸을 <b className="text-lime">직접 칠해서</b> 배경에 녹아들고,
-          술래는 색·재질·윤곽·자세가 어색한 지점을 찾아 태그합니다.
-        </p>
-        <p>
-          <b>1. 술래 결정</b> — 라운드가 시작되면 전원이 중립 지점에 모이고 룰렛이 술래를 뽑습니다.
-        </p>
-        <p>
-          <b>2. 위장</b> — 카멜레온은 맵을 돌아다니며 스포이드로 벽·가구의 색과 재질을 찍고(<b>F</b> 페인트),
-          자세 11가지(<b>1~9, 0, -</b>)로 실루엣을 맞춥니다. 벽 앞에서 <b>Space</b>로 붙고 <b>E/Q</b>로 오르내립니다.
-          대기실에서 고른 몸 크기(쁘띠·보통·통통)는 눈에 띄는 정도와 점수 배율을 바꿉니다.
-        </p>
-        <p>
-          <b>3. 수색</b> — 술래는 1인칭으로 수색하고(우클릭 3인칭) 가까이 조준해 좌클릭으로 발견합니다.
-          탄약 제한을 켜면 기본 {DEFAULT_AMMO}발: 빗나가면 −1, 맞히면 +1, 달아나는 상대에게 쏜 건 무료입니다.
-          카멜레온은 <b>T</b>로 휘파람을 불어 술래를 속일 수 있고, 일정 시간마다 강제로 불게 됩니다.
-        </p>
-        <p>
-          <b>4. 점수</b> — 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN} ·
-          술래 눈앞에서 가만히 속이면 초당 최대 10점(가까울수록 큼). 발견된 카멜레온은 관전으로 넘어갑니다(감염 모드는 술래 합류).
-        </p>
-        <p>
-          <b>5. 승리</b> — 제한 시간 안에 전원 발견이면 술래 승, 한 명이라도 남으면 카멜레온 승. <b>Tab</b>으로 현황.
-        </p>
-        <p>
-          <b>조작</b> — PC는 WASD·마우스와 우측 하단 버튼, 모바일은 가로 화면에서 왼쪽 조이스틱과 오른쪽 시야 패드를 씁니다.
-        </p>
-        <p>맵: {MAPS.map((m) => m.name).join(" / ")}</p>
+    <AccessibleModal titleId="howto-title" onClose={onClose} panelClassName="max-h-[90dvh] w-full max-w-xl overflow-y-auto overscroll-contain rounded-3xl bg-[#142019] p-6 shadow-2xl">
+      <div className="flex items-center gap-3">
+        <Image src="/mascot.jpg" alt="" width={56} height={56} className="h-14 w-14 rounded-2xl object-cover ring-2 ring-lime/60" />
+        <div>
+          <h2 id="howto-title" className="font-display text-3xl leading-none">카멜론 룰</h2>
+          <p className="mt-1 text-sm text-lime/90">하얀 몸에 색을 칠해 배경이 되자 — 술래를 속이면 이긴다!</p>
+        </div>
       </div>
-      <button type="button" onClick={onClose} className="mt-6 h-12 w-full rounded-full bg-lime font-display text-black transition hover:brightness-110 active:scale-[0.98]">
-        알겠어요
+
+      <ol className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label="게임 순서">
+        {HOWTO_STEPS.map((step, index) => (
+          <li key={step.title} className={`rounded-2xl border border-white/10 bg-gradient-to-br ${step.accent} p-4`}>
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-black/50 font-display text-sm text-lime" aria-hidden="true">{index + 1}</span>
+              <span className="text-2xl" aria-hidden="true">{step.icon}</span>
+              <span className="font-display text-lg">{step.title}</span>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-white/85">{step.body}</p>
+          </li>
+        ))}
+      </ol>
+
+      <section className="mt-4 rounded-2xl bg-black/30 p-4" aria-labelledby="howto-keys">
+        <h3 id="howto-keys" className="text-xs font-semibold tracking-wide text-white/60">조작 (PC)</h3>
+        <ul className="mt-2 flex flex-wrap gap-2">
+          {HOWTO_KEYS.map((entry) => (
+            <li key={entry.key} className="flex items-center gap-1.5 rounded-lg bg-white/8 px-2 py-1 text-xs">
+              <kbd className="rounded-md border border-lime/50 bg-black/60 px-1.5 py-0.5 font-mono text-[11px] font-bold text-lime">{entry.key}</kbd>
+              <span className="text-white/85">{entry.label}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-white/55">모바일은 가로 화면에서 왼쪽 조이스틱 · 오른쪽 시야 패드 · 화면 버튼을 써요.</p>
+      </section>
+
+      <section className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4" aria-label="점수">
+        {[
+          ["발견", `+${SCORE_TAG}`],
+          ["생존", `+${SCORE_SURVIVE}`],
+          ["술래 승리", `+${SCORE_HUNT_WIN}`],
+          ["눈앞에서 속이기", "초당 최대 10"],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-xl bg-white/6 px-2 py-2">
+            <div className="font-display text-lg text-lime">{value}</div>
+            <div className="text-[11px] text-white/65">{label}</div>
+          </div>
+        ))}
+      </section>
+
+      <p className="mt-3 text-center text-xs text-white/55">
+        탄약 제한(기본 {DEFAULT_AMMO}발: 빗나가면 −1, 맞히면 +1)과 감염 모드는 방 옵션 · 맵 {MAPS.map((m) => m.name).join(" / ")}
+      </p>
+
+      <button type="button" onClick={onClose} className="mt-5 h-12 w-full rounded-full bg-lime font-display text-lg text-black transition hover:brightness-110 active:scale-[0.98]">
+        알겠어요, 해볼게요!
       </button>
     </AccessibleModal>
   );
