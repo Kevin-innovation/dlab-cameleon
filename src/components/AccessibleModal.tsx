@@ -29,8 +29,12 @@ export function AccessibleModal({
     if (!dialog) return;
     lastFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
+    // Short panels (forms) focus their first control; a panel that scrolls focuses itself,
+    // since focusing a button at its bottom would scroll the title out of view.
     const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
-    (focusable[0] ?? dialog).focus();
+    const scrolls = dialog.scrollHeight > dialog.clientHeight + 1;
+    (scrolls ? dialog : (focusable[0] ?? dialog)).focus({ preventScroll: true });
+    dialog.scrollTop = 0;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {

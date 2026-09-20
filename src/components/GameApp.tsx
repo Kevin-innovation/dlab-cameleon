@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { APP_NAME, CHANNELS, DEFAULT_CHANNEL_ID, MAX_PLAYERS, NICK_KEY } from "@/lib/config";
+import { APP_NAME, CHANNELS, DEFAULT_AMMO, DEFAULT_CHANNEL_ID, MAX_PLAYERS, NICK_KEY, SCORE_HUNT_WIN, SCORE_SURVIVE, SCORE_TAG } from "@/lib/config";
 import { MAPS } from "@/lib/maps";
 import { requestMobileLandscape } from "@/lib/mobile";
 import { generateRoomCode, parseRoomCode } from "@/lib/rooms/code";
@@ -299,8 +299,14 @@ export default function GameApp() {
               <div className="text-[11px] tracking-wide text-lime/80">몸에 색을 칠해 숨는다</div>
             </div>
           </button>
-          <button type="button" className="text-sm text-white/70" onClick={() => setHowto(true)}>
-            룰
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={howto}
+            onClick={() => setHowto(true)}
+            className="h-10 rounded-full border border-lime/40 bg-black/30 px-4 text-sm font-semibold text-lime transition hover:border-lime hover:bg-lime/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime active:scale-95"
+          >
+            카멜론 룰
           </button>
         </header>
 
@@ -358,34 +364,39 @@ function HowTo({ onClose }: { onClose: () => void }) {
   return (
     <AccessibleModal titleId="howto-title" onClose={onClose} panelClassName="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-[#142019] p-6 shadow-2xl">
       <h2 id="howto-title" className="text-wrap-balance font-display text-3xl">
-        메챠 카멜레온 룰
+        카멜론 룰
       </h2>
       <div className="mt-4 space-y-3 text-sm leading-relaxed text-white/80">
         <p>
-          파티형 숨바꼭질입니다. 숨는 쪽은 새하얀 몸을 <b className="text-lime">직접 칠해서</b> 배경에
-          녹아들고, 술래는 색온도·윤곽·자세가 어색한 지점을 찾아 태그합니다.
+          파티형 숨바꼭질입니다. 카멜레온은 새하얀 몸을 <b className="text-lime">직접 칠해서</b> 배경에 녹아들고,
+          술래는 색·재질·윤곽·자세가 어색한 지점을 찾아 태그합니다.
         </p>
         <p>
-          <b>1. 역할</b> — 라운드 시작 시 술래와 카멜레온이 랜덤 배정됩니다.
+          <b>1. 술래 결정</b> — 라운드가 시작되면 전원이 중립 지점에 모이고 룰렛이 술래를 뽑습니다.
         </p>
         <p>
-          <b>2. 역할 확인·위장</b> — 술래는 수색 시작 전 대기합니다. 카멜레온은 3D 맵을 돌아다니며
-          스포이드로 벽·가구 색을 찍고, 몸을 칠하고, 자세를 맞춥니다.
+          <b>2. 위장</b> — 카멜레온은 맵을 돌아다니며 스포이드로 벽·가구의 색과 재질을 찍고(<b>F</b> 페인트),
+          자세 11가지(<b>1~9, 0, -</b>)로 실루엣을 맞춥니다. 벽 앞에서 <b>Space</b>로 붙고 <b>E/Q</b>로 오르내립니다.
+          대기실에서 고른 몸 크기(쁘띠·보통·통통)는 눈에 띄는 정도와 점수 배율을 바꿉니다.
         </p>
         <p>
-          <b>3. 수색</b> — 술래가 입장합니다. 색·윤곽·자세가 어색한 곳을 직접 조사하고 가까이 조준해
-          발견합니다. 기본 모드에서는 발견된 카멜레온이 관전 상태가 됩니다.
+          <b>3. 수색</b> — 술래는 1인칭으로 수색하고(우클릭 3인칭) 가까이 조준해 좌클릭으로 발견합니다.
+          탄약 제한을 켜면 기본 {DEFAULT_AMMO}발: 빗나가면 −1, 맞히면 +1, 달아나는 상대에게 쏜 건 무료입니다.
+          카멜레온은 <b>T</b>로 휘파람을 불어 술래를 속일 수 있고, 일정 시간마다 강제로 불게 됩니다.
         </p>
         <p>
-          <b>4. 승리</b> — 제한 시간 안에 전원 발견이면 술래 승. 한 명이라도 남으면 카멜레온 승.
+          <b>4. 점수</b> — 발견 +{SCORE_TAG} · 생존 +{SCORE_SURVIVE} · 술래 승리 +{SCORE_HUNT_WIN} ·
+          술래 눈앞에서 가만히 속이면 초당 최대 10점(가까울수록 큼). 발견된 카멜레온은 관전으로 넘어갑니다(감염 모드는 술래 합류).
         </p>
         <p>
-          <b>조작</b> — PC는 WASD·마우스, 화면 버튼으로 자세·페인트를 사용합니다. 모바일은 가로 화면에서
-          왼쪽 조이스틱과 오른쪽 시야 패드를 사용하세요. 감염·탄약 제한은 방 옵션입니다.
+          <b>5. 승리</b> — 제한 시간 안에 전원 발견이면 술래 승, 한 명이라도 남으면 카멜레온 승. <b>Tab</b>으로 현황.
+        </p>
+        <p>
+          <b>조작</b> — PC는 WASD·마우스와 우측 하단 버튼, 모바일은 가로 화면에서 왼쪽 조이스틱과 오른쪽 시야 패드를 씁니다.
         </p>
         <p>맵: {MAPS.map((m) => m.name).join(" / ")}</p>
       </div>
-      <button type="button" onClick={onClose} className="mt-6 w-full rounded-full bg-lime py-2 font-display text-black">
+      <button type="button" onClick={onClose} className="mt-6 h-12 w-full rounded-full bg-lime font-display text-black transition hover:brightness-110 active:scale-[0.98]">
         알겠어요
       </button>
     </AccessibleModal>
