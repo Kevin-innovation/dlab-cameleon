@@ -54,9 +54,11 @@ export const POSE_SHAPES: Record<Pose, PoseShape> = {
       legR: { position: [0.11, 0.24, 0.3], rotation: [-HALF_PI, 0, 0] },
     },
   },
-  lie: { scale: [1.05, 0.95, 1.0], position: [0, 0.3, 0], rotation: [-HALF_PI, 0, 0] },
+  // Lying: the body is rotated onto its back and slid so it is centred on the player's
+  // position (feet 0.95 behind, head 0.95 ahead) — the collision radius covers that span.
+  lie: { scale: [1.05, 0.95, 1.0], position: [0, 0.3, 0.95], rotation: [-HALF_PI, 0, 0] },
   stretch: {
-    scale: [0.8, 1.56, 0.8],
+    scale: [0.82, 1.48, 0.82],
     parts: {
       armL: { position: [-0.16, 1.66, 0], rotation: [0, 0, 0.18] },
       armR: { position: [0.16, 1.66, 0], rotation: [0, 0, -0.18] },

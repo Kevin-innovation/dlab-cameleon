@@ -103,6 +103,8 @@ export function poseHeight(pose: string) {
   if (pose === "huddle") return 1.0;
   if (pose === "ball") return 1.1;
   if (pose === "lie") return 0.6;
+  // Stretch is 1.56× tall; the head must stop under low ceilings and door headers.
+  if (pose === "stretch") return 2.5;
   return 1.72;
 }
 
@@ -260,7 +262,9 @@ export function poseRadius(pose: string) {
   if (pose === "stick") return 0.2;
   if (pose === "stretch") return 0.2;
   if (pose === "ball") return 0.35;
-  if (pose === "lie" || pose === "huddle") return 0.3;
+  // A lying body spans ~1.9m around its centre; a wide circle keeps head and feet out of walls.
+  if (pose === "lie") return 0.8;
+  if (pose === "huddle") return 0.3;
   return 0.26;
 }
 
