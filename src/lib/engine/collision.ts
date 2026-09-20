@@ -133,6 +133,11 @@ export function blocked(
 ) {
   const m = edgeMargin(r);
   if (x < m || z < m || x > bounds.w - m || z > bounds.d - m) return true;
+  return blockedByBoxes(x, z, r, boxes, feetY, headY);
+}
+
+/** Box-only test without the room-edge margin: a body pressed onto a perimeter wall sits inside that margin by design. */
+export function blockedByBoxes(x: number, z: number, r: number, boxes: Collider[], feetY = 0, headY = 1.72) {
   for (const b of boxes) {
     if (solidAt(x, z, r, feetY, headY, b)) return true;
   }

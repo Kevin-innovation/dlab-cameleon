@@ -417,8 +417,14 @@ export function animateCharacter(
       }
     }
   }
-  rig.body.rotation.x = rig.pose === "lie" ? rig.body.rotation.x : 0;
-  rig.body.rotation.z = 0;
+  // Re-assert the pose's base transform every frame: the catch animation and older code
+  // used to zero the rotation/offset here, which silently disabled lean/upside/sit.
+  const shape = POSE_SHAPES[rig.pose] ?? POSE_SHAPES.stand;
+  const size = BODY_SCALE[rig.bodySize];
+  const [rx, ry, rz] = shape.rotation ?? [0, 0, 0];
+  const [px, py, pz] = shape.position ?? [0, 0, 0];
+  rig.body.rotation.set(rx, ry, rz);
+  rig.body.scale.set(shape.scale[0] * size.xz, shape.scale[1] * size.y, shape.scale[2] * size.xz);
 
   const airborne = !!opts.airborne;
   const walkOn =
@@ -457,12 +463,8 @@ export function animateCharacter(
     const flash = rig.muzzle.material as THREE.MeshBasicMaterial;
     flash.opacity = 0;
   }
-  rig.body.position.y = (opts.ghost && !reducedMotion ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0) + bob;
-  if (airborne) rig.body.position.y += 0.05;
-  if (rig.pose === "stick") {
-    rig.body.position.z = 0;
-    rig.body.scale.set(1.28, 1.06, 0.08);
-  }
+  const float = opts.ghost && !reducedMotion ? 0.22 + Math.sin(performance.now() * 0.003) * 0.08 : 0;
+  rig.body.position.set(px * size.xz, py * size.y + float + bob + (airborne ? 0.05 : 0), pz * size.xz);
 }
 
 export function uvPaint(

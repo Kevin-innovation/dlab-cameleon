@@ -11,6 +11,7 @@ import { lightLevelAt } from "../camouflage";
 import { ceilingAt } from "../ceiling";
 import {
   blocked,
+  blockedByBoxes,
   edgeMargin,
   headHit,
   landOn,
@@ -46,6 +47,8 @@ const QUALITY_STEPS: { pixelRatio: number; shadows: boolean }[] = [
   { pixelRatio: 1, shadows: false },
 ];
 const QUALITY_SAMPLE_FRAMES = 120;
+/** How far (surface distance) a wall may be for Space / the stick pose to snap onto it. */
+const CLING_REACH = 0.7;
 const QUALITY_SLOW_FRAME_MS = 26;
 const SHADOW_REFRESH_EVERY = 2;
 
@@ -824,7 +827,7 @@ export class GameWorld {
     // rendered wall can be more than the body radius away from the player.
     // C should still reach that wall and snap the player onto its surface.
     const hit = nearestSurface(this.localX, this.localZ, this.colliders, 0.9);
-    if (!hit || hit.dist < 0.04 || hit.dist > 0.55) return false;
+    if (!hit || hit.dist < 0.04 || hit.dist > CLING_REACH) return false;
     const box = hit.box;
     // Cling rails run along X or Z. A rotated prop's face is diagonal, so sliding
     // along an axis would walk the body into (or off) the surface; skip those.
@@ -990,8 +993,8 @@ export class GameWorld {
     }
 
     if (this.grounded && (k.has(" ") || k.has("space")) && !input.paintOpen) {
-      const wall = nearestSurface(this.localX, this.localZ, boxes, 0.52);
-      if (wall && wall.dist < 0.48 && this.tryCling(pose)) {
+      const wall = nearestSurface(this.localX, this.localZ, boxes, CLING_REACH);
+      if (wall && this.tryCling(pose)) {
         // The same Space press that attached us must not detach us next frame.
         this.clingSpaceLatch = true;
         this.stepCling(dt, k, poseRadius("stick"));
@@ -1100,18 +1103,18 @@ export class GameWorld {
     // Moving along or up the wall must not push the body into a neighbouring
     // wall or prop; the clung box itself is excluded since we sit on its face.
     const others = this.colliders.filter((b) => !sameCollider(b, cling.box));
-    const bounds = { w: this.map.w, d: this.map.d };
     const h = poseHeight("stick");
     let nextX = cling.axis === "x" ? cling.plane + cling.sign * pad : Math.max(cling.minA, Math.min(cling.maxA, this.localX + rx * along * speed));
     let nextZ = cling.axis === "z" ? cling.plane + cling.sign * pad : Math.max(cling.minA, Math.min(cling.maxA, this.localZ + rz * along * speed));
-    if (blocked(nextX, nextZ, r, others, bounds, this.localY, this.localY + h)) {
+    // Box-only checks: on a perimeter wall the body legitimately sits inside the room-edge margin.
+    if (blockedByBoxes(nextX, nextZ, r, others, this.localY, this.localY + h)) {
       nextX = this.localX;
       nextZ = this.localZ;
     }
     const nextY = Math.max(0, Math.min(this.clingFeetMax(cling.maxY), this.localY + climb * speed));
     this.localX = nextX;
     this.localZ = nextZ;
-    if (!blocked(nextX, nextZ, r, others, bounds, nextY, nextY + h)) this.localY = nextY;
+    if (!blockedByBoxes(nextX, nextZ, r, others, nextY, nextY + h)) this.localY = nextY;
     this.vy = 0;
     this.yaw = Math.atan2(nx, nz);
     const m = edgeMargin(r);
@@ -1828,9 +1831,9 @@ function isAxisAligned(box: Collider) {
 }
 
 function clingPad() {
-  // The stick pose is scaled to 0.08 on its local depth axis (0.22 * 0.08).
-  // Keep the body surface on the wall face instead of leaving a visible gap.
-  return 0.018;
+  // The stick pose keeps its volume, so the body is 0.56 × 0.22 ≈ 0.12 deep: sit the
+  // centre that far off the wall so the back touches the face without sinking in.
+  return 0.13;
 }
 
 function makeDoor(def: DoorDef) {

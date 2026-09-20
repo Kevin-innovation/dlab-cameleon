@@ -144,6 +144,7 @@ export function GameView({
   const [watching, setWatching] = useState(false);
   const [nowTick, setNowTick] = useState(0);
   const [atDoor, setAtDoor] = useState(false);
+  const [clinging, setClinging] = useState(false);
   const [tabOpen, setTabOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
   const [graphicsError, setGraphicsError] = useState("");
@@ -243,6 +244,7 @@ export function GameView({
     let lastMissedShown = 0;
     let wasHost = false;
     let wasHunterRole = false;
+    let wasClinging = false;
 
     const typing = (e: Event) => {
       const el = e.target as HTMLElement | null;
@@ -760,11 +762,15 @@ export function GameView({
         pose,
         ghost,
       );
-      if (world.clinging()) {
+      // Clinging always shows the stick pose; letting go of the wall (Space/E over the top)
+      // stands the body back up. A stick pose picked away from any wall is left alone.
+      const clingingNow = world.clinging();
+      if (clingingNow) {
         if (pose !== "stick") session.me().set("pose", "stick", true);
-      } else if (pose === "stick") {
+      } else if (wasClinging && pose === "stick") {
         session.me().set("pose", "stand", true);
       }
+      wasClinging = clingingNow;
       if (!watchingRef.current) session.me().set("yaw", world.yaw, false);
 
       if (me && room.phase === "hunt" && hiderAlive(room, me.id)) {
@@ -914,6 +920,7 @@ export function GameView({
         setNowTick(bucket * 500);
       }
       setAtDoor(!!worldRef.current?.nearDoor());
+      setClinging(!!worldRef.current?.clinging());
     }, 120);
 
     return () => {
@@ -1472,8 +1479,8 @@ export function GameView({
           <TouchControls
             canWatch={myRole === "hider" || myRole === "spectator" || hud.phase === "lobby"}
             canFire={myRole === "hunter" && hud.phase === "hunt"}
-            clinging={me?.pose === "stick"}
-            canOpenDoor={atDoor && !watching && me?.pose !== "stick"}
+            clinging={clinging}
+            canOpenDoor={atDoor && !watching && !clinging}
             canPaint={myRole !== "hunter"}
             watching={watching}
             paintOpen={paintOpen}
@@ -1965,11 +1972,21 @@ function TouchControls({
   );
 }
 
+/**
+ * Stick is a real pose, not just "cling": picking it always flattens the body, and if an
+ * axis-aligned wall is within reach the body also snaps onto it (E/Q climb, Space detach).
+ * Picking it again lets go and stands up.
+ */
 function applyPosePick(session: Session, world: GameWorld, pose: Pose) {
+  const cur = ((session.me().get("pose") as Pose) || "stand") as Pose;
   if (pose === "stick") {
-    const cur = ((session.me().get("pose") as Pose) || "stand") as Pose;
-    const on = world.tryCling(cur);
-    session.me().set("pose", on ? "stick" : "stand", true);
+    if (cur === "stick") {
+      world.exitCling();
+      session.me().set("pose", "stand", true);
+      return;
+    }
+    world.tryCling(cur);
+    session.me().set("pose", "stick", true);
     return;
   }
   world.exitCling();
