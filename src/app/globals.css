@@ -36,6 +36,17 @@ html {
 body {
   font-family: var(--font-ui);
   overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
+/* While the game view is mounted the document is pinned to the visual viewport: no page
+   scroll, no rubber-banding, so the bottom controls can never be scrolled off-screen. */
+body.game-active {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: manipulation;
 }
 
 /* Same family as body text; "display" is now just the heavy weight with tighter tracking. */

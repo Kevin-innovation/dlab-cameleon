@@ -34,6 +34,9 @@ export const viewport: Viewport = {
   themeColor: "#0b100d",
   width: "device-width",
   initialScale: 1,
+  // A zoomed page hides the bottom controls on phones (double-tap / pinch while playing).
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 

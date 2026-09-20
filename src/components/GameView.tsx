@@ -198,6 +198,11 @@ export function GameView({
     paintOpenRef.current = paintOpen;
     if (paintOpen) exitPointerLockSafely();
   }, [paintOpen]);
+  // Pin the document while playing (see body.game-active in globals.css).
+  useEffect(() => {
+    document.body.classList.add("game-active");
+    return () => document.body.classList.remove("game-active");
+  }, []);
   useEffect(() => {
     colorRef.current = color;
   }, [color]);
