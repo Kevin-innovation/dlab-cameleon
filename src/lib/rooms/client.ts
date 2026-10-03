@@ -85,3 +85,11 @@ export function deleteLobbyChat(channelId: string, messageId: string, name: stri
     fetchImpl,
   );
 }
+
+export function clearLobbyChat(channelId: string, name: string, adminKey: string, fetchImpl: typeof fetch = fetch) {
+  return request<{ removed: number; all: true }>(
+    "/api/rooms/chat",
+    json("DELETE", { channelId, name, adminKey, all: true }),
+    fetchImpl,
+  );
+}

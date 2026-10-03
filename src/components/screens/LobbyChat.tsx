@@ -7,7 +7,7 @@ import type { LobbyChatState } from "./useLobbyChat";
 
 const TIME_FORMAT = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" });
 
-export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyChatState & { send: (text: string) => Promise<boolean>; remove: (messageId: string, adminKey: string) => Promise<boolean>; refresh: () => void } }) {
+export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyChatState & { send: (text: string) => Promise<boolean>; remove: (messageId: string, adminKey: string) => Promise<boolean>; clear: (adminKey: string) => Promise<boolean>; refresh: () => void } }) {
   const [draft, setDraft] = useState("");
   const [adminKey, setAdminKey] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
@@ -35,9 +35,23 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
           <p className="text-xs tracking-wide text-lime">한국 서버 로비</p>
           <h2 id="lobby-chat-title" className="font-display text-2xl">실시간 채팅</h2>
         </div>
-        <button type="button" onClick={chat.refresh} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/65 transition hover:border-lime/50 hover:text-lime">
-          새로고침
-        </button>
+        <div className="flex items-center gap-1.5">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("한국 서버 채팅을 모두 삭제할까요?")) void chat.clear(adminKey);
+              }}
+              disabled={!adminKey.trim() || chat.clearing || chat.deletingId !== ""}
+              className="rounded-full border border-pink/30 px-2.5 py-1 text-[11px] text-pink transition hover:border-pink/60 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              {chat.clearing ? "삭제 중…" : "전체 삭제"}
+            </button>
+          )}
+          <button type="button" onClick={chat.refresh} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/65 transition hover:border-lime/50 hover:text-lime">
+            새로고침
+          </button>
+        </div>
       </div>
       <p className="mt-1 text-xs text-white/55">방에 들어가기 전에도 {nickname} 님으로 대화할 수 있어요.</p>
       {isAdmin && (

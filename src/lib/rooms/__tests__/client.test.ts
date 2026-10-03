@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeRoom, deleteLobbyChat, fetchLobbyChat, fetchRoom, fetchRooms, generateDirectoryToken, sendHeartbeat, sendLobbyChat } from "../client";
+import { clearLobbyChat, closeRoom, deleteLobbyChat, fetchLobbyChat, fetchRoom, fetchRooms, generateDirectoryToken, sendHeartbeat, sendLobbyChat } from "../client";
 import type { RoomListing } from "../listing";
 
 const NOW = 1_700_000_000_000;
@@ -107,6 +107,13 @@ describe("lobby chat client", () => {
     expect(calls[0].url).toBe("/api/rooms/chat");
     expect(calls[0].init?.method).toBe("DELETE");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ channelId: "kr1", messageId: "lobby-1-abcd1234", name: "Kevin", adminKey: "k".repeat(32) });
+  });
+
+  it("clears all chat with the admin key", async () => {
+    const calls: Call[] = [];
+    await clearLobbyChat("kr1", "Kevin", "k".repeat(32), fakeFetch(200, { ok: true, data: { removed: 2, all: true } }, calls));
+    expect(calls[0].init?.method).toBe("DELETE");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ channelId: "kr1", name: "Kevin", adminKey: "k".repeat(32), all: true });
   });
 });
 

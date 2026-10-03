@@ -26,6 +26,7 @@ export interface RoomDirectoryStore {
   listChat(channelId: string, after: number, now: number): Promise<LobbyChatMessage[]>;
   appendChat(channelId: string, message: LobbyChatMessage, now: number): Promise<void>;
   deleteChat(channelId: string, messageId: string, now: number): Promise<DeleteChatResult>;
+  clearChat(channelId: string, now: number): Promise<number>;
 }
 
 type MemoryEntry = { listing: RoomListing; token: string };
@@ -105,6 +106,16 @@ export class MemoryRoomDirectoryStore implements RoomDirectoryStore {
     if (messages.length === entry.messages.length) return "missing";
     this.chats.set(channelId, { messages, expiresAt: entry.expiresAt });
     return "removed";
+  }
+
+  async clearChat(channelId: string, now: number): Promise<number> {
+    const entry = this.chats.get(channelId);
+    if (!entry || entry.expiresAt <= now) {
+      if (entry) this.chats.delete(channelId);
+      return 0;
+    }
+    this.chats.delete(channelId);
+    return entry.messages.length;
   }
 }
 
@@ -254,6 +265,21 @@ export class RedisRoomDirectoryStore implements RoomDirectoryStore {
     if (remaining.length === messages.length) return "missing";
     await this.redis.set(key, remaining, { ex: LOBBY_CHAT_TTL_S });
     return "removed";
+  }
+
+  async clearChat(channelId: string, now: number): Promise<number> {
+    void now;
+    const key = chatKey(channelId);
+    if (this.redis.lrange) {
+      const rows = await this.redis.lrange<unknown>(key, 0, LOBBY_CHAT_HISTORY_MAX - 1);
+      if (rows.length === 0) return 0;
+      await this.redis.del(key);
+      return rows.length;
+    }
+    const messages = (await this.redis.get<LobbyChatMessage[]>(key)) ?? [];
+    if (messages.length === 0) return 0;
+    await this.redis.del(key);
+    return messages.length;
   }
 }
 

@@ -106,6 +106,15 @@ describe("lobby chat", () => {
     expect((await handleDeleteChat(store, JSON.stringify({ channelId: "kr1", messageId, name: "Kevin", adminKey: ADMIN_KEY }), NOW + 1, ADMIN_KEY)).status).toBe(200);
     expect((await handleListChat(store, "kr1", 0, NOW + 2)).body).toEqual({ ok: true, data: { messages: [], now: NOW + 2 } });
   });
+
+  it("lets Kevin clear the whole channel", async () => {
+    const store = new MemoryRoomDirectoryStore();
+    await handleSendChat(store, JSON.stringify({ channelId: "kr1", name: "미호", text: "첫 번째" }), NOW);
+    await handleSendChat(store, JSON.stringify({ channelId: "kr1", name: "준혁", text: "두 번째" }), NOW + 1);
+    const cleared = await handleDeleteChat(store, JSON.stringify({ channelId: "kr1", name: "Kevin", adminKey: ADMIN_KEY, all: true }), NOW + 2, ADMIN_KEY);
+    expect(cleared).toEqual({ status: 200, body: { ok: true, data: { removed: 2, all: true } } });
+    expect((await handleListChat(store, "kr1", 0, NOW + 3)).body).toEqual({ ok: true, data: { messages: [], now: NOW + 3 } });
+  });
 });
 
 describe("handleGetRoom", () => {

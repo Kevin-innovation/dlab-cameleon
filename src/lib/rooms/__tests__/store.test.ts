@@ -144,6 +144,8 @@ function suite(name: string, make: () => { store: RoomDirectoryStore; advance: (
       expect(await store.deleteChat("kr1", "m1", NOW + 1)).toBe("removed");
       expect(await store.deleteChat("kr1", "m1", NOW + 1)).toBe("missing");
       expect(await store.listChat("kr1", 0, NOW + 1)).toEqual([second]);
+      expect(await store.clearChat("kr1", NOW + 1)).toBe(1);
+      expect(await store.clearChat("kr1", NOW + 1)).toBe(0);
       expect(await store.listChat("jp1", 0, NOW + 1)).toEqual([]);
     });
   });

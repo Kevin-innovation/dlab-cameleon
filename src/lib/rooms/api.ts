@@ -109,9 +109,10 @@ export async function handleDeleteChat(store: RoomDirectoryStore, rawBody: strin
   const messageId = readMessageId(parsed.value.messageId);
   const name = cleanLobbyChatName(parsed.value.name);
   if (!channelId) return fail(400, "channel is invalid");
-  if (!messageId) return fail(400, "message id is invalid");
   if (!name) return fail(400, "name is invalid");
   if (!isLobbyAdminName(name) || !isLobbyAdminKey(parsed.value.adminKey, expectedAdminKey)) return fail(403, "admin authorization required");
+  if (parsed.value.all === true) return ok({ removed: await store.clearChat(channelId, now), all: true });
+  if (!messageId) return fail(400, "message id is invalid");
   const outcome = await store.deleteChat(channelId, messageId, now);
   if (outcome === "missing") return fail(404, "chat message not found");
   return ok({ removed: messageId });
