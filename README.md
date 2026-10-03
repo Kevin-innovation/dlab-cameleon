@@ -51,6 +51,8 @@ npm run dev
 
 방 목록 API(`/api/rooms*`)는 `KV_REST_API_URL`/`KV_REST_API_TOKEN`이 없으면 로컬에서 메모리 스토어로 동작합니다(같은 dev 서버 안에서만 공유). Vercel 프로젝트에 연결하면 `vercel env pull`로 `.env.local`을 받을 수 있습니다.
 
+로비 채팅에서 **Kevin** 닉네임으로 관리자 인증 키를 입력하면 채팅 삭제 버튼이 활성화됩니다. `LOBBY_ADMIN_KEY`를 로컬·Preview·Production 환경변수에 16자 이상으로 설정해야 하며, 닉네임만 Kevin으로 입력한 사용자는 서버에서 삭제가 거부됩니다. 키는 클라이언트에 저장하지 않습니다.
+
 게임성 기준선과 맵·스폰 검증은 다음 명령으로 실행합니다.
 
 ```bash

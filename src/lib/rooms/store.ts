@@ -4,6 +4,7 @@ import { isStale, type RoomListing } from "./listing";
 
 export type UpsertResult = "ok" | "forbidden" | "too_fast";
 export type RemoveResult = "ok" | "forbidden" | "missing";
+export type DeleteChatResult = "removed" | "missing";
 
 export type DirectoryStoreOptions = {
   ttlMs: number;
@@ -24,6 +25,7 @@ export interface RoomDirectoryStore {
   remove(code: string, token: string): Promise<RemoveResult>;
   listChat(channelId: string, after: number, now: number): Promise<LobbyChatMessage[]>;
   appendChat(channelId: string, message: LobbyChatMessage, now: number): Promise<void>;
+  deleteChat(channelId: string, messageId: string, now: number): Promise<DeleteChatResult>;
 }
 
 type MemoryEntry = { listing: RoomListing; token: string };
@@ -92,6 +94,18 @@ export class MemoryRoomDirectoryStore implements RoomDirectoryStore {
       expiresAt: now + LOBBY_CHAT_TTL_S * 1000,
     });
   }
+
+  async deleteChat(channelId: string, messageId: string, now: number): Promise<DeleteChatResult> {
+    const entry = this.chats.get(channelId);
+    if (!entry || entry.expiresAt <= now) {
+      if (entry) this.chats.delete(channelId);
+      return "missing";
+    }
+    const messages = entry.messages.filter((message) => message.id !== messageId);
+    if (messages.length === entry.messages.length) return "missing";
+    this.chats.set(channelId, { messages, expiresAt: entry.expiresAt });
+    return "removed";
+  }
 }
 
 /** The subset of the Upstash client the store relies on; kept narrow so tests can fake it. */
@@ -105,6 +119,7 @@ export interface DirectoryRedis {
   mget<T>(...keys: string[]): Promise<(T | null)[]>;
   lpush?: (key: string, ...values: unknown[]) => Promise<number>;
   lrange?: <T>(key: string, start: number, stop: number) => Promise<T[]>;
+  lrem?: (key: string, count: number, value: unknown) => Promise<number>;
   ltrim?: (key: string, start: number, stop: number) => Promise<unknown>;
   expire?: (key: string, seconds: number) => Promise<unknown>;
 }
@@ -206,4 +221,49 @@ export class RedisRoomDirectoryStore implements RoomDirectoryStore {
     const messages = (await this.redis.get<LobbyChatMessage[]>(key)) ?? [];
     await this.redis.set(key, [...messages, message].slice(-LOBBY_CHAT_HISTORY_MAX), { ex: LOBBY_CHAT_TTL_S });
   }
+
+  async deleteChat(channelId: string, messageId: string, now: number): Promise<DeleteChatResult> {
+    void now;
+    const key = chatKey(channelId);
+    if (this.redis.lrange) {
+      const rows = await this.redis.lrange<unknown>(key, 0, LOBBY_CHAT_HISTORY_MAX - 1);
+      const row = rows.find((candidate) => {
+        const message = parseChatRow(candidate);
+        return message?.id === messageId;
+      });
+      if (row === undefined) return "missing";
+      const serialized = typeof row === "string" ? row : JSON.stringify(row);
+      if (this.redis.lrem) return (await this.redis.lrem(key, 1, serialized)) > 0 ? "removed" : "missing";
+
+      // Compatibility fallback for a test adapter or an older Redis shape.
+      const remaining = rows.filter((candidate) => {
+        const message = parseChatRow(candidate);
+        return message?.id !== messageId;
+      });
+      await this.redis.del(key);
+      if (remaining.length && this.redis.lpush) {
+        await this.redis.lpush(key, ...remaining.slice().reverse().map((candidate) => typeof candidate === "string" ? candidate : JSON.stringify(candidate)));
+        if (this.redis.ltrim) await this.redis.ltrim(key, 0, LOBBY_CHAT_HISTORY_MAX - 1);
+        if (this.redis.expire) await this.redis.expire(key, LOBBY_CHAT_TTL_S);
+      }
+      return "removed";
+    }
+
+    const messages = (await this.redis.get<LobbyChatMessage[]>(key)) ?? [];
+    const remaining = messages.filter((message) => message.id !== messageId);
+    if (remaining.length === messages.length) return "missing";
+    await this.redis.set(key, remaining, { ex: LOBBY_CHAT_TTL_S });
+    return "removed";
+  }
+}
+
+function parseChatRow(row: unknown): LobbyChatMessage | null {
+  if (typeof row === "string") {
+    try {
+      return JSON.parse(row) as LobbyChatMessage;
+    } catch {
+      return null;
+    }
+  }
+  return row && typeof row === "object" ? row as LobbyChatMessage : null;
 }

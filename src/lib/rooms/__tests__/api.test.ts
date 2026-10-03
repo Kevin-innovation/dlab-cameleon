@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleCloseRoom, handleGetRoom, handleHeartbeat, handleListChat, handleListRooms, handleSendChat } from "../api";
+import { handleCloseRoom, handleDeleteChat, handleGetRoom, handleHeartbeat, handleListChat, handleListRooms, handleSendChat } from "../api";
 import { MemoryRoomDirectoryStore } from "../store";
 
 const NOW = 1_700_000_000_000;
@@ -76,6 +76,8 @@ describe("handleListRooms", () => {
 });
 
 describe("lobby chat", () => {
+  const ADMIN_KEY = "k".repeat(32);
+
   it("stores a nickname-labelled message and returns it to the channel", async () => {
     const store = new MemoryRoomDirectoryStore();
     const sent = await handleSendChat(store, JSON.stringify({ channelId: "kr1", name: " 미호 ", text: "안녕\n방 찾는 중" }), NOW);
@@ -92,6 +94,17 @@ describe("lobby chat", () => {
     const store = new MemoryRoomDirectoryStore();
     expect((await handleSendChat(store, JSON.stringify({ channelId: "kr1", name: "미호", text: "" }), NOW)).status).toBe(400);
     expect((await handleListChat(store, "bad channel", 0, NOW)).status).toBe(400);
+  });
+
+  it("lets only Kevin with the server key remove a message", async () => {
+    const store = new MemoryRoomDirectoryStore();
+    const sent = await handleSendChat(store, JSON.stringify({ channelId: "kr1", name: "미호", text: "삭제 대상" }), NOW);
+    const messageId = (sent.body as { data: { message: { id: string } } }).data.message.id;
+
+    expect((await handleDeleteChat(store, JSON.stringify({ channelId: "kr1", messageId, name: "미호", adminKey: ADMIN_KEY }), NOW + 1, ADMIN_KEY)).status).toBe(403);
+    expect((await handleDeleteChat(store, JSON.stringify({ channelId: "kr1", messageId, name: "Kevin", adminKey: "wrong" }), NOW + 1, ADMIN_KEY)).status).toBe(403);
+    expect((await handleDeleteChat(store, JSON.stringify({ channelId: "kr1", messageId, name: "Kevin", adminKey: ADMIN_KEY }), NOW + 1, ADMIN_KEY)).status).toBe(200);
+    expect((await handleListChat(store, "kr1", 0, NOW + 2)).body).toEqual({ ok: true, data: { messages: [], now: NOW + 2 } });
   });
 });
 

@@ -2,14 +2,17 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CHAT_TEXT_MAX } from "@/lib/config";
+import { isLobbyAdminName } from "@/lib/rooms/admin";
 import type { LobbyChatState } from "./useLobbyChat";
 
 const TIME_FORMAT = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" });
 
-export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyChatState & { send: (text: string) => Promise<boolean>; refresh: () => void } }) {
+export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyChatState & { send: (text: string) => Promise<boolean>; remove: (messageId: string, adminKey: string) => Promise<boolean>; refresh: () => void } }) {
   const [draft, setDraft] = useState("");
+  const [adminKey, setAdminKey] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const lastMessageId = chat.messages[chat.messages.length - 1]?.id ?? "";
+  const isAdmin = isLobbyAdminName(nickname);
 
   useEffect(() => {
     const log = logRef.current;
@@ -37,6 +40,21 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
         </button>
       </div>
       <p className="mt-1 text-xs text-white/55">방에 들어가기 전에도 {nickname} 님으로 대화할 수 있어요.</p>
+      {isAdmin && (
+        <div className="mt-3 rounded-2xl border border-lime/20 bg-lime/5 p-3">
+          <label htmlFor="lobby-admin-key" className="text-xs font-semibold text-lime">Kevin 관리자 인증</label>
+          <input
+            id="lobby-admin-key"
+            type="password"
+            value={adminKey}
+            onChange={(event) => setAdminKey(event.target.value)}
+            autoComplete="off"
+            placeholder="관리자 키 입력"
+            className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs outline-none focus-visible:border-lime/50 focus-visible:ring-1 focus-visible:ring-lime/40"
+          />
+          <p className="mt-1 text-[10px] text-white/45">인증 후 채팅마다 삭제 버튼이 표시됩니다.</p>
+        </div>
+      )}
       <div ref={logRef} className="mt-3 h-56 overflow-y-auto rounded-2xl bg-black/25 p-3" role="log" aria-live="polite" aria-label="한국 서버 로비 채팅">
         {chat.loading && chat.messages.length === 0 ? (
           <p className="grid h-full place-items-center text-xs text-white/50">채팅을 불러오는 중…</p>
@@ -49,6 +67,19 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
                 <div className="flex items-baseline gap-1.5">
                   <span className={message.name === nickname ? "font-semibold text-lime" : "font-semibold text-white/85"}>{message.name}</span>
                   <time className="text-[10px] text-white/40" dateTime={new Date(message.at).toISOString()}>{TIME_FORMAT.format(message.at)}</time>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("이 채팅을 삭제할까요?")) void chat.remove(message.id, adminKey);
+                      }}
+                      disabled={!adminKey.trim() || chat.deletingId === message.id}
+                      className="ml-auto rounded-full border border-pink/30 px-1.5 py-0.5 text-[10px] text-pink disabled:cursor-not-allowed disabled:opacity-30"
+                      aria-label={`${message.name}의 채팅 삭제`}
+                    >
+                      {chat.deletingId === message.id ? "…" : "삭제"}
+                    </button>
+                  )}
                 </div>
                 <p className="break-words text-white/75">{message.text}</p>
               </li>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeRoom, fetchLobbyChat, fetchRoom, fetchRooms, generateDirectoryToken, sendHeartbeat, sendLobbyChat } from "../client";
+import { closeRoom, deleteLobbyChat, fetchLobbyChat, fetchRoom, fetchRooms, generateDirectoryToken, sendHeartbeat, sendLobbyChat } from "../client";
 import type { RoomListing } from "../listing";
 
 const NOW = 1_700_000_000_000;
@@ -99,6 +99,14 @@ describe("lobby chat client", () => {
     await sendLobbyChat("kr1", "미호", "안녕", fakeFetch(201, { ok: true, data: { message: { id: "m1", name: "미호", text: "안녕", at: NOW } } }, calls));
     expect(calls[0].init?.method).toBe("POST");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ channelId: "kr1", name: "미호", text: "안녕" });
+  });
+
+  it("deletes a chat message with the admin key", async () => {
+    const calls: Call[] = [];
+    await deleteLobbyChat("kr1", "lobby-1-abcd1234", "Kevin", "k".repeat(32), fakeFetch(200, { ok: true, data: { removed: "lobby-1-abcd1234" } }, calls));
+    expect(calls[0].url).toBe("/api/rooms/chat");
+    expect(calls[0].init?.method).toBe("DELETE");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ channelId: "kr1", messageId: "lobby-1-abcd1234", name: "Kevin", adminKey: "k".repeat(32) });
   });
 });
 

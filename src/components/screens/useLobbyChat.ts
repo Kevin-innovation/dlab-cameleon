@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LOBBY_CHAT_HISTORY_MAX, LOBBY_CHAT_POLL_MS } from "@/lib/config";
-import { fetchLobbyChat, sendLobbyChat } from "@/lib/rooms/client";
+import { deleteLobbyChat, fetchLobbyChat, sendLobbyChat } from "@/lib/rooms/client";
 import type { LobbyChatMessage } from "@/lib/rooms/chat";
 
 export type LobbyChatState = {
   messages: LobbyChatMessage[];
   loading: boolean;
   sending: boolean;
+  deletingId: string;
   error: string;
 };
 
-const initialState: LobbyChatState = { messages: [], loading: true, sending: false, error: "" };
+const initialState: LobbyChatState = { messages: [], loading: true, sending: false, deletingId: "", error: "" };
 
 function mergeMessages(current: LobbyChatMessage[], incoming: LobbyChatMessage[]) {
   const byId = new Map(current.map((message) => [message.id, message]));
@@ -22,12 +23,13 @@ function mergeMessages(current: LobbyChatMessage[], incoming: LobbyChatMessage[]
     .slice(-LOBBY_CHAT_HISTORY_MAX);
 }
 
-export function useLobbyChat(channelId: string, nickname: string, enabled: boolean): LobbyChatState & { send: (text: string) => Promise<boolean>; refresh: () => void } {
+export function useLobbyChat(channelId: string, nickname: string, enabled: boolean): LobbyChatState & { send: (text: string) => Promise<boolean>; remove: (messageId: string, adminKey: string) => Promise<boolean>; refresh: () => void } {
   const [state, setState] = useState<LobbyChatState>(initialState);
   const cursorRef = useRef(0);
   const timerRef = useRef<number>(0);
   const activeRef = useRef(false);
   const sendingRef = useRef(false);
+  const deletingRef = useRef(false);
 
   const load = useCallback(async () => {
     const result = await fetchLobbyChat(channelId, Math.max(0, cursorRef.current - 1));
@@ -83,11 +85,39 @@ export function useLobbyChat(channelId: string, nickname: string, enabled: boole
     [channelId, nickname],
   );
 
+  const remove = useCallback(
+    async (messageId: string, adminKey: string) => {
+      if (!messageId || !adminKey.trim() || !nickname.trim() || sendingRef.current || deletingRef.current) return false;
+      deletingRef.current = true;
+      setState((prev) => ({ ...prev, deletingId: messageId, error: "" }));
+      const result = await deleteLobbyChat(channelId, messageId, nickname, adminKey);
+      deletingRef.current = false;
+      if (!activeRef.current) return false;
+      if (!result.ok) {
+        setState((prev) => ({
+          ...prev,
+          deletingId: "",
+          error: result.status === 403
+            ? "Kevin 관리자 키를 확인해 주세요."
+            : result.status === 503
+              ? "관리자 삭제 기능이 서버에 설정되지 않았습니다."
+              : result.status === 404
+                ? "이미 삭제된 채팅입니다."
+                : "채팅을 삭제하지 못했습니다.",
+        }));
+        return false;
+      }
+      setState((prev) => ({ ...prev, deletingId: "", messages: prev.messages.filter((message) => message.id !== messageId) }));
+      return true;
+    },
+    [channelId, nickname],
+  );
+
   const refresh = useCallback(() => {
     cursorRef.current = 0;
     setState((prev) => ({ ...prev, messages: [], loading: true, error: "" }));
     void load();
   }, [load]);
 
-  return { ...state, send, refresh };
+  return { ...state, send, remove, refresh };
 }

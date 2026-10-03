@@ -10,7 +10,7 @@ interface RoomBrowserProps {
   channelName: string;
   nickname: string;
   list: RoomListState;
-  chat: LobbyChatState & { send: (text: string) => Promise<boolean>; refresh: () => void };
+  chat: LobbyChatState & { send: (text: string) => Promise<boolean>; remove: (messageId: string, adminKey: string) => Promise<boolean>; refresh: () => void };
   busy: boolean;
   error: string;
   onRefresh: () => void;

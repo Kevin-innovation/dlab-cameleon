@@ -1,6 +1,7 @@
 import { sortListings, validateListing } from "./listing";
 import { parseRoomCode } from "./code";
 import { cleanLobbyChatName, cleanLobbyChatText, type LobbyChatMessage } from "./chat";
+import { isLobbyAdminKey, isLobbyAdminName } from "./admin";
 import type { RoomDirectoryStore } from "./store";
 
 export type ApiResult = { status: number; body: { ok: true; data: unknown } | { ok: false; error: string } };
@@ -8,6 +9,7 @@ export type ApiResult = { status: number; body: { ok: true; data: unknown } | { 
 const MAX_BODY_BYTES = 2048;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 const CHANNEL_PATTERN = /^[a-z0-9-]{1,16}$/;
+const MESSAGE_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
 const ok = (data: unknown, status = 200): ApiResult => ({ status, body: { ok: true, data } });
 const fail = (status: number, error: string): ApiResult => ({ status, body: { ok: false, error } });
@@ -71,6 +73,10 @@ function readChannel(value: unknown): string | null {
   return typeof value === "string" && CHANNEL_PATTERN.test(value) ? value : null;
 }
 
+function readMessageId(value: unknown): string | null {
+  return typeof value === "string" && MESSAGE_ID_PATTERN.test(value) ? value : null;
+}
+
 export async function handleListChat(store: RoomDirectoryStore, channelId: string, after: number, now: number): Promise<ApiResult> {
   if (!readChannel(channelId)) return fail(400, "channel is invalid");
   if (!Number.isSafeInteger(after) || after < 0) return fail(400, "after is invalid");
@@ -94,4 +100,19 @@ export async function handleSendChat(store: RoomDirectoryStore, rawBody: string,
   };
   await store.appendChat(channelId, message, now);
   return ok({ message }, 201);
+}
+
+export async function handleDeleteChat(store: RoomDirectoryStore, rawBody: string, now: number, expectedAdminKey: string | null): Promise<ApiResult> {
+  const parsed = parseBody(rawBody);
+  if (!parsed.ok) return parsed.result;
+  const channelId = readChannel(parsed.value.channelId);
+  const messageId = readMessageId(parsed.value.messageId);
+  const name = cleanLobbyChatName(parsed.value.name);
+  if (!channelId) return fail(400, "channel is invalid");
+  if (!messageId) return fail(400, "message id is invalid");
+  if (!name) return fail(400, "name is invalid");
+  if (!isLobbyAdminName(name) || !isLobbyAdminKey(parsed.value.adminKey, expectedAdminKey)) return fail(403, "admin authorization required");
+  const outcome = await store.deleteChat(channelId, messageId, now);
+  if (outcome === "missing") return fail(404, "chat message not found");
+  return ok({ removed: messageId });
 }

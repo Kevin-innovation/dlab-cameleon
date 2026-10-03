@@ -7,6 +7,12 @@ import { MemoryRoomDirectoryStore, RedisRoomDirectoryStore, type DirectoryRedis,
 const limiter = new MemoryRateLimiter({ limit: 240, windowMs: 60_000 });
 const chatLimiter = new MemoryRateLimiter({ limit: 30, windowMs: 60_000 });
 
+/** The moderation key is server-only; never expose it through a public config variable. */
+export function getLobbyAdminKey(): string | null {
+  const key = process.env.LOBBY_ADMIN_KEY?.trim();
+  return key && key.length >= 16 ? key : null;
+}
+
 /** Returns a 429 response when the caller exceeded the budget, otherwise null. */
 export function rateLimitResponse(request: Request): Response | null {
   const result = limiter.hit(clientKeyFromHeaders(request.headers));
