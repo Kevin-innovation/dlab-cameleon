@@ -206,6 +206,15 @@ export function GameView({
     if (id) session.callDoor(id);
   }, [session]);
 
+  const retryGraphics = useCallback(() => {
+    try {
+      window.sessionStorage.setItem("camelon-low-spec", "1");
+    } catch {
+      // Private browsing can deny sessionStorage; a reload is still useful for context loss.
+    }
+    window.location.reload();
+  }, []);
+
   useEffect(() => {
     paintOpenRef.current = paintOpen;
     if (paintOpen) exitPointerLockSafely();
@@ -236,8 +245,9 @@ export function GameView({
     let world: GameWorld;
     try {
       world = new GameWorld(canvas);
-    } catch {
-      queueMicrotask(() => setGraphicsError("이 기기에서 3D 그래픽을 시작하지 못했습니다."));
+    } catch (error) {
+      console.error("[camelon] WebGL init failed", error);
+      queueMicrotask(() => setGraphicsError("3D 그래픽을 시작하지 못했습니다. WebGL이 꺼져 있거나 그래픽 메모리가 부족할 수 있습니다."));
       return;
     }
     worldRef.current = world;
@@ -252,15 +262,16 @@ export function GameView({
     const startMap = getMap(session.getRoom().mapId);
     try {
       world.loadMap(startMap.id);
-    } catch {
+    } catch (error) {
+      console.error("[camelon] map graphics load failed", error);
       world.dispose();
       worldRef.current = null;
-      queueMicrotask(() => setGraphicsError("이 기기의 그래픽 메모리가 부족해 게임을 시작하지 못했습니다."));
+      queueMicrotask(() => setGraphicsError("맵 리소스를 그래픽 메모리에 올리지 못했습니다. 저사양 모드로 다시 시도해 주세요."));
       return;
     }
     const onContextLost = (event: Event) => {
       event.preventDefault();
-      setGraphicsError("3D 그래픽 연결이 끊겼습니다. Safari 탭을 닫고 다시 열어 주세요.");
+      setGraphicsError("3D 그래픽 연결이 끊겼습니다. 저사양 모드로 다시 시작해 주세요.");
     };
     const onContextRestored = () => setGraphicsError("");
     canvas.addEventListener("webglcontextlost", onContextLost, { passive: false });
@@ -941,7 +952,13 @@ export function GameView({
         fps: fpsHunt,
         moving: localMoving,
       });
-      world.render();
+      try {
+        world.render();
+      } catch (error) {
+        console.error("[camelon] render failed", error);
+        setGraphicsError("그래픽 렌더링 중 오류가 발생했습니다. 저사양 모드로 다시 시작해 주세요.");
+        return;
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -1239,6 +1256,13 @@ export function GameView({
               <div className="text-4xl" aria-hidden="true">⚠</div>
               <h2 className="mt-3 font-display text-2xl text-lime">게임 그래픽을 준비하지 못했어요</h2>
               <p className="mt-2 text-sm leading-relaxed text-white/75">{graphicsError}</p>
+              <button
+                type="button"
+                className="mt-5 rounded-full bg-lime px-5 py-2.5 font-display text-black transition hover:bg-lime/85"
+                onClick={retryGraphics}
+              >
+                저사양 모드로 다시 시작
+              </button>
             </div>
           </div>
         )}
@@ -1737,7 +1761,7 @@ export function GameView({
 
       {showStats && perf && (
         <div className="pointer-events-none absolute right-3 top-16 z-30 rounded-lg bg-black/70 px-2 py-1 font-mono text-[11px] text-lime" aria-hidden="true">
-          {perf.avgMs > 0 ? `${(1000 / perf.avgMs).toFixed(0)}fps ${perf.avgMs.toFixed(1)}ms` : "측정 중"} · q{perf.quality} · dpr{perf.pixelRatio.toFixed(2)} · {perf.shadows ? "shadow" : "noshadow"} · {perf.calls}calls · {(perf.triangles / 1000).toFixed(0)}k tri · {perf.lights} lights
+          {perf.avgMs > 0 ? `${(1000 / perf.avgMs).toFixed(0)}fps ${perf.avgMs.toFixed(1)}ms` : "측정 중"} · q{perf.quality}{perf.lowSpec ? " · safe" : ""} · dpr{perf.pixelRatio.toFixed(2)} · {perf.shadows ? "shadow" : "noshadow"} · {perf.calls}calls · {(perf.triangles / 1000).toFixed(0)}k tri · {perf.lights} lights
         </div>
       )}
 

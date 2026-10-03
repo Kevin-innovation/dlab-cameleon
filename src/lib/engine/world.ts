@@ -56,6 +56,15 @@ const KILL_DROPS = 28;
 const CLING_REACH = 0.7;
 const QUALITY_SLOW_FRAME_MS = 20;
 const SHADOW_REFRESH_EVERY = 2;
+const LOW_SPEC_STORAGE_KEY = "camelon-low-spec";
+
+function readLowSpecPreference() {
+  try {
+    return typeof window !== "undefined" && window.sessionStorage.getItem(LOW_SPEC_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 const LOCAL_PROP_MODELS: Partial<Record<PropKind, string>> = {
   sofa: "/models/lobby-sofa-cc0.glb",
@@ -154,6 +163,7 @@ export class GameWorld {
   private viewBob = 0;
   private reducedMotion = false;
   private isMobile = false;
+  private lowSpec = false;
   private textureLoader = new THREE.TextureLoader();
   private imageTextures = new Map<string, THREE.Texture>();
   private modelLoader = new GLTFLoader();
@@ -175,25 +185,35 @@ export class GameWorld {
   constructor(canvas: HTMLCanvasElement) {
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.isMobile = window.matchMedia("(max-width: 767px), (pointer: coarse) and (hover: none)").matches;
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const deviceMemory = Number(nav.deviceMemory);
+    const cores = Number(nav.hardwareConcurrency);
+    this.lowSpec =
+      readLowSpecPreference() ||
+      this.isMobile ||
+      (Number.isFinite(deviceMemory) && deviceMemory > 0 && deviceMemory <= 4) ||
+      (Number.isFinite(cores) && cores > 0 && cores <= 4);
+    const dpr = window.devicePixelRatio || 1;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       // MSAA on top of a ≥1.5 device pixel ratio is nearly invisible and costs a lot of fill.
-      antialias: !this.isMobile && (window.devicePixelRatio || 1) < 1.5,
+      antialias: !this.lowSpec && dpr < 1.5,
       alpha: false,
-      powerPreference: "high-performance",
+      powerPreference: this.lowSpec ? "low-power" : "high-performance",
     });
     // iPhones often report a 2–3x device pixel ratio. Rendering the full
     // framebuffer at that density makes the WebGL tab far more likely to be
     // evicted when the map, furniture, and player paint textures are loaded.
-    this.renderer.setPixelRatio(Math.min(this.isMobile ? 1 : QUALITY_STEPS[0].pixelRatio, window.devicePixelRatio || 1));
+    this.renderer.setPixelRatio(Math.min(this.lowSpec ? 1 : QUALITY_STEPS[0].pixelRatio, dpr));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
-    this.renderer.shadowMap.enabled = !this.isMobile;
+    this.renderer.shadowMap.enabled = !this.lowSpec;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // Static geometry dominates the shadow pass; refreshing it every other frame is invisible and halves its cost.
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
+    this.qualityStep = this.lowSpec ? QUALITY_STEPS.length - 1 : 0;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 700);
@@ -256,8 +276,8 @@ export class GameWorld {
     }
     sun.target.position.set(map.w / 2, 0, map.d / 2);
     this.mapGroup.add(sun.target);
-    sun.castShadow = !this.isMobile;
-    const shadowMapSize = this.isMobile ? 512 : 1024;
+    sun.castShadow = !this.lowSpec;
+    const shadowMapSize = this.lowSpec ? 256 : 1024;
     sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 40 + half * 2;
@@ -271,7 +291,7 @@ export class GameWorld {
     // One fill light per map; per-room light comes from the roaming fixture lights below.
     const accentPoints = [{ x: map.w * 0.5, z: map.d * 0.42 }];
     for (const point of accentPoints) {
-      const accent = new THREE.PointLight(accentColor, this.isMobile ? 0.42 : 0.72, Math.max(map.w, map.d) * 0.62, 2);
+      const accent = new THREE.PointLight(accentColor, this.lowSpec ? 0.28 : this.isMobile ? 0.42 : 0.72, Math.max(map.w, map.d) * 0.62, 2);
       accent.position.set(point.x, map.ceiling * 0.68, point.z);
       this.mapGroup.add(accent);
     }
@@ -279,8 +299,8 @@ export class GameWorld {
     const floorTex = map.floorTexture
       ? this.loadImageTexture(map.floorTexture, map.w / 4, map.d / 4)
       : canvasTexture(
-          makePatternCanvas(map.floorPattern ?? "wood", map.floor, [map.floor, map.floorPattern ? map.floor : "#b08950"], 11, this.isMobile ? 256 : 512),
-          this.isMobile ? 1 : 8,
+          makePatternCanvas(map.floorPattern ?? "wood", map.floor, [map.floor, map.floorPattern ? map.floor : "#b08950"], 11, this.lowSpec ? 128 : this.isMobile ? 256 : 512),
+          this.lowSpec ? 1 : this.isMobile ? 1 : 8,
         );
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(map.w, map.d),
@@ -307,7 +327,7 @@ export class GameWorld {
       ground.position.set(map.w / 2, -0.03, map.d / 2);
       ground.receiveShadow = true;
       this.mapGroup.add(ground);
-      this.mapGroup.add(makeTreeLine(map, this.isMobile ? 14 : 28));
+      this.mapGroup.add(makeTreeLine(map, this.lowSpec ? 8 : this.isMobile ? 14 : 28));
     } else if (!map.rooms?.length) {
       // Legacy maps without room definitions: one ceiling sheet. It sits above the
       // lights, so give it an emissive floor so it never renders as a black void.
@@ -332,7 +352,7 @@ export class GameWorld {
     const staticProps: { object: THREE.Object3D; blocker: boolean }[] = [];
     for (const b of map.boxes) {
       if (b.prop) {
-        const modelUrl = b.modelUrl ?? LOCAL_PROP_MODELS[b.prop];
+        const modelUrl = this.lowSpec ? undefined : b.modelUrl ?? LOCAL_PROP_MODELS[b.prop];
         if (modelUrl) {
           // Placeholder until the glTF arrives; the model replaces it and is flattened then.
           const prop = flattenStatic(this.createPropVisual(b));
@@ -377,8 +397,8 @@ export class GameWorld {
           mat = new THREE.MeshStandardMaterial({ map: tex, color: b.color, roughness: 0.84 });
         } else if (b.pattern && b.pattern !== "solid") {
           // One canvas per material key (not per box) so equal surfaces share a texture and a draw call.
-          cnv = makePatternCanvas(b.pattern, b.color, b.colors, 7, this.isMobile ? 128 : 256);
-          const tex = canvasTexture(cnv, this.isMobile ? 1 : 8);
+          cnv = makePatternCanvas(b.pattern, b.color, b.colors, 7, this.lowSpec ? 96 : this.isMobile ? 128 : 256);
+          const tex = canvasTexture(cnv, this.lowSpec ? 1 : this.isMobile ? 1 : 8);
           mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78 });
         } else {
           mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.78 });
@@ -415,7 +435,7 @@ export class GameWorld {
       for (const geom of batch.geoms) geom.dispose();
       if (!merged) continue;
       const mesh = new THREE.Mesh(merged, batch.mat);
-      mesh.castShadow = !this.isMobile && batch.castShadow;
+      mesh.castShadow = !this.lowSpec && batch.castShadow;
       mesh.receiveShadow = batch.role !== "fixture";
       mesh.userData.color = batch.color;
       if (batch.texture) mesh.userData.texture = batch.texture;
@@ -432,7 +452,7 @@ export class GameWorld {
     // shader cost of each lit fragment) stays constant however many rooms a map has.
     this.roamingLights = [];
     this.fixtureLights = map.lights ?? [];
-    const lightBudget = this.isMobile ? 0 : Math.min(ROAMING_LIGHTS, this.fixtureLights.length);
+    const lightBudget = this.lowSpec ? 0 : Math.min(ROAMING_LIGHTS, this.fixtureLights.length);
     for (let i = 0; i < lightBudget; i++) {
       const light = this.fixtureLights[i];
       const point = new THREE.PointLight(light.color, light.intensity, light.distance, 1.2);
@@ -461,7 +481,7 @@ export class GameWorld {
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
       texture.repeat.set(repeatX, repeatY);
-      texture.anisotropy = Math.min(this.isMobile ? 2 : 8, this.renderer.capabilities.getMaxAnisotropy());
+      texture.anisotropy = Math.min(this.lowSpec ? 1 : this.isMobile ? 2 : 8, this.renderer.capabilities.getMaxAnisotropy());
       this.imageTextures.set(key, texture);
     }
     return texture;
@@ -495,7 +515,7 @@ export class GameWorld {
     const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0) => {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(x, y, z);
-      mesh.castShadow = !this.isMobile;
+      mesh.castShadow = !this.lowSpec;
       mesh.receiveShadow = true;
       mesh.userData.color = def.color;
       mesh.userData.prop = def.prop;
@@ -673,7 +693,7 @@ export class GameWorld {
       model.traverse((child) => {
         const mesh = child as THREE.Mesh;
         if (!mesh.isMesh) return;
-        mesh.castShadow = !this.isMobile;
+        mesh.castShadow = !this.lowSpec;
         mesh.receiveShadow = true;
         const firstMaterial = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         const materialColor = firstMaterial && "color" in firstMaterial
@@ -1602,7 +1622,7 @@ export class GameWorld {
     this.lastAverageMs = average;
     this.frameAccum = 0;
     this.frameCount = 0;
-    if (this.isMobile || average <= QUALITY_SLOW_FRAME_MS || this.qualityStep >= QUALITY_STEPS.length - 1) return;
+    if (this.lowSpec || average <= QUALITY_SLOW_FRAME_MS || this.qualityStep >= QUALITY_STEPS.length - 1) return;
     this.qualityStep += 1;
     const step = QUALITY_STEPS[this.qualityStep];
     this.renderer.setPixelRatio(Math.min(step.pixelRatio, window.devicePixelRatio || 1));
@@ -1674,6 +1694,7 @@ export class GameWorld {
       calls: info.calls,
       triangles: info.triangles,
       lights: this.roamingLights.length + 1,
+      lowSpec: this.lowSpec,
     };
   }
 
