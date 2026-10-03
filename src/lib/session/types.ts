@@ -38,9 +38,13 @@ export type Session = {
 };
 
 function readSnap(p: SessionPlayer): PlayerSnap {
+  const name = String(p.get("name") ?? "").trim();
   return {
     id: p.id,
-    name: String(p.get("name") ?? "손님"),
+    // A remote player's state can arrive a few frames after the participant
+    // itself. Keep that transient state honest; the real nickname replaces it
+    // as soon as the replicated name field arrives.
+    name: name || "닉네임 확인 중",
     ready: Boolean(p.get("ready")),
     x: Number(p.get("x") ?? 4),
     y: Number(p.get("y") ?? 0),

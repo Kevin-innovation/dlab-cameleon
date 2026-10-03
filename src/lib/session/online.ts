@@ -68,6 +68,10 @@ export async function connectOnline(opts: {
     gameId: process.env.NEXT_PUBLIC_PLAYROOM_GAME_ID,
     defaultStates: { room: emptyRoom() },
     defaultPlayerStates: {
+      // Declare the nickname in the replicated player schema. Without this key,
+      // the first participant snapshots can be blank while Playroom hydrates a
+      // newly joined player, which made the UI fall back to "손님".
+      name: "",
       ready: false,
       fill: WHITE,
       blobs: [],

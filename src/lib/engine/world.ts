@@ -30,6 +30,7 @@ import {
   applyPaint,
   applyPose,
   createCharacter,
+  setCharacterName,
   createViewGun,
   extendPaint,
   setCamouflageLook,
@@ -1254,6 +1255,8 @@ export class GameWorld {
         rig = createCharacter(p.name, p.id);
         this.players.set(p.id, rig);
         this.scene.add(rig.group);
+      } else {
+        setCharacterName(rig, p.name);
       }
       const ghost = isGhost(room, p.id);
       const show = canSee(room, self, p) && !(opts.hideLocal && p.id === myId);

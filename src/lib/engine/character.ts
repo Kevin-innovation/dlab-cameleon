@@ -21,6 +21,7 @@ export type CharacterRig = {
   body: THREE.Group;
   visor: THREE.Mesh;
   nameSprite: THREE.Sprite;
+  displayName: string;
   ghostBadge: THREE.Sprite;
   parts: Record<BodyPart, PartLayer>;
   fill: string;
@@ -116,19 +117,23 @@ function paintCanvas(ctx: CanvasRenderingContext2D, fill: string, blobs: PaintBl
   }
 }
 
-function makeNameSprite(text: string) {
-  const c = document.createElement("canvas");
-  c.width = 256;
-  c.height = 64;
-  const g = c.getContext("2d")!;
-  g.clearRect(0, 0, 256, 64);
+function drawNameLabel(canvas: HTMLCanvasElement, text: string) {
+  const g = canvas.getContext("2d")!;
+  g.clearRect(0, 0, canvas.width, canvas.height);
   g.font = "700 28px sans-serif";
   g.textAlign = "center";
   g.lineWidth = 6;
   g.strokeStyle = "rgba(0,0,0,0.65)";
   g.fillStyle = "#fff6e8";
-  g.strokeText(text, 128, 40);
-  g.fillText(text, 128, 40);
+  g.strokeText(text, canvas.width / 2, 40);
+  g.fillText(text, canvas.width / 2, 40);
+}
+
+function makeNameSprite(text: string) {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 64;
+  drawNameLabel(c, text);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
@@ -257,6 +262,7 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     body,
     visor,
     nameSprite,
+    displayName: name,
     ghostBadge,
     parts,
     fill: WHITE,
@@ -274,6 +280,20 @@ export function createCharacter(name: string, playerId: string): CharacterRig {
     shootSeq: 0,
     catching: false,
   };
+}
+
+/** Update a world-space name tag after a remote nickname arrives late. */
+export function setCharacterName(rig: CharacterRig, name: string) {
+  const next = name.trim() || "닉네임 확인 중";
+  if (rig.displayName === next) return;
+  rig.displayName = next;
+  const material = rig.nameSprite.material as THREE.SpriteMaterial;
+  const texture = material.map;
+  if (!texture) return;
+  const canvas = texture.image as HTMLCanvasElement | undefined;
+  if (!canvas) return;
+  drawNameLabel(canvas, next);
+  texture.needsUpdate = true;
 }
 
 export function applyPaint(rig: CharacterRig, fill: string, blobs: PaintBlob[]) {
