@@ -26,7 +26,7 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
   };
 
   return (
-    <section aria-labelledby="lobby-chat-title" className="rounded-3xl border border-lime/20 bg-[#101a14]/85 p-4 shadow-xl backdrop-blur-sm lg:sticky lg:top-6 lg:self-start">
+    <section aria-labelledby="lobby-chat-title" className="min-w-0 w-full rounded-3xl border border-lime/20 bg-[#101a14]/85 p-4 shadow-xl backdrop-blur-sm lg:sticky lg:top-6 lg:self-start">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs tracking-wide text-lime">한국 서버 로비</p>

@@ -36,7 +36,7 @@ export function RoomBrowser({ channelName, nickname, list, chat, busy, error, on
   const openRooms = list.rooms.filter((room) => room.phase === "lobby" && hasOpenSlot(room)).length;
 
   return (
-    <main id="main-content" className="flex flex-1 flex-col gap-5 py-6">
+    <main id="main-content" className="flex min-w-0 flex-1 flex-col gap-5 py-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-lime">{channelName}</p>
@@ -57,12 +57,12 @@ export function RoomBrowser({ channelName, nickname, list, chat, busy, error, on
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2" role="group" aria-label="방 참가 방법">
+      <div className="grid w-full min-w-0 grid-cols-3 gap-2" role="group" aria-label="방 참가 방법">
         <button
           type="button"
           onClick={onQuickJoin}
           disabled={busy}
-          className="h-14 rounded-2xl bg-lime font-display text-lg text-black disabled:opacity-50 sm:text-xl"
+          className="h-14 min-w-0 w-full truncate rounded-2xl bg-lime px-2 font-display text-lg text-black disabled:opacity-50 sm:text-xl"
         >
           빠른 참가
         </button>
@@ -70,7 +70,7 @@ export function RoomBrowser({ channelName, nickname, list, chat, busy, error, on
           type="button"
           onClick={onCreate}
           disabled={busy}
-          className="h-14 rounded-2xl border border-lime/40 bg-lime/10 font-display text-lg text-lime disabled:opacity-50 sm:text-xl"
+          className="h-14 min-w-0 w-full truncate rounded-2xl border border-lime/40 bg-lime/10 px-2 font-display text-lg text-lime disabled:opacity-50 sm:text-xl"
         >
           방 만들기
         </button>
@@ -78,7 +78,7 @@ export function RoomBrowser({ channelName, nickname, list, chat, busy, error, on
           type="button"
           onClick={onJoinByCode}
           disabled={busy}
-          className="h-14 rounded-2xl border border-white/15 bg-white/5 font-display text-lg disabled:opacity-50 sm:text-xl"
+          className="h-14 min-w-0 w-full truncate rounded-2xl border border-white/15 bg-white/5 px-2 font-display text-lg disabled:opacity-50 sm:text-xl"
         >
           코드로 참가
         </button>
@@ -90,8 +90,8 @@ export function RoomBrowser({ channelName, nickname, list, chat, busy, error, on
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-start">
-        <section aria-label="공개 방 목록" className="flex flex-col gap-2">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <section aria-label="공개 방 목록" className="flex min-w-0 w-full flex-col gap-2">
           {list.rooms.length === 0 && !list.loading && (
             <div className="rounded-3xl border border-dashed border-white/15 px-6 py-12 text-center">
               <p className="font-display text-2xl">아직 열린 방이 없어요</p>
