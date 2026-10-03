@@ -1,5 +1,6 @@
 import { sortListings, validateListing } from "./listing";
 import { parseRoomCode } from "./code";
+import { cleanLobbyChatName, cleanLobbyChatText, type LobbyChatMessage } from "./chat";
 import type { RoomDirectoryStore } from "./store";
 
 export type ApiResult = { status: number; body: { ok: true; data: unknown } | { ok: false; error: string } };
@@ -64,4 +65,33 @@ export async function handleCloseRoom(store: RoomDirectoryStore, rawCode: string
   if (outcome === "missing") return fail(404, "room not found");
   if (outcome === "forbidden") return fail(401, "token does not own this room");
   return ok({ removed: code });
+}
+
+function readChannel(value: unknown): string | null {
+  return typeof value === "string" && CHANNEL_PATTERN.test(value) ? value : null;
+}
+
+export async function handleListChat(store: RoomDirectoryStore, channelId: string, after: number, now: number): Promise<ApiResult> {
+  if (!readChannel(channelId)) return fail(400, "channel is invalid");
+  if (!Number.isSafeInteger(after) || after < 0) return fail(400, "after is invalid");
+  return ok({ messages: await store.listChat(channelId, after, now), now });
+}
+
+export async function handleSendChat(store: RoomDirectoryStore, rawBody: string, now: number): Promise<ApiResult> {
+  const parsed = parseBody(rawBody);
+  if (!parsed.ok) return parsed.result;
+  const channelId = readChannel(parsed.value.channelId);
+  const name = cleanLobbyChatName(parsed.value.name);
+  const text = cleanLobbyChatText(parsed.value.text);
+  if (!channelId) return fail(400, "channel is invalid");
+  if (!name) return fail(400, "name is invalid");
+  if (!text) return fail(400, "text is invalid");
+  const message: LobbyChatMessage = {
+    id: `lobby-${now}-${Math.random().toString(36).slice(2, 10)}`,
+    name,
+    text,
+    at: now,
+  };
+  await store.appendChat(channelId, message, now);
+  return ok({ message }, 201);
 }

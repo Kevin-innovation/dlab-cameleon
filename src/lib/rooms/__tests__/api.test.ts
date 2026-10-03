@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleCloseRoom, handleGetRoom, handleHeartbeat, handleListRooms } from "../api";
+import { handleCloseRoom, handleGetRoom, handleHeartbeat, handleListChat, handleListRooms, handleSendChat } from "../api";
 import { MemoryRoomDirectoryStore } from "../store";
 
 const NOW = 1_700_000_000_000;
@@ -72,6 +72,26 @@ describe("handleListRooms", () => {
     const store = new MemoryRoomDirectoryStore();
     expect((await handleListRooms(store, "", NOW)).status).toBe(400);
     expect((await handleListRooms(store, "x".repeat(40), NOW)).status).toBe(400);
+  });
+});
+
+describe("lobby chat", () => {
+  it("stores a nickname-labelled message and returns it to the channel", async () => {
+    const store = new MemoryRoomDirectoryStore();
+    const sent = await handleSendChat(store, JSON.stringify({ channelId: "kr1", name: " 미호 ", text: "안녕\n방 찾는 중" }), NOW);
+    expect(sent.status).toBe(201);
+    const message = (sent.body as { data: { message: { name: string; text: string } } }).data.message;
+    expect(message).toMatchObject({ name: "미호", text: "안녕 방 찾는 중" });
+
+    const listed = await handleListChat(store, "kr1", 0, NOW + 1);
+    expect(listed.status).toBe(200);
+    expect((listed.body as { data: { messages: { id: string }[] } }).data.messages).toHaveLength(1);
+  });
+
+  it("rejects invalid chat input", async () => {
+    const store = new MemoryRoomDirectoryStore();
+    expect((await handleSendChat(store, JSON.stringify({ channelId: "kr1", name: "미호", text: "" }), NOW)).status).toBe(400);
+    expect((await handleListChat(store, "bad channel", 0, NOW)).status).toBe(400);
   });
 });
 

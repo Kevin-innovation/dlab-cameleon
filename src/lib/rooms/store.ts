@@ -1,4 +1,5 @@
-import { DIRECTORY_TTL_S } from "../config";
+import { DIRECTORY_TTL_S, LOBBY_CHAT_HISTORY_MAX, LOBBY_CHAT_TTL_S } from "../config";
+import type { LobbyChatMessage } from "./chat";
 import { isStale, type RoomListing } from "./listing";
 
 export type UpsertResult = "ok" | "forbidden" | "too_fast";
@@ -21,12 +22,16 @@ export interface RoomDirectoryStore {
   list(channelId: string, now: number): Promise<RoomListing[]>;
   get(code: string, now: number): Promise<RoomListing | null>;
   remove(code: string, token: string): Promise<RemoveResult>;
+  listChat(channelId: string, after: number, now: number): Promise<LobbyChatMessage[]>;
+  appendChat(channelId: string, message: LobbyChatMessage, now: number): Promise<void>;
 }
 
 type MemoryEntry = { listing: RoomListing; token: string };
+type MemoryChatEntry = { messages: LobbyChatMessage[]; expiresAt: number };
 
 export class MemoryRoomDirectoryStore implements RoomDirectoryStore {
   private readonly rooms = new Map<string, MemoryEntry>();
+  private readonly chats = new Map<string, MemoryChatEntry>();
 
   constructor(private readonly options: DirectoryStoreOptions = DEFAULT_STORE_OPTIONS) {}
 
@@ -68,6 +73,25 @@ export class MemoryRoomDirectoryStore implements RoomDirectoryStore {
     this.rooms.delete(code);
     return "ok";
   }
+
+  async listChat(channelId: string, after: number, now: number): Promise<LobbyChatMessage[]> {
+    const entry = this.chats.get(channelId);
+    if (!entry) return [];
+    if (entry.expiresAt <= now) {
+      this.chats.delete(channelId);
+      return [];
+    }
+    return entry.messages.filter((message) => message.at > after);
+  }
+
+  async appendChat(channelId: string, message: LobbyChatMessage, now: number): Promise<void> {
+    const entry = this.chats.get(channelId);
+    const messages = entry && entry.expiresAt > now ? entry.messages : [];
+    this.chats.set(channelId, {
+      messages: [...messages, message].slice(-LOBBY_CHAT_HISTORY_MAX),
+      expiresAt: now + LOBBY_CHAT_TTL_S * 1000,
+    });
+  }
 }
 
 /** The subset of the Upstash client the store relies on; kept narrow so tests can fake it. */
@@ -79,11 +103,16 @@ export interface DirectoryRedis {
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   mget<T>(...keys: string[]): Promise<(T | null)[]>;
+  lpush?: (key: string, ...values: unknown[]) => Promise<number>;
+  lrange?: <T>(key: string, start: number, stop: number) => Promise<T[]>;
+  ltrim?: (key: string, start: number, stop: number) => Promise<unknown>;
+  expire?: (key: string, seconds: number) => Promise<unknown>;
 }
 
 const KEY_PREFIX = "cm";
 const roomKey = (code: string) => `${KEY_PREFIX}:room:${code}`;
 const indexKey = (channelId: string) => `${KEY_PREFIX}:rooms:${channelId}`;
+const chatKey = (channelId: string) => `${KEY_PREFIX}:chat:${channelId}`;
 
 /** Token and listing live in one value so a heartbeat costs two Redis commands (Upstash bills per command). */
 type RedisEntry = { token: string; listing: RoomListing };
@@ -141,5 +170,40 @@ export class RedisRoomDirectoryStore implements RoomDirectoryStore {
     await this.redis.del(roomKey(code));
     await this.redis.srem(indexKey(row.listing.channelId), code);
     return "ok";
+  }
+
+  async listChat(channelId: string, after: number, now: number): Promise<LobbyChatMessage[]> {
+    void now; // Redis applies the chat TTL server-side.
+    if (this.redis.lrange) {
+      const rows = await this.redis.lrange<unknown>(chatKey(channelId), 0, LOBBY_CHAT_HISTORY_MAX - 1);
+      return rows
+        .map((row) => {
+          if (typeof row === "string") {
+            try {
+              return JSON.parse(row) as LobbyChatMessage;
+            } catch {
+              return null;
+            }
+          }
+          return row as LobbyChatMessage;
+        })
+        .filter((message): message is LobbyChatMessage => Boolean(message && message.at > after))
+        .reverse();
+    }
+    const messages = (await this.redis.get<LobbyChatMessage[]>(chatKey(channelId))) ?? [];
+    return messages.filter((message) => message.at > after);
+  }
+
+  async appendChat(channelId: string, message: LobbyChatMessage, now: number): Promise<void> {
+    void now; // Redis applies the chat TTL server-side.
+    const key = chatKey(channelId);
+    if (this.redis.lpush && this.redis.lrange && this.redis.ltrim && this.redis.expire) {
+      await this.redis.lpush(key, JSON.stringify(message));
+      await this.redis.ltrim(key, 0, LOBBY_CHAT_HISTORY_MAX - 1);
+      await this.redis.expire(key, LOBBY_CHAT_TTL_S);
+      return;
+    }
+    const messages = (await this.redis.get<LobbyChatMessage[]>(key)) ?? [];
+    await this.redis.set(key, [...messages, message].slice(-LOBBY_CHAT_HISTORY_MAX), { ex: LOBBY_CHAT_TTL_S });
   }
 }

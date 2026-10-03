@@ -15,6 +15,7 @@ import { CreateRoomModal, type CreateRoomInput } from "./screens/CreateRoomModal
 import { Home } from "./screens/Home";
 import { JoinByCodeModal } from "./screens/JoinByCodeModal";
 import { RoomBrowser } from "./screens/RoomBrowser";
+import { useLobbyChat } from "./screens/useLobbyChat";
 import { useRoomList } from "./screens/useRoomList";
 
 type Screen =
@@ -133,6 +134,7 @@ export default function GameApp() {
   const [howto, setHowto] = useState(false);
   const reconnectAttempted = useRef(false);
   const roomList = useRoomList(DEFAULT_CHANNEL_ID, screen.t === "rooms");
+  const lobbyChat = useLobbyChat(DEFAULT_CHANNEL_ID, nick.trim(), screen.t === "rooms");
 
   const connect = useCallback(
     async (name: string, target: ConnectTarget) => {
@@ -325,7 +327,9 @@ export default function GameApp() {
         {screen.t === "rooms" && (
           <RoomBrowser
             channelName={CHANNEL.name}
+            nickname={nick.trim()}
             list={roomList}
+            chat={lobbyChat}
             busy={busy}
             error={error}
             onRefresh={roomList.refresh}

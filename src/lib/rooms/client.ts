@@ -1,4 +1,5 @@
 import { parseRoomCode } from "./code";
+import type { LobbyChatMessage } from "./chat";
 import type { RoomListing } from "./listing";
 
 /** Browser-side access to the room directory. Never throws; network errors come back as status 0. */
@@ -59,4 +60,20 @@ export function sendHeartbeat(listing: RoomListing, token: string, fetchImpl: ty
 
 export function closeRoom(code: string, token: string, fetchImpl: typeof fetch = fetch) {
   return request<{ removed: string }>(`/api/rooms/${code}`, json("DELETE", { token }), fetchImpl);
+}
+
+export function fetchLobbyChat(channelId: string, after = 0, fetchImpl: typeof fetch = fetch) {
+  return request<{ messages: LobbyChatMessage[]; now: number }>(
+    `/api/rooms/chat?channel=${encodeURIComponent(channelId)}&after=${Math.max(0, Math.floor(after))}`,
+    undefined,
+    fetchImpl,
+  );
+}
+
+export function sendLobbyChat(channelId: string, name: string, text: string, fetchImpl: typeof fetch = fetch) {
+  return request<{ message: LobbyChatMessage }>(
+    "/api/rooms/chat",
+    json("POST", { channelId, name, text }),
+    fetchImpl,
+  );
 }

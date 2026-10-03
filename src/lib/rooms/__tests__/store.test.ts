@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { LobbyChatMessage } from "../chat";
 import type { RoomListing } from "../listing";
 import { MemoryRoomDirectoryStore, RedisRoomDirectoryStore, type DirectoryRedis, type RoomDirectoryStore } from "../store";
 
@@ -130,6 +131,17 @@ function suite(name: string, make: () => { store: RoomDirectoryStore; advance: (
       expect(await store.remove("KR7F3K9Q", "tok-a")).toBe("ok");
       expect(await store.remove("KR7F3K9Q", "tok-a")).toBe("missing");
       expect(await store.list("kr1", NOW)).toEqual([]);
+    });
+
+    it("stores channel chat and supports incremental reads", async () => {
+      const { store } = make();
+      const first: LobbyChatMessage = { id: "m1", name: "미호", text: "안녕", at: NOW };
+      const second: LobbyChatMessage = { id: "m2", name: "준혁", text: "같이 해요", at: NOW + 1 };
+      await store.appendChat("kr1", first, NOW);
+      await store.appendChat("kr1", second, NOW + 1);
+      expect(await store.listChat("kr1", 0, NOW + 1)).toEqual([first, second]);
+      expect(await store.listChat("kr1", NOW, NOW + 1)).toEqual([second]);
+      expect(await store.listChat("jp1", 0, NOW + 1)).toEqual([]);
     });
   });
 }

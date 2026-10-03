@@ -5,6 +5,7 @@ import { MemoryRoomDirectoryStore, RedisRoomDirectoryStore, type DirectoryRedis,
 
 /** Per-instance abuse guard. 240/min per IP leaves room for several players behind one NAT (list poll 12/min + heartbeat 6/min each). */
 const limiter = new MemoryRateLimiter({ limit: 240, windowMs: 60_000 });
+const chatLimiter = new MemoryRateLimiter({ limit: 30, windowMs: 60_000 });
 
 /** Returns a 429 response when the caller exceeded the budget, otherwise null. */
 export function rateLimitResponse(request: Request): Response | null {
@@ -12,6 +13,16 @@ export function rateLimitResponse(request: Request): Response | null {
   if (result.allowed) return null;
   return Response.json(
     { ok: false, error: "too many requests" },
+    { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": "60" } },
+  );
+}
+
+/** Sending is stricter than polling so a public channel cannot be flooded by one client. */
+export function chatRateLimitResponse(request: Request): Response | null {
+  const result = chatLimiter.hit(clientKeyFromHeaders(request.headers));
+  if (result.allowed) return null;
+  return Response.json(
+    { ok: false, error: "too many chat messages" },
     { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": "60" } },
   );
 }

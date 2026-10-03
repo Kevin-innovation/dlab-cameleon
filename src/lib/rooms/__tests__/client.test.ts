@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeRoom, fetchRoom, fetchRooms, generateDirectoryToken, sendHeartbeat } from "../client";
+import { closeRoom, fetchLobbyChat, fetchRoom, fetchRooms, generateDirectoryToken, sendHeartbeat, sendLobbyChat } from "../client";
 import type { RoomListing } from "../listing";
 
 const NOW = 1_700_000_000_000;
@@ -83,6 +83,22 @@ describe("sendHeartbeat / closeRoom", () => {
     await closeRoom("KR7F3K9Q", "t".repeat(32), fakeFetch(200, { ok: true, data: { removed: "KR7F3K9Q" } }, calls));
     expect(calls[0].url).toBe("/api/rooms/KR7F3K9Q");
     expect(calls[0].init?.method).toBe("DELETE");
+  });
+});
+
+describe("lobby chat client", () => {
+  it("fetches chat after a cursor", async () => {
+    const calls: Call[] = [];
+    const result = await fetchLobbyChat("kr1", NOW, fakeFetch(200, { ok: true, data: { messages: [], now: NOW } }, calls));
+    expect(result.ok).toBe(true);
+    expect(calls[0].url).toBe(`/api/rooms/chat?channel=kr1&after=${NOW}`);
+  });
+
+  it("posts the channel and nickname with a message", async () => {
+    const calls: Call[] = [];
+    await sendLobbyChat("kr1", "미호", "안녕", fakeFetch(201, { ok: true, data: { message: { id: "m1", name: "미호", text: "안녕", at: NOW } } }, calls));
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ channelId: "kr1", name: "미호", text: "안녕" });
   });
 });
 
