@@ -483,10 +483,18 @@ export class GameWorld {
   }
 
   private loadImageTexture(path: string, repeatX = 1, repeatY = 1) {
-    const key = `${path}|${repeatX.toFixed(2)}|${repeatY.toFixed(2)}`;
+    const webpPath = path.replace(/\.png$/i, ".webp");
+    const key = `${webpPath}|${repeatX.toFixed(2)}|${repeatY.toFixed(2)}`;
     let texture = this.imageTextures.get(key);
     if (!texture) {
-      texture = this.textureLoader.load(path);
+      texture = this.textureLoader.load(webpPath, undefined, undefined, () => {
+        // Keep older Safari/WebGL implementations compatible with the original PNG.
+        if (webpPath === path) return;
+        this.textureLoader.load(path, (fallback) => {
+          texture!.image = fallback.image;
+          texture!.needsUpdate = true;
+        });
+      });
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
@@ -736,11 +744,20 @@ export class GameWorld {
         this.modelStats.pending = Math.max(0, this.modelStats.pending - 1);
         return;
       }
+      // Keep the procedural silhouette as a far-distance LOD. It preserves the prop's
+      // gameplay footprint while avoiding every GLB sub-mesh when the camera is across a room.
+      const lod = new THREE.LOD();
+      lod.position.set(def.x, def.y, def.z);
+      // flattenStatic bakes the fallback's original world transform into its vertices;
+      // move both children into the LOD's local space before reparenting them.
+      fallback.position.set(-def.x, -def.y, -def.z);
+      model.position.sub(lod.position);
+      parent.add(lod);
+      lod.addLevel(fallback, Math.max(10, Math.max(def.w, def.d) * 4.5));
       parent.add(model);
+      lod.addLevel(model, 0);
       this.removeMeshBlockers(fallback);
       if (def.collide || def.h >= 0.28) this.addMeshBlockers(model);
-      parent.remove(fallback);
-      disposeObject(fallback);
       this.modelStats.pending = Math.max(0, this.modelStats.pending - 1);
       this.modelStats.loaded += 1;
     } catch (error) {
