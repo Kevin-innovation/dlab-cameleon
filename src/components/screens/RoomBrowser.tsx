@@ -90,7 +90,7 @@ export function RoomBrowser({ channelName, nickname, list, chat, busy, error, on
         </p>
       )}
 
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_calc((100%_-_1rem)/3)] lg:items-start">
         <section aria-label="공개 방 목록" className="flex min-w-0 w-full flex-col gap-2">
           {list.rooms.length === 0 && !list.loading && (
             <div className="rounded-3xl border border-dashed border-white/15 px-6 py-12 text-center">
