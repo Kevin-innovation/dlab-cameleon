@@ -30,12 +30,12 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
 
   return (
     <section aria-labelledby="lobby-chat-title" className="min-w-0 w-full rounded-3xl border border-lime/20 bg-[#101a14]/85 p-4 shadow-xl backdrop-blur-sm lg:sticky lg:top-6 lg:self-start">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="text-xs tracking-wide text-lime">한국 서버 로비</p>
-          <h2 id="lobby-chat-title" className="font-display text-2xl">실시간 채팅</h2>
+          <h2 id="lobby-chat-title" className="whitespace-nowrap font-display text-2xl leading-tight">실시간 채팅</h2>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex w-full shrink-0 items-center justify-end gap-1.5 sm:w-auto">
           {isAdmin && (
             <button
               type="button"
@@ -43,12 +43,12 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
                 if (window.confirm("한국 서버 채팅을 모두 삭제할까요?")) void chat.clear(adminKey);
               }}
               disabled={!adminKey.trim() || chat.clearing || chat.deletingId !== ""}
-              className="rounded-full border border-pink/30 px-2.5 py-1 text-[11px] text-pink transition hover:border-pink/60 disabled:cursor-not-allowed disabled:opacity-30"
+              className="h-9 w-20 shrink-0 whitespace-nowrap rounded-full border border-pink/30 px-2 text-[10px] leading-none text-pink transition hover:border-pink/60 disabled:cursor-not-allowed disabled:opacity-30 sm:w-[5.5rem] sm:text-[11px]"
             >
               {chat.clearing ? "삭제 중…" : "전체 삭제"}
             </button>
           )}
-          <button type="button" onClick={chat.refresh} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/65 transition hover:border-lime/50 hover:text-lime">
+          <button type="button" onClick={chat.refresh} className="h-9 w-20 shrink-0 whitespace-nowrap rounded-full border border-white/15 px-2 text-[10px] leading-none text-white/65 transition hover:border-lime/50 hover:text-lime sm:w-[5.5rem] sm:text-[11px]">
             새로고침
           </button>
         </div>
@@ -56,7 +56,7 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
       <p className="mt-1 text-xs text-white/55">방에 들어가기 전에도 {nickname} 님으로 대화할 수 있어요.</p>
       {isAdmin && (
         <div className="mt-3 rounded-2xl border border-lime/20 bg-lime/5 p-3">
-          <label htmlFor="lobby-admin-key" className="text-xs font-semibold text-lime">Kevin 관리자 인증</label>
+          <label htmlFor="lobby-admin-key" className="whitespace-nowrap text-xs font-semibold text-lime">Kevin 관리자 인증</label>
           <input
             id="lobby-admin-key"
             type="password"
@@ -115,7 +115,7 @@ export function LobbyChat({ nickname, chat }: { nickname: string; chat: LobbyCha
           placeholder="방금 들어온 사람에게 인사하기…"
           className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm outline-none focus-visible:border-lime/50 focus-visible:ring-1 focus-visible:ring-lime/40"
         />
-        <button type="submit" disabled={chat.sending || !draft.trim()} className="rounded-xl bg-lime px-3.5 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40">
+        <button type="submit" disabled={chat.sending || !draft.trim()} className="rounded-xl bg-lime px-3.5 text-xs font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40">
           {chat.sending ? "…" : "전송"}
         </button>
       </form>
