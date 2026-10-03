@@ -42,13 +42,13 @@ import { makePatternCanvas, rgbToHex } from "./textures";
 import { hunterVisibility } from "../camouflage";
 
 /** Desktop quality ladder walked by adaptQuality(); the first entry is the default. */
-const QUALITY_STEPS: { pixelRatio: number; shadows: boolean }[] = [
-  { pixelRatio: 1.5, shadows: true },
-  { pixelRatio: 1.25, shadows: true },
-  { pixelRatio: 1, shadows: true },
-  { pixelRatio: 1, shadows: false },
+const QUALITY_STEPS: { pixelRatio: number; shadows: boolean; roamingLights: number }[] = [
+  { pixelRatio: 1.5, shadows: true, roamingLights: 3 },
+  { pixelRatio: 1.25, shadows: true, roamingLights: 2 },
+  { pixelRatio: 1, shadows: true, roamingLights: 1 },
+  { pixelRatio: 1, shadows: false, roamingLights: 0 },
 ];
-const QUALITY_SAMPLE_FRAMES = 90;
+const QUALITY_SAMPLE_FRAMES = 45;
 const ROAMING_LIGHTS = 3;
 const KILL_FX_MS = 2400;
 const KILL_DROPS = 28;
@@ -168,10 +168,13 @@ export class GameWorld {
   private imageTextures = new Map<string, THREE.Texture>();
   private modelLoader = new GLTFLoader();
   private modelTemplates = new Map<string, Promise<THREE.Group>>();
+  private modelLoadQueue: (() => Promise<void>)[] = [];
+  private activeModelLoads = 0;
   private mapLoadSeq = 0;
   private modelStats = { pending: 0, loaded: 0, failed: 0 };
   private roamingLights: { point: THREE.PointLight; index: number }[] = [];
   private fixtureLights: { x: number; y: number; z: number; color: string; intensity: number; distance: number }[] = [];
+  private doorStateKey = "\0";
   private roamClock = 0;
   /** Rolling average frame time from the last quality window, for the ?stats overlay. */
   private lastAverageMs = 0;
@@ -259,6 +262,7 @@ export class GameWorld {
     this.cling = null;
     this.grounded = true;
     this.doorPass.clear();
+    this.doorStateKey = "\0";
 
     const preset = LIGHTING_PRESETS[map.lighting ?? "day"];
     const hemi = new THREE.HemisphereLight(preset.skyColor, preset.groundColor, preset.hemi);
@@ -350,16 +354,21 @@ export class GameWorld {
 
     const batches = new Map<string, StaticBatch>();
     const staticProps: { object: THREE.Object3D; blocker: boolean }[] = [];
+    // Keep the authored GLB furniture as hero props while the remaining furniture uses
+    // the cheaper procedural silhouette. This caps shader/material draw calls on large maps.
+    const modelBudget = this.lowSpec ? 0 : this.isMobile ? 0 : this.qualityStep >= 2 ? 6 : 12;
+    let modelCount = 0;
     for (const b of map.boxes) {
       if (b.prop) {
-        const modelUrl = this.lowSpec ? undefined : b.modelUrl ?? LOCAL_PROP_MODELS[b.prop];
+        const modelUrl = modelCount < modelBudget ? b.modelUrl ?? LOCAL_PROP_MODELS[b.prop] : undefined;
         if (modelUrl) {
+          modelCount += 1;
           // Placeholder until the glTF arrives; the model replaces it and is flattened then.
           const prop = flattenStatic(this.createPropVisual(b));
           this.mapGroup.add(prop);
           if (b.collide || b.h >= 0.28) this.addMeshBlockers(prop);
           this.modelStats.pending += 1;
-          void this.loadPropModel(b, prop, modelUrl, loadSeq);
+          this.queuePropModel(b, prop, modelUrl, loadSeq);
         } else {
           // Purely procedural props are static for the map's lifetime: batch them map-wide.
           staticProps.push({ object: this.createPropVisual(b), blocker: Boolean(b.collide || b.h >= 0.28) });
@@ -460,6 +469,7 @@ export class GameWorld {
       this.mapGroup.add(point);
       this.roamingLights.push({ point, index: i });
     }
+    this.applyRoamingLightBudget(QUALITY_STEPS[this.qualityStep].roamingLights);
 
     this.doorRigs = [];
     for (const def of map.doors ?? []) {
@@ -668,6 +678,23 @@ export class GameWorld {
     return promise;
   }
 
+  /** Keep decoding bounded so a map entry cannot saturate the main thread with GLB work. */
+  private queuePropModel(def: BoxDef, fallback: THREE.Group, url: string, loadSeq: number) {
+    this.modelLoadQueue.push(() => this.loadPropModel(def, fallback, url, loadSeq));
+    this.pumpModelQueue();
+  }
+
+  private pumpModelQueue() {
+    while (this.activeModelLoads < 4 && this.modelLoadQueue.length > 0) {
+      const load = this.modelLoadQueue.shift()!;
+      this.activeModelLoads += 1;
+      void load().finally(() => {
+        this.activeModelLoads -= 1;
+        this.pumpModelQueue();
+      });
+    }
+  }
+
   private async loadPropModel(def: BoxDef, fallback: THREE.Group, url: string, loadSeq: number) {
     try {
       const template = await this.getModelTemplate(url);
@@ -727,6 +754,9 @@ export class GameWorld {
   }
 
   syncDoors(open: Record<string, boolean>) {
+    const key = this.doorRigs.map((d) => (open[d.def.id] ? d.def.id : "")).join("|");
+    if (key === this.doorStateKey) return;
+    this.doorStateKey = key;
     for (const d of this.doorRigs) {
       d.pivot.rotation.y = open[d.def.id] ? 1.84 : 0;
     }
@@ -1568,7 +1598,7 @@ export class GameWorld {
 
   /** Re-assign the roaming point lights to the fixtures nearest the camera (cheap; every 0.4s). */
   private updateRoamingLights() {
-    if (this.roamingLights.length === 0) return;
+    if (this.roamingLights.length === 0 || !this.roamingLights.some((slot) => slot.point.visible)) return;
     const now = performance.now();
     if (now - this.roamClock < 400) return;
     this.roamClock = now;
@@ -1580,8 +1610,9 @@ export class GameWorld {
       .slice(0, this.roamingLights.length)
       .map((entry) => entry.index);
     // Keep lights that are still among the nearest where they are; move the others to the free slots.
-    const free = nearest.filter((index) => !this.roamingLights.some((slot) => slot.index === index));
-    for (const slot of this.roamingLights) {
+    const active = this.roamingLights.filter((slot) => slot.point.visible);
+    const free = nearest.filter((index) => !active.some((slot) => slot.index === index));
+    for (const slot of active) {
       if (nearest.includes(slot.index)) continue;
       const index = free.shift();
       if (index === undefined) break;
@@ -1627,6 +1658,7 @@ export class GameWorld {
     const step = QUALITY_STEPS[this.qualityStep];
     this.renderer.setPixelRatio(Math.min(step.pixelRatio, window.devicePixelRatio || 1));
     this.resize();
+    this.applyRoamingLightBudget(step.roamingLights);
     if (!step.shadows && this.renderer.shadowMap.enabled) {
       this.renderer.shadowMap.enabled = false;
       this.scene.traverse((o) => {
@@ -1634,6 +1666,12 @@ export class GameWorld {
         for (const m of Array.isArray(mat) ? mat : mat ? [mat] : []) m.needsUpdate = true;
       });
     }
+  }
+
+  private applyRoamingLightBudget(maxLights: number) {
+    this.roamingLights.forEach((slot, index) => {
+      slot.point.visible = index < maxLights;
+    });
   }
 
   /** Current adaptive quality step (0 = full); exposed for the perf audit. */
@@ -1693,7 +1731,7 @@ export class GameWorld {
       shadows: this.renderer.shadowMap.enabled,
       calls: info.calls,
       triangles: info.triangles,
-      lights: this.roamingLights.length + 1,
+      lights: this.roamingLights.filter((slot) => slot.point.visible).length + 1,
       lowSpec: this.lowSpec,
     };
   }

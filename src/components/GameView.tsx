@@ -60,6 +60,8 @@ import { useRoomDirectorySync } from "./game/useRoomDirectorySync";
 type Tool = "brush" | "dropper" | "fill";
 
 const LOOK_SCALE_KEY = "camelon:lookScale";
+const BOT_TICK_HZ = 15;
+const MISSED_SIGHT_HZ = 10;
 
 const KEY_BY_CODE: Record<string, string> = {
   KeyW: "w",
@@ -295,6 +297,8 @@ export function GameView({
     let bakedId = startMap.id;
     const hostTauntSeq = new Map<string, number>();
     const missedAcc = new Map<string, number>();
+    let botSimDt = 1 / BOT_TICK_HZ;
+    let missedSightDt = 0;
     let lastMissedFlush = 0;
     let lastMissedShown = 0;
     let wasHost = false;
@@ -693,7 +697,7 @@ export function GameView({
         world.setLocal(s.x, s.z);
       }
       const map = getMap(room.mapId);
-      const players = snapsFrom(session);
+      let players = snapsFrom(session);
       const me = players.find((p) => p.id === session.myId());
 
       if (touchFireRef.current !== seenTouchFire) {
@@ -766,7 +770,15 @@ export function GameView({
         }
       }
 
-      if (session.kind === "practice") tickSoloBots(session, map, room, botDt, Date.now());
+      if (session.kind === "practice") {
+        botSimDt += botDt;
+        if (botSimDt >= 1 / BOT_TICK_HZ) {
+          const simDt = Math.min(0.25, botSimDt);
+          botSimDt = 0;
+          tickSoloBots(session, map, room, simDt, Date.now());
+          players = snapsFrom(session);
+        }
+      }
       const frameKeys = mobilePortraitRef.current ? new Set<string>() : new Set(keys);
       if (!mobilePortraitRef.current) {
         for (const key of input.touchKeys) frameKeys.add(key);
@@ -858,7 +870,7 @@ export function GameView({
       }
 
       if (session.isHost()) {
-        const livePlayers = snapsFrom(session);
+        const livePlayers = players;
         if (!wasHost) {
           // Host acquisition (initial or migration): adopt every player's current
           // sequence so already-played taunts are not replayed by the new host.
@@ -869,10 +881,15 @@ export function GameView({
         let next = tickRoom(reconciled, livePlayers, Date.now());
         // Missed Spot: still hiders in a hunter's view earn points; flush to the room every few seconds.
         if (room.phase === "hunt" && next.phase === "hunt") {
+          missedSightDt += dt;
           const hunters = livePlayers.filter((p) => isHunter(room, p.id));
           const hiders = livePlayers.filter((p) => hiderAlive(room, p.id));
-          for (const [id, pts] of accrueMissed(hunters, hiders, dt, (a, b) => world.hasLineOfSight(a.id, b.id))) {
-            missedAcc.set(id, (missedAcc.get(id) ?? 0) + pts);
+          if (missedSightDt >= 1 / MISSED_SIGHT_HZ) {
+            const sightDt = missedSightDt;
+            missedSightDt = 0;
+            for (const [id, pts] of accrueMissed(hunters, hiders, sightDt, (a, b) => world.hasLineOfSight(a.id, b.id))) {
+              missedAcc.set(id, (missedAcc.get(id) ?? 0) + pts);
+            }
           }
           const nowMs = Date.now();
           if (missedAcc.size > 0 && nowMs - lastMissedFlush > MISSED_FLUSH_MS) {
@@ -886,6 +903,8 @@ export function GameView({
             lastMissedShown = nowMs;
             next = { ...next, missedShown: { ...next.missed } };
           }
+        } else {
+          missedSightDt = 0;
         }
         const myName = String(session.me().get("name") ?? "").trim().slice(0, 12);
         next = claimHost(next, session.myId(), myName, Date.now());
@@ -909,7 +928,7 @@ export function GameView({
           }
         }
         const myId = session.myId();
-        const bodies = snapsFrom(session).map((p) =>
+        const bodies = players.map((p) =>
           p.id === myId ? { id: p.id, x: world.localX, z: world.localZ } : { id: p.id, x: p.x, z: p.z },
         );
         const closeIds = world.doorsToClose(next.doors ?? {}, bodies);
@@ -944,7 +963,7 @@ export function GameView({
       }
 
       const fpsHunt = !!(me && isHunter(room, me.id) && room.phase === "hunt");
-      const live = snapsFrom(session);
+      const live = players;
       world.syncPlayers(live, session.myId(), room, { localMoving, dt, hideLocal: fpsHunt });
       world.updateCamera({
         paintOpen: paintOpenRef.current,
